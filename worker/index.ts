@@ -2,6 +2,7 @@ import framework from "../dist/server/index.js";
 
 interface Env {
   DB: D1Database;
+  ASSETS?: { fetch(request: Request): Promise<Response> };
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
 }
@@ -234,6 +235,10 @@ const worker = {
     if (path.startsWith("/api/auth/")) return auth(request, env, ctx, path.slice("/api/auth/".length));
     if (path === "/api/state") return state(request, env);
     if (path.startsWith("/api/registry/")) return registry(request, env, path.slice("/api/registry/".length));
+    if (env.ASSETS && (path.startsWith("/_next/") || path === "/favicon.svg")) {
+      const asset = await env.ASSETS.fetch(request);
+      if (asset.status !== 404) return asset;
+    }
     return app(request, env, ctx);
   },
 };
