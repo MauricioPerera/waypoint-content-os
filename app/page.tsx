@@ -852,6 +852,7 @@ export default function Home() {
             <Entries
               entries={entries}
               types={types}
+              searchQuery={searchQuery}
               create={() => setShowEntry(true)}
             />
           )}{" "}
@@ -2959,16 +2960,19 @@ function Activity({
 function Entries({
   entries,
   types,
+  searchQuery,
   create,
 }: {
   entries: Entry[];
   types: ContentType[];
+  searchQuery: string;
   create: () => void;
 }) {
   const [q, setQ] = useState("");
   const [visibleType, setVisibleType] = useState("All content");
   const [visibleStatus, setVisibleStatus] = useState("All statuses");
   const [selected, setSelected] = useState<Entry>();
+  useEffect(() => setQ(searchQuery), [searchQuery]);
   useEffect(() => {
     const raw = window.localStorage.getItem("waypoint.model");
     if (raw)
