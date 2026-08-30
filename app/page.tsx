@@ -720,9 +720,12 @@ export default function Home() {
   };
   const updateRelation = (relation: Relation) => { setRelations((all) => all.map((item) => item.id === relation.id ? relation : item)); emitRegisteredHooks("relation.updated", { relation }); notify("Relation updated"); };
   const updateComment = (comment: Comment) => { setComments((all) => all.map((item) => item.id === comment.id ? { ...comment, updatedAt: new Date().toISOString() } : item)); notify("Comment updated"); };
+  const createComment = (comment: Comment) => { setComments((all) => [comment, ...all]); emitRegisteredHooks("comment.created", { comment }); notify("Comment created"); };
   const removeComment = (comment: Comment) => { if (!window.confirm("Delete this comment?")) return; setComments((all) => all.filter((item) => item.id !== comment.id)); notify("Comment deleted"); };
   const removeMedia = (asset: MediaAsset) => { if (!window.confirm(`Delete ${asset.name}?`)) return; setMedia((all) => all.filter((item) => item.id !== asset.id)); notify("Media deleted"); };
+  const createMedia = (asset: MediaAsset) => { setMedia((all) => [asset, ...all]); emitRegisteredHooks("media.created", { media: asset }); notify("Media registered"); };
   const removeMenu = (menu: Menu) => { if (!window.confirm(`Delete menu ${menu.name}?`)) return; setMenus((all) => all.filter((item) => item.id !== menu.id)); notify("Menu deleted"); };
+  const createMenu = (menu: Menu) => { setMenus((all) => [menu, ...all]); emitRegisteredHooks("menu.created", { menu }); notify("Menu created"); };
   const createContentType = (
     name: string,
     slug: string,
@@ -1042,11 +1045,11 @@ export default function Home() {
               }}
             />
           )}{" "}
-          {view === "media" && <Media media={media} remove={removeMedia} />} {" "}
+          {view === "media" && <Media media={media} remove={removeMedia} create={createMedia} />} {" "}
           {view === "comments" && (
-            <Comments comments={comments} entries={entries} update={updateComment} remove={removeComment} />
+            <Comments comments={comments} entries={entries} update={updateComment} remove={removeComment} create={createComment} />
           )}{" "}
-          {view === "menus" && <Menus menus={menus} remove={removeMenu} />}
+          {view === "menus" && <Menus menus={menus} remove={removeMenu} create={createMenu} />}
           {view === "settings" && (
             <Settings
               settings={settings}
@@ -2007,7 +2010,8 @@ function Users({
     </div>
   );
 }
-function Media({ media, remove }: { media: MediaAsset[]; remove: (asset: MediaAsset) => void }) {
+function Media({ media, remove, create }: { media: MediaAsset[]; remove: (asset: MediaAsset) => void; create: (asset: MediaAsset) => void }) {
+  const [draft, setDraft] = useState({ name: "", url: "", alt: "" });
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -2052,6 +2056,7 @@ function Media({ media, remove }: { media: MediaAsset[]; remove: (asset: MediaAs
           ))}
         </div>
       </section>
+      <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">REGISTER ASSET</p><h2>Add media</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="cover.jpg" /></label><label>URL<input type="url" value={draft.url} onChange={(event) => setDraft({ ...draft, url: event.target.value })} placeholder="https://…" /></label><label>Alt text<input value={draft.alt} onChange={(event) => setDraft({ ...draft, alt: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" disabled={!draft.name.trim() || !draft.url.trim()} onClick={() => { create({ id: "med_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: draft.name.trim(), url: draft.url.trim(), mimeType: "application/octet-stream", size: 0, alt: draft.alt.trim(), attachedEntryIds: [], createdAt: new Date().toISOString() }); setDraft({ name: "", url: "", alt: "" }); }}>Register media</button></div></div></section>
     </div>
   );
 }
@@ -2060,12 +2065,15 @@ function Comments({
   entries,
   update,
   remove,
+  create,
 }: {
   comments: Comment[];
   entries: Entry[];
   update: (comment: Comment) => void;
   remove: (comment: Comment) => void;
+  create: (comment: Comment) => void;
 }) {
+  const [draft, setDraft] = useState({ entryId: entries[0]?.id || "", authorName: "", content: "" });
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -2128,10 +2136,12 @@ function Comments({
           </table>
         </div>
       </section>
+      <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">NEW COMMENT</p><h2>Add feedback</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Entry<select value={draft.entryId} onChange={(event) => setDraft({ ...draft, entryId: event.target.value })}>{entries.map((entry) => <option key={entry.id} value={entry.id}>{entry.title}</option>)}</select></label><label>Author<input value={draft.authorName} onChange={(event) => setDraft({ ...draft, authorName: event.target.value })} /></label><label>Comment<textarea rows={3} value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" disabled={!draft.entryId || !draft.authorName.trim() || !draft.content.trim()} onClick={() => { const now = new Date().toISOString(); create({ id: "cmt_" + Math.random().toString(16).slice(2, 8).toUpperCase(), entryId: draft.entryId, authorName: draft.authorName.trim(), content: draft.content.trim(), status: "Pending", createdAt: now, updatedAt: now }); setDraft({ ...draft, authorName: "", content: "" }); }}>Add comment</button></div></div></section>
     </div>
   );
 }
-function Menus({ menus, remove }: { menus: Menu[]; remove: (menu: Menu) => void }) {
+function Menus({ menus, remove, create }: { menus: Menu[]; remove: (menu: Menu) => void; create: (menu: Menu) => void }) {
+  const [draft, setDraft] = useState({ name: "", slug: "", location: "header" });
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -2182,6 +2192,7 @@ function Menus({ menus, remove }: { menus: Menu[]; remove: (menu: Menu) => void 
           </section>
         ))}
       </div>
+      <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">NEW MENU</p><h2>Create navigation</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label>Slug<input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} /></label><label>Location<input value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" disabled={!draft.name.trim() || !draft.slug.trim()} onClick={() => { create({ id: "menu_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: draft.name.trim(), slug: draft.slug.trim(), location: draft.location.trim(), items: [] }); setDraft({ name: "", slug: "", location: "header" }); }}>Create menu</button></div></div></section>
     </div>
   );
 }
