@@ -715,6 +715,11 @@ export function createTools(s: State) {
           capabilities: [...new Set(capabilities || [])],
         };
         s.setRoles((all) => [role, ...all]);
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "role.created", role },
+          }),
+        );
         return { status: "created", role, ui_effect: "role_created" };
       },
     }),
@@ -6107,6 +6112,11 @@ export function createTools(s: State) {
             note: "Repite con confirm:true para eliminar este rol",
           };
         s.setRoles((all) => all.filter((item) => item.id !== current.id));
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "role.deleted", roleId: current.id },
+          }),
+        );
         return {
           status: "deleted",
           role: current.slug,
