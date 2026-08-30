@@ -679,6 +679,17 @@ export default function Home() {
     notify("Draft created");
     return entry;
   };
+  const updateEntry = (next: Entry) => {
+    const updated = { ...next, updatedAt: new Date().toISOString(), updated: "" };
+    setEntries((all) => all.map((entry) => (entry.id === updated.id ? updated : entry)));
+    emitRegisteredHooks("entry.updated", { entry: updated });
+    notify("Entry updated");
+  };
+  const removeEntry = (entry: Entry) => {
+    setEntries((all) => all.filter((item) => item.id !== entry.id));
+    emitRegisteredHooks("entry.deleted", { entryId: entry.id });
+    notify("Entry deleted");
+  };
   const createContentType = (
     name: string,
     slug: string,
@@ -854,6 +865,8 @@ export default function Home() {
               types={types}
               searchQuery={searchQuery}
               create={() => setShowEntry(true)}
+              update={updateEntry}
+              remove={removeEntry}
             />
           )}{" "}
           {view === "schema" && (
@@ -2962,11 +2975,15 @@ function Entries({
   types,
   searchQuery,
   create,
+  update,
+  remove,
 }: {
   entries: Entry[];
   types: ContentType[];
   searchQuery: string;
   create: () => void;
+  update: (entry: Entry) => void;
+  remove: (entry: Entry) => void;
 }) {
   const [q, setQ] = useState("");
   const [visibleType, setVisibleType] = useState("All content");
@@ -3072,40 +3089,41 @@ function Entries({
         <Table entries={shown} types={types} onSelect={setSelected} />
       </section>
       {selected && (
-        <EntryInspector entry={selected} close={() => setSelected(undefined)} />
+        <EntryInspector entry={selected} types={types} update={update} remove={remove} close={() => setSelected(undefined)} />
       )}
     </div>
   );
 }
-function EntryInspector({ entry, close }: { entry: Entry; close: () => void }) {
+function EntryInspector({ entry, types, update, remove, close }: { entry: Entry; types: ContentType[]; update: (entry: Entry) => void; remove: (entry: Entry) => void; close: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(entry.title);
+  const [status, setStatus] = useState(entry.status);
+  const [data, setData] = useState(entry.data || {});
+  const schema = types.find((type) => type.name === entry.type);
+  const save = () => { update({ ...entry, title: title.trim(), status, data }); setEditing(false); };
   return (
     <div className="modal-backdrop" onClick={close}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-top">
           <div>
             <p className="eyebrow">ENTRY CONTEXT</p>
-            <h2>{entry.title}</h2>
+            <h2>{editing ? "Edit entry" : entry.title}</h2>
           </div>
           <button onClick={close}>×</button>
         </div>
-        <p className="subhead">
-          {entry.type} · {entry.status} · {entry.id}
-        </p>
-        <label>
-          Structured fields
-          <pre>{JSON.stringify(entry.data || {}, null, 2)}</pre>
-        </label>
-        <label>
-          Metadata<pre>{JSON.stringify(entry.metadata || {}, null, 2)}</pre>
-        </label>
-        <div className="modal-hint">
-          ✦ Use WebMCP <code>get_entry_context</code> for terms, connections and
-          revisions.
-        </div>
+        <p className="subhead">{entry.type} · {entry.status} · {entry.id}</p>
+        {editing ? <>
+          <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+          <label>Status<select value={status} onChange={(event) => setStatus(event.target.value as Entry["status"])}><option>Draft</option><option>Published</option></select></label>
+          {(schema?.fields || []).filter((field) => field !== "title" && field !== "slug").map((field) => <label key={field}>{field}<input value={String(data[field] ?? "")} onChange={(event) => setData({ ...data, [field]: event.target.value })} /></label>)}
+        </> : <>
+          <label>Structured fields<pre>{JSON.stringify(entry.data || {}, null, 2)}</pre></label>
+          <label>Metadata<pre>{JSON.stringify(entry.metadata || {}, null, 2)}</pre></label>
+          <div className="modal-hint">✦ Edit any field defined by the {entry.type} schema.</div>
+        </>}
         <div className="modal-actions">
-          <button className="primary-button" onClick={close}>
-            Done
-          </button>
+          {!editing && <button className="ghost-button" onClick={() => { if (window.confirm("Delete this entry?")) { remove(entry); close(); } }}>Delete</button>}
+          {editing ? <><button className="ghost-button" onClick={() => setEditing(false)}>Cancel</button><button className="primary-button" disabled={!title.trim()} onClick={save}>Save changes</button></> : <><button className="ghost-button" onClick={() => setEditing(true)}>Edit entry</button><button className="primary-button" onClick={close}>Done</button></>}
         </div>
       </div>
     </div>
