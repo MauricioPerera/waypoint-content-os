@@ -98,6 +98,7 @@ type User = {
   metadata?: Record<string, unknown>;
   capabilities: string[];
 };
+type AuthUser = { id: string; name: string; email: string; role: string };
 type Role = {
   id: string;
   name: string;
@@ -447,12 +448,41 @@ export default function Home() {
     [activeStatus, setActiveStatus] = useState("All statuses"),
     [toast, setToast] = useState("");
   const [remoteReady, setRemoteReady] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [setupRequired, setSetupRequired] = useState(false);
   const [showEntry, setShowEntry] = useState(false),
     [showTaxonomy, setShowTaxonomy] = useState(false),
     [showTerm, setShowTerm] = useState(false),
     [showType, setShowType] = useState(false),
     [showRelation, setShowRelation] = useState(false),
     [termTaxonomy, setTermTaxonomy] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([
+      fetch("/api/auth/me", { credentials: "same-origin" }),
+      fetch("/api/auth/status", { credentials: "same-origin" }),
+    ])
+      .then(async ([meResponse, statusResponse]) => {
+        if (!mounted) return;
+        if (meResponse.ok) {
+          const payload = (await meResponse.json()) as { user?: AuthUser };
+          setAuthUser(payload.user || null);
+        } else if (meResponse.status === 404) {
+          setAuthUser({ id: "local", name: "Local admin", email: "admin@localhost", role: "administrator" });
+        }
+        if (statusResponse.ok) {
+          const payload = (await statusResponse.json()) as { setupRequired?: boolean };
+          setSetupRequired(Boolean(payload.setupRequired));
+        }
+      })
+      .catch(() => {
+        if (window.location.hostname === "localhost")
+          setAuthUser({ id: "local", name: "Local admin", email: "admin@localhost", role: "administrator" });
+      })
+      .finally(() => mounted && setAuthLoading(false));
+    return () => { mounted = false; };
+  }, []);
   useEffect(() => {
     const raw = window.localStorage.getItem("waypoint.model");
     if (raw)
@@ -734,6 +764,10 @@ export default function Home() {
     createContentType,
     notify,
   };
+  if (authLoading)
+    return <div className="auth-shell"><div className="auth-card"><span className="brand-mark">W</span><p>Loading Waypoint…</p></div></div>;
+  if (!authUser)
+    return <AuthScreen setupRequired={setupRequired} onAuthenticated={setAuthUser} />;
   return (
     <>
       <WebmcpRegistrar state={state} />
@@ -759,6 +793,12 @@ export default function Home() {
               </button>
               <button className="help-button">
                 ? <span>Help</span>
+              </button>
+              <button
+                className="secondary-button"
+                onClick={() => fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).finally(() => setAuthUser(null))}
+              >
+                Sign out
               </button>
               <button
                 className="primary-button"
@@ -1024,6 +1064,53 @@ export default function Home() {
         )}
       </div>
     </>
+  );
+}
+
+function AuthScreen({
+  setupRequired,
+  onAuthenticated,
+}: {
+  setupRequired: boolean;
+  onAuthenticated: (user: AuthUser) => void;
+}) {
+  const [register, setRegister] = useState(setupRequired);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(`/api/auth/${register ? "register" : "login"}`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const payload = (await response.json()) as { user?: AuthUser; error?: string };
+      if (!response.ok || !payload.user) throw new Error(payload.error || "No se pudo iniciar sesión");
+      onAuthenticated(payload.user);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo iniciar sesión");
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="auth-shell">
+      <form className="auth-card" onSubmit={submit}>
+        <span className="brand-mark">W</span>
+        <h1>{register ? "Create your Waypoint workspace" : "Welcome back"}</h1>
+        <p>{register ? "Set up the administrator account to begin." : "Sign in to manage your content and agent tools."}</p>
+        {register && <input aria-label="Name" placeholder="Full name" value={name} onChange={(event) => setName(event.target.value)} required />}
+        <input aria-label="Email" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        <input aria-label="Password" type="password" minLength={12} placeholder="Password (12+ characters)" value={password} onChange={(event) => setPassword(event.target.value)} required />
+        {error && <div className="auth-error">{error}</div>}
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? "Working…" : register ? "Create account" : "Sign in"}</button>
+        {!setupRequired && <button className="ghost-button" type="button" onClick={() => setRegister((value) => !value)}>{register ? "Already have an account? Sign in" : "First-time setup"}</button>}
+      </form>
+    </div>
   );
 }
 const label = (v: View) =>
