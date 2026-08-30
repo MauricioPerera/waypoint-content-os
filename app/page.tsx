@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { WebmcpRegistrar } from "../src/mcp/register";
 import { VisualCanvas } from "./visual-canvas";
+import { LayoutAdmin } from "./layout-admin";
 
 type View =
   | "overview"
@@ -1071,7 +1072,7 @@ export default function Home() {
               }}
             />
           )}
-          {view === "pages" && <VisualCanvas pages={pages} templates={templates} layouts={layouts} createPage={createPage} updatePage={updatePage} removePage={removePage} createTemplate={createTemplate} removeTemplate={removeTemplate} updateLayout={updateLayout} updateTemplate={updateTemplate} />}
+          {view === "pages" && <><VisualCanvas pages={pages} templates={templates} layouts={layouts} createPage={createPage} updatePage={updatePage} removePage={removePage} createTemplate={createTemplate} removeTemplate={removeTemplate} updateLayout={updateLayout} updateTemplate={updateTemplate} /><LayoutAdmin layouts={layouts} createLayout={createLayout} updateLayout={updateLayout} /></>}
           {view === "plugins" && (
             <Plugins
               plugins={plugins}
