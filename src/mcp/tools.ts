@@ -6699,7 +6699,7 @@ export function createTools(s: State) {
             ? current.terms.find(
                 (term) =>
                   term.id === input.parent || term.slug === input.parent,
-              )?.id
+              )?.id || null
             : null;
           if (input.parent && !parentId)
             throw Error("Padre no encontrado: " + input.parent);
@@ -9619,7 +9619,7 @@ export function createTools(s: State) {
         s.setEntries((all) =>
           all.map(
             (entry) =>
-              updated.find((item) => item.entry.id === entry.id) || entry,
+              updated.find((item) => item.id === entry.id) || entry,
           ),
         );
         s.setRevisions((all) => [...all, ...revisions]);

@@ -385,6 +385,24 @@ const defaultSiteSettings: SiteSettings = {
   timezone: "America/Mexico_City",
   options: {},
 };
+type PersistedModel = Partial<{
+  entries: Entry[];
+  types: ContentType[];
+  taxonomies: Taxonomy[];
+  relations: Relation[];
+  connections: Connection[];
+  termAssignments: TermAssignment[];
+  revisions: Revision[];
+  users: User[];
+  roles: Role[];
+  plugins: Plugin[];
+  media: MediaAsset[];
+  comments: Comment[];
+  menus: Menu[];
+  activeType: string;
+  activeStatus: string;
+}>;
+
 function emitRegisteredHooks(event: string, payload: Record<string, unknown>) {
   try {
     const raw = window.localStorage.getItem("waypoint.hooks");
@@ -428,6 +446,7 @@ export default function Home() {
     [activeType, setActiveType] = useState("All content"),
     [activeStatus, setActiveStatus] = useState("All statuses"),
     [toast, setToast] = useState("");
+  const [remoteReady, setRemoteReady] = useState(false);
   const [showEntry, setShowEntry] = useState(false),
     [showTaxonomy, setShowTaxonomy] = useState(false),
     [showTerm, setShowTerm] = useState(false),
@@ -485,26 +504,64 @@ export default function Home() {
       window.removeEventListener("waypoint-settings-updated", syncSettings);
   }, []);
   useEffect(() => {
+    let mounted = true;
+    fetch("/api/state")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        const data = (payload as { state?: PersistedModel })?.state;
+        if (!data || !mounted) return;
+        if (data.entries) setEntries(data.entries);
+        if (data.types) setTypes(data.types);
+        if (data.taxonomies) setTaxonomies(data.taxonomies);
+        if (data.relations) setRelations(data.relations);
+        if (data.connections) setConnections(data.connections);
+        if (data.termAssignments) setTermAssignments(data.termAssignments);
+        if (data.revisions) setRevisions(data.revisions);
+        if (data.users) setUsers(data.users);
+        if (data.roles) setRoles(data.roles);
+        if (data.plugins) setPlugins(data.plugins);
+        if (data.media) setMedia(data.media);
+        if (data.comments) setComments(data.comments);
+        if (data.menus) setMenus(data.menus);
+        if (data.activeType) setActiveType(data.activeType);
+        if (data.activeStatus) setActiveStatus(data.activeStatus);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (mounted) setRemoteReady(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!remoteReady) return;
+    const state = {
+      entries,
+      types,
+      taxonomies,
+      relations,
+      connections,
+      termAssignments,
+      revisions,
+      users,
+      roles,
+      plugins,
+      media,
+      comments,
+      menus,
+      activeType,
+      activeStatus,
+    };
     window.localStorage.setItem(
       "waypoint.model",
-      JSON.stringify({
-        entries,
-        types,
-        taxonomies,
-        relations,
-        connections,
-        termAssignments,
-        revisions,
-        users,
-        roles,
-        plugins,
-        media,
-        comments,
-        menus,
-        activeType,
-        activeStatus,
-      }),
+      JSON.stringify(state),
     );
+    fetch("/api/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state),
+    }).catch(() => undefined);
     window.dispatchEvent(new Event("waypoint-model-updated"));
   }, [
     entries,
@@ -522,6 +579,7 @@ export default function Home() {
     menus,
     activeType,
     activeStatus,
+    remoteReady,
   ]);
   useEffect(() => {
     const onModelUpdated = () =>
@@ -749,6 +807,7 @@ export default function Home() {
           )}{" "}
           {view === "users" && (
             <Users
+              users={users}
               roles={roles}
               create={(user) => {
                 if (

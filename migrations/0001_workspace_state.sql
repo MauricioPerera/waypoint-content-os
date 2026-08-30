@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS workspace_state (
+  id TEXT PRIMARY KEY NOT NULL,
+  data TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
