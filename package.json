@@ -9,7 +9,8 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "check": "npm run lint && npx tsc --noEmit && npm run build"
   },
   "dependencies": {
     "@nekuda/webmcp-sdk": "0.5.0",
