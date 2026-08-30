@@ -1492,6 +1492,11 @@ export function createTools(s: State) {
           createdAt: new Date().toISOString(),
         };
         s.setMedia((all) => [asset, ...all]);
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "media.registered", media: asset },
+          }),
+        );
         return {
           status: "registered",
           media: asset,
@@ -1754,6 +1759,11 @@ export function createTools(s: State) {
           items: [],
         };
         s.setMenus((all) => [menu, ...all]);
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "menu.created", menu },
+          }),
+        );
         return { status: "created", menu, ui_effect: "menu_created" };
       },
     }),
@@ -1805,6 +1815,11 @@ export function createTools(s: State) {
         };
         s.setMenus((all) =>
           all.map((item) => (item.id === current.id ? updated : item)),
+        );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "menu.updated", menu: updated },
+          }),
         );
         return { status: "updated", menu: updated, ui_effect: "menu_updated" };
       },
@@ -2140,6 +2155,11 @@ export function createTools(s: State) {
           updatedAt: now,
         };
         s.setComments((all) => [comment, ...all]);
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "comment.created", comment },
+          }),
+        );
         return { status: "created", comment, ui_effect: "comment_created" };
       },
     }),
@@ -2174,6 +2194,11 @@ export function createTools(s: State) {
         };
         s.setComments((all) =>
           all.map((item) => (item.id === commentId ? comment : item)),
+        );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "comment.moderated", comment },
+          }),
         );
         return { status: "updated", comment, ui_effect: "comment_moderated" };
       },
@@ -2210,6 +2235,11 @@ export function createTools(s: State) {
             note: "Repite con confirm:true para eliminar este comentario",
           };
         s.setComments((all) => all.filter((item) => item.id !== commentId));
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "comment.deleted", commentId },
+          }),
+        );
         return { status: "deleted", commentId, ui_effect: "comment_deleted" };
       },
     }),
@@ -9705,6 +9735,11 @@ export function createTools(s: State) {
         s.setMedia((all) =>
           all.map((asset) => (asset.id === current.id ? updated : asset)),
         );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "media.updated", media: updated },
+          }),
+        );
         return {
           status: "updated",
           media: updated,
@@ -9924,6 +9959,13 @@ export function createTools(s: State) {
           "relation.deleted",
           "relation.connected",
           "relation.disconnected",
+          "media.registered",
+          "media.updated",
+          "comment.created",
+          "comment.moderated",
+          "comment.deleted",
+          "menu.created",
+          "menu.updated",
           "user.created",
           "user.deleted",
           "role.created",
