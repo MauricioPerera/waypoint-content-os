@@ -1,5 +1,7 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+/* The app hydrates persisted local workspace state and synchronizes UI filters through effects. */
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useEffect, useState } from 'react';
 import { WebmcpRegistrar } from '../src/mcp/register';
 
 type View = 'overview' | 'entries' | 'schema' | 'taxonomies' | 'relations' | 'users' | 'plugins' | 'media' | 'comments' | 'menus';
