@@ -15,7 +15,8 @@ type View =
   | "media"
   | "comments"
   | "menus"
-  | "settings";
+  | "settings"
+  | "activity";
 type Entry = {
   id: string;
   title: string;
@@ -733,6 +734,7 @@ export default function Home() {
               }}
             />
           )}
+          {view === "activity" && <ActivityLog revisions={revisions} entries={entries} />}
         </main>
         {showEntry && (
           <EntryModal
@@ -914,7 +916,7 @@ function Sidebar({
           active={view === "plugins"}
           on={() => setView("plugins")}
         />
-        <Nav icon="✦" text="Agent activity" on={() => setView("overview")} />
+        <Nav icon="✦" text="Agent activity" active={view === "activity"} on={() => setView("activity")} />
         <Nav icon="⚙" text="Settings" active={view === "settings"} on={() => setView("settings")} />
       </nav>
       <div className="sidebar-bottom">
@@ -1616,6 +1618,10 @@ function Status({ label }: { label: string }) {
       {label}
     </span>
   );
+}
+function ActivityLog({ revisions, entries }: { revisions: Revision[]; entries: Entry[] }) {
+  const ordered = revisions.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return <div className="page"><div className="page-heading compact"><div><p className="kicker">AUDIT TRAIL</p><h1>Agent activity</h1><p className="subhead">A chronological record of changes made through the CMS and its agents.</p></div><span className="live-chip"><i />{revisions.length} events</span></div><section className="card entries-card"><div className="card-heading"><div><p className="eyebrow">REVISION HISTORY</p><h2>Workspace changes</h2></div></div>{ordered.length ? <div className="activity-list">{ordered.map((revision) => <Activity key={revision.id} icon="✦" title={revision.action.replaceAll("_", " ")} detail={`${entries.find((entry) => entry.id === revision.entryId)?.title || revision.after.title} · ${revision.id}`} time={new Date(revision.createdAt).toLocaleString()} />)}</div> : <p className="subhead" style={{ padding: "0 21px 20px" }}>No tracked changes yet.</p>}</section></div>;
 }
 function Activity({
   icon,
