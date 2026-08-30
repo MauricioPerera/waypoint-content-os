@@ -114,6 +114,8 @@ type Plugin = {
   status: "Active" | "Inactive";
   capabilities: string[];
 };
+type Hook = { id: string; name: string; event: string; priority: number; enabled: boolean; pluginSlug?: string; description?: string };
+type Action = { id: string; name: string; label: string; description: string; pluginSlug?: string; capabilities?: string[] };
 type MediaAsset = {
   id: string;
   name: string;
@@ -1219,6 +1221,9 @@ function Menus({ menus }: { menus: Menu[] }) {
   );
 }
 function Plugins({ plugins, toggle }: { plugins: Plugin[]; toggle: (plugin: Plugin) => void }) {
+  const [hooks, setHooks] = useState<Hook[]>([]);
+  const [actions, setActions] = useState<Action[]>([]);
+  useEffect(() => { const sync = () => { try { setHooks(JSON.parse(window.localStorage.getItem("waypoint.hooks") || "[]")); setActions(JSON.parse(window.localStorage.getItem("waypoint.actions") || "[]")); } catch { setHooks([]); setActions([]); } }; sync(); window.addEventListener("waypoint-model-updated", sync); return () => window.removeEventListener("waypoint-model-updated", sync); }, []);
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -1261,6 +1266,10 @@ function Plugins({ plugins, toggle }: { plugins: Plugin[]; toggle: (plugin: Plug
           ))}
         </div>
       </section>
+      <div className="lower-grid" style={{ marginTop: 16 }}>
+        <section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">EVENT SUBSCRIPTIONS</p><h2>Hooks</h2></div><span className="live-chip"><i />{hooks.filter((hook) => hook.enabled).length} enabled</span></div>{hooks.length ? hooks.map((hook) => <div className="taxonomy-summary" key={hook.id}><span className="taxonomy-symbol">↗</span><div><b>{hook.name}</b><small>{hook.event} · priority {hook.priority}</small></div><span className={hook.enabled ? "live-chip" : "status"}>{hook.enabled ? "Enabled" : "Disabled"}</span></div>) : <p className="subhead" style={{ padding: "0 21px 20px" }}>No hooks registered yet.</p>}</section>
+        <section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">DECLARATIVE COMMANDS</p><h2>Actions</h2></div><span className="live-chip"><i />{actions.length} registered</span></div>{actions.length ? actions.map((action) => <div className="taxonomy-summary" key={action.id}><span className="taxonomy-symbol">✦</span><div><b>{action.label}</b><small>{action.name} · {(action.capabilities || []).length} capabilities</small></div></div>) : <p className="subhead" style={{ padding: "0 21px 20px" }}>No actions registered yet.</p>}</section>
+      </div>
       <div className="health-note">
         <span>ⓘ</span>
         <p>
