@@ -2283,7 +2283,7 @@ function Menus({ menus, remove, create, update }: { menus: Menu[]; remove: (menu
     </div>
   );
 }
-function PageBuilder({
+/* function PageBuilder({
   pages, templates, layouts, createPage, updatePage, removePage, createTemplate, updateTemplate, removeTemplate, createLayout, updateLayout,
 }: {
   pages: VisualPage[]; templates: PageTemplate[]; layouts: PageLayout[];
@@ -2315,6 +2315,8 @@ function PageBuilder({
     <div className="lower-grid" style={{ marginTop: 16 }}><section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">TEMPLATES</p><h2>Reusable patterns</h2></div></div>{templates.map((template) => <div className="taxonomy-summary" key={template.id}><div><b>{template.name}</b><small>{template.blocks.length} blocks · {template.description}</small></div><button className="text-button" onClick={() => page && updateTemplate({ ...template, blocks: page.blocks })}>Update</button><button className="text-button" onClick={() => removeTemplate(template)}>Delete</button><button className="text-button" onClick={() => createFromTemplate(template)}>Use</button></div>)}<div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Save current page as template<input value={templateName} onChange={(event) => setTemplateName(event.target.value)} /></label><button className="primary-button" disabled={!page || !templateName.trim()} onClick={saveTemplate}>Save template</button></div></section><section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">LAYOUT RULES</p><h2>{layoutDraft.name || "Design system"}</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Font<input value={layoutDraft.rules.fontFamily} onChange={(event) => setLayoutDraft({ ...layoutDraft, rules: { ...layoutDraft.rules, fontFamily: event.target.value } })} /></label><label>Accent color<input type="color" value={layoutDraft.rules.accent} onChange={(event) => setLayoutDraft({ ...layoutDraft, rules: { ...layoutDraft.rules, accent: event.target.value } })} /></label><label>Max width<input value={layoutDraft.rules.maxWidth} onChange={(event) => setLayoutDraft({ ...layoutDraft, rules: { ...layoutDraft.rules, maxWidth: event.target.value } })} /></label><label>Spacing<input value={layoutDraft.rules.spacing} onChange={(event) => setLayoutDraft({ ...layoutDraft, rules: { ...layoutDraft.rules, spacing: event.target.value } })} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { const next = { ...layoutDraft, id: layoutDraft.id || "layout_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: layoutDraft.name || "Custom layout", slug: layoutDraft.slug || "custom-layout" }; (layoutDraft.id ? updateLayout(next) : createLayout(next)); setLayoutDraft(next); }}>Save layout rules</button></div></div></section></div>
   </div>;
 }
+}
+*/
 function Plugins({
   plugins,
   install,
