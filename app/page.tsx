@@ -792,7 +792,7 @@ export default function Home() {
   if (authLoading)
     return <div className="auth-shell"><div className="auth-card"><span className="brand-mark">W</span><p>Loading Waypoint…</p></div></div>;
   if (!authUser)
-    return <AuthScreen setupRequired={setupRequired} onAuthenticated={setAuthUser} />;
+    return <AuthScreen setupRequired={setupRequired} onAuthenticated={(user) => { setAuthUser(user); setSetupRequired(false); }} />;
   return (
     <>
       <WebmcpRegistrar state={state} />
@@ -821,7 +821,7 @@ export default function Home() {
               </button>
               <button
                 className="secondary-button"
-                onClick={() => fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).finally(() => setAuthUser(null))}
+                onClick={() => fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).finally(() => { setAuthUser(null); setSetupRequired(false); })}
               >
                 Sign out
               </button>
