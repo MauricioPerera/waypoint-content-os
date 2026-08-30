@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Cutline Studio — editor de video local',
-  description: 'Recorta, une y adapta tus videos en el navegador.',
+  title: 'Waypoint — Agent-first content OS',
+  description: 'Un sistema de contenidos estructurado para humanos y agentes de IA.',
 };
 
 export default function RootLayout({
