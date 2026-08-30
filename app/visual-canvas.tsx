@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- preview URLs are user-managed and intentionally unoptimized. */
 import { useState } from "react";
 
 type Block = { id: string; type: "text" | "image" | "button" | "columns" | "divider" | "html"; content: string; settings?: Record<string, unknown> };
