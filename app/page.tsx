@@ -519,6 +519,7 @@ export default function Home() {
       }
   }, []);
   useEffect(() => {
+    if (!authUser) return;
     const syncSettings = () => {
       const raw = window.localStorage.getItem("waypoint.settings");
       if (raw)
@@ -529,7 +530,7 @@ export default function Home() {
         }
     };
     syncSettings();
-    fetch("/api/registry/settings")
+    fetch("/api/registry/settings", { credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         const remote = payload as { data?: Partial<SiteSettings> } | null;
@@ -540,10 +541,11 @@ export default function Home() {
     window.addEventListener("waypoint-settings-updated", syncSettings);
     return () =>
       window.removeEventListener("waypoint-settings-updated", syncSettings);
-  }, []);
+  }, [authUser]);
   useEffect(() => {
+    if (!authUser) return;
     let mounted = true;
-    fetch("/api/state")
+    fetch("/api/state", { credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         const data = (payload as { state?: PersistedModel })?.state;
@@ -571,9 +573,9 @@ export default function Home() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [authUser]);
   useEffect(() => {
-    if (!remoteReady) return;
+    if (!remoteReady || !authUser) return;
     const state = {
       entries,
       types,
@@ -597,6 +599,7 @@ export default function Home() {
     );
     fetch("/api/state", {
       method: "PUT",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(state),
     }).catch(() => undefined);
@@ -618,6 +621,7 @@ export default function Home() {
     activeType,
     activeStatus,
     remoteReady,
+    authUser,
   ]);
   useEffect(() => {
     const onModelUpdated = () =>
@@ -977,6 +981,7 @@ export default function Home() {
                 window.dispatchEvent(new Event("waypoint-settings-updated"));
                 fetch("/api/registry/settings", {
                   method: "PUT",
+                  credentials: "same-origin",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify(next),
                 }).catch(() => undefined);
@@ -2064,6 +2069,7 @@ function Plugins({
     window.localStorage.setItem(`waypoint.${kind}`, JSON.stringify(value));
     fetch(`/api/registry/${kind}`, {
       method: "PUT",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(value),
     }).catch(() => undefined);
@@ -2084,14 +2090,14 @@ function Plugins({
       }
     };
     sync();
-    fetch("/api/registry/hooks")
+    fetch("/api/registry/hooks", { credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         const remote = payload as { data?: Hook[] } | null;
         if (Array.isArray(remote?.data)) setHooks(remote.data);
       })
       .catch(() => undefined);
-    fetch("/api/registry/actions")
+    fetch("/api/registry/actions", { credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
         const remote = payload as { data?: Action[] } | null;
