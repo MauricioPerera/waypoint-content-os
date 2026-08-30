@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { WebmcpRegistrar } from '../src/mcp/register';
 
 type View = 'overview' | 'entries' | 'schema' | 'taxonomies' | 'relations' | 'users' | 'plugins' | 'media' | 'comments' | 'menus';
-type Entry = { id:string; title:string; type:string; status:'Published'|'Draft'; updated:string; relation:string; authorUserId?:string; scheduledAt?:string; deletedAt?:string; metadata?:Record<string,unknown>; data?:Record<string,unknown> };
+type Entry = { id:string; title:string; slug?:string; type:string; status:'Published'|'Draft'; updated:string; relation:string; authorUserId?:string; scheduledAt?:string; deletedAt?:string; metadata?:Record<string,unknown>; data?:Record<string,unknown> };
 type ContentType = { icon:string; name:string; count:number; tone:string; desc:string; slug:string; fields:string[] };
 type Term = { id:string; name:string; slug:string; parent:string|null; description?:string };
 type Taxonomy = { name:string; slug:string; hierarchical:boolean; terms:Term[] };
