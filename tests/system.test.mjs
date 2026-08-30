@@ -31,6 +31,19 @@ test("Cloudflare configuration includes persistent D1 and R2 bindings", async ()
   assert.match(config, /\"bucket_name\":/);
 });
 
+test("plugin extension surface supports install, hooks, actions, and persistence", async () => {
+  const page = await source("app/page.tsx");
+  const tools = await source("src/mcp/tools.ts");
+  assert.match(page, /Install declarative plugin/);
+  assert.match(page, /toggleHook/);
+  assert.match(page, /runAction/);
+  assert.match(page, /\/api\/registry\/hooks/);
+  assert.match(page, /\/api\/registry\/actions/);
+  assert.match(tools, /plugin/);
+  assert.match(tools, /hook/);
+  assert.match(tools, /action/);
+});
+
 test("public application renders the authentication shell", async () => {
   const response = await fetch(`${baseUrl}/`, { redirect: "manual" });
   const html = await response.text();
