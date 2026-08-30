@@ -254,10 +254,13 @@ async function uploadMedia(request: Request, env: Env) {
   const file = form.get("file");
   if (!(file instanceof File) || !file.size) return json({ error: "Archivo requerido" }, 400, request);
   if (file.size > 10 * 1024 * 1024) return json({ error: "El archivo supera el límite de 10 MB" }, 413, request);
+  const contentType = file.type || "application/octet-stream";
+  const allowed = /^(image|audio|video)\//.test(contentType) || ["application/pdf", "text/plain", "application/json"].includes(contentType);
+  if (!allowed) return json({ error: "Tipo de archivo no permitido" }, 415, request);
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-120) || "upload";
   const key = `media/${randomToken(12)}-${safeName}`;
-  await env.MEDIA_BUCKET.put(key, file.stream(), { httpMetadata: { contentType: file.type || "application/octet-stream", cacheControl: "private, max-age=3600" } });
-  return json({ key, url: `${new URL(request.url).origin}/media/${encodeURIComponent(key)}`, name: file.name, mimeType: file.type || "application/octet-stream", size: file.size }, 201, request);
+  await env.MEDIA_BUCKET.put(key, file.stream(), { httpMetadata: { contentType, cacheControl: "private, max-age=3600" } });
+  return json({ key, url: `${new URL(request.url).origin}/media/${encodeURIComponent(key)}`, name: file.name, mimeType: contentType, size: file.size }, 201, request);
 }
 
 const worker = {
