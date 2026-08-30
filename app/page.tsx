@@ -715,7 +715,7 @@ export default function Home() {
               create={() => setShowRelation(true)}
             />
           )}{" "}
-          {view === "users" && <Users users={users} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); emitRegisteredHooks("user.updated", { user: next }); notify("User updated"); }} />}{" "}
+          {view === "users" && <Users roles={roles} create={(user) => { if (users.some((item) => item.email.toLowerCase() === user.email.toLowerCase())) return; setUsers((all) => [user, ...all]); emitRegisteredHooks("user.created", { user }); notify("User created"); }} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); emitRegisteredHooks("user.updated", { user: next }); notify("User updated"); }} />}{" "}
           {view === "plugins" && <Plugins plugins={plugins} toggle={(plugin) => { const updated = { ...plugin, status: plugin.status === "Active" ? "Inactive" as const : "Active" as const }; setPlugins((all) => all.map((item) => item.id === plugin.id ? updated : item)); emitRegisteredHooks("plugin.status_changed", { plugin: updated }); notify(updated.status === "Active" ? "Plugin enabled" : "Plugin disabled"); }} />}{" "}
           {view === "media" && <Media media={media} />}{" "}
           {view === "comments" && (
@@ -999,9 +999,11 @@ function Settings({
     </div>
   );
 }
-function Users({ users, update }: { users: User[]; update: (user: User) => void }) {
+function Users({ users, roles, create, update }: { users: User[]; roles: Role[]; create: (user: User) => void; update: (user: User) => void }) {
   const [editing, setEditing] = useState<User>();
   const [metadataText, setMetadataText] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newUser, setNewUser] = useState({ name: "", email: "", role: roles[0]?.slug || "", status: "Invited" as "Active" | "Invited", metadata: "{}" });
   const openEditor = (user: User) => { setEditing(user); setMetadataText(JSON.stringify(user.metadata || {}, null, 2)); };
   const saveEditor = () => { if (!editing) return; let metadata: Record<string, unknown>; try { metadata = JSON.parse(metadataText || "{}"); } catch { return; } if (!metadata || Array.isArray(metadata) || typeof metadata !== "object") return; update({ ...editing, name: editing.name.trim(), email: editing.email.trim().toLowerCase(), metadata }); setEditing(undefined); };
   return (
@@ -1014,6 +1016,7 @@ function Users({ users, update }: { users: User[]; update: (user: User) => void 
             People, roles and capabilities available to your content agent.
           </p>
         </div>
+        <button className="primary-button" onClick={() => setCreating(true)}>＋ New user</button>
         <span className="live-chip">
           <i />
           {users.length} members
@@ -1067,6 +1070,7 @@ function Users({ users, update }: { users: User[]; update: (user: User) => void 
           </table>
         </div>
       </section>
+      {creating && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">NEW MEMBER</p><h2>Invite user</h2></div><button className="text-button" onClick={() => setCreating(false)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={newUser.name} onChange={(event) => setNewUser({ ...newUser, name: event.target.value })} /></label><label>Email<input type="email" value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} /></label><label>Role<select value={newUser.role} onChange={(event) => setNewUser({ ...newUser, role: event.target.value })}>{roles.map((role) => <option key={role.slug} value={role.slug}>{role.name}</option>)}</select></label><label>Status<select value={newUser.status} onChange={(event) => setNewUser({ ...newUser, status: event.target.value as "Active" | "Invited" })}><option>Invited</option><option>Active</option></select></label><label>Metadata (JSON)<textarea rows={5} value={newUser.metadata} onChange={(event) => setNewUser({ ...newUser, metadata: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" disabled={!newUser.name.trim() || !newUser.email.includes("@")} onClick={() => { let metadata: Record<string, unknown>; try { metadata = JSON.parse(newUser.metadata || "{}"); } catch { return; } const role = roles.find((item) => item.slug === newUser.role) || roles[0]; if (!role) return; create({ id: "usr_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: newUser.name.trim(), email: newUser.email.trim().toLowerCase(), role: role.slug, status: newUser.status, capabilities: role.capabilities, metadata }); setNewUser({ name: "", email: "", role: roles[0]?.slug || "", status: "Invited", metadata: "{}" }); setCreating(false); }}>Create user</button></div></div></section>}
       {editing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">USER PROFILE</p><h2>Edit {editing.name}</h2></div><button className="text-button" onClick={() => setEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label>Email<input type="email" value={editing.email} onChange={(event) => setEditing({ ...editing, email: event.target.value })} /></label><label>Metadata (JSON)<textarea rows={7} value={metadataText} onChange={(event) => setMetadataText(event.target.value)} /></label><div className="modal-actions"><button className="primary-button" onClick={saveEditor}>Save user</button></div></div></section>}
     </div>
   );
