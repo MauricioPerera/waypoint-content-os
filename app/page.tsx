@@ -451,6 +451,7 @@ export default function Home() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [showEntry, setShowEntry] = useState(false),
     [showTaxonomy, setShowTaxonomy] = useState(false),
     [showTerm, setShowTerm] = useState(false),
@@ -812,11 +813,11 @@ export default function Home() {
               <strong>{label(view)}</strong>
             </div>
             <div className="topbar-actions">
-              <button className="icon-button">⌕</button>
-              <button className="icon-button">
+              <button className="icon-button" aria-label="Search entries" onClick={() => { const query = window.prompt("Search entries, fields, relations"); if (query !== null) { setView("entries"); window.dispatchEvent(new CustomEvent("waypoint-entry-search", { detail: query })); } }}>⌕</button>
+              <button className="icon-button" aria-label="Open agent activity" onClick={() => setView("activity")}>
                 ♧<i />
               </button>
-              <button className="help-button">
+              <button className="help-button" onClick={() => setHelpOpen(true)}>
                 ? <span>Help</span>
               </button>
               <button
@@ -1093,10 +1094,20 @@ export default function Home() {
             }}
           />
         )}{" "}
-        {toast && (
+          {toast && (
           <div className="toast">
             <span>✓</span>
             {toast}
+          </div>
+        )}
+        {helpOpen && (
+          <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>
+            <div className="modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-top"><div><p className="eyebrow">WAYPOINT GUIDE</p><h2>Agent-ready workspace</h2></div><button onClick={() => setHelpOpen(false)}>×</button></div>
+              <p className="subhead">Use the sidebar to manage entries, content types, taxonomies, terms, relations, users and plugins.</p>
+              <p className="subhead">Agents can use the WebMCP tools to create and update structured content through the same workspace logic.</p>
+              <div className="modal-actions"><button className="primary-button" onClick={() => setHelpOpen(false)}>Got it</button></div>
+            </div>
           </div>
         )}
       </div>
@@ -2959,11 +2970,15 @@ function Entries({
       setVisibleType((event as CustomEvent<string>).detail);
     const handleStatus = (event: Event) =>
       setVisibleStatus((event as CustomEvent<string>).detail);
+    const handleSearch = (event: Event) =>
+      setQ((event as CustomEvent<string>).detail);
     window.addEventListener("waypoint-type-filter", handleType);
     window.addEventListener("waypoint-status-filter", handleStatus);
+    window.addEventListener("waypoint-entry-search", handleSearch);
     return () => {
       window.removeEventListener("waypoint-type-filter", handleType);
       window.removeEventListener("waypoint-status-filter", handleStatus);
+      window.removeEventListener("waypoint-entry-search", handleSearch);
     };
   }, []);
   const typeNames = Array.from(new Set(entries.map((entry) => entry.type)));
