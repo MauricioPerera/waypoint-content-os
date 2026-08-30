@@ -301,6 +301,37 @@ export function createTools(s: State) {
       },
     }),
     defineTool({
+      stableKey: "page.create_template",
+      name: "create_page_template",
+      title: "Crear plantilla visual",
+      description: "Crea una plantilla reutilizable con bloques y un layout opcional; úsala cuando el agente deba convertir una estructura visual en una base para futuras páginas y devuelve la plantilla registrada.",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, slug: { type: "string" }, description: { type: "string" }, blocks: { type: "array" }, layoutId: { type: "string" } }, required: ["name", "slug", "blocks"], additionalProperties: false },
+      async execute({ name, slug, description, blocks, layoutId }: { name: string; slug: string; description?: string; blocks: PageBlock[]; layoutId?: string }) {
+        const normalized = slug.trim().toLowerCase();
+        if (!name.trim() || !/^[a-z0-9-]+$/.test(normalized)) throw Error("Nombre o slug de plantilla inválido");
+        if (s.templates.some((template) => template.slug === normalized)) throw Error("El slug de plantilla ya existe");
+        if (layoutId && !s.layouts.some((layout) => layout.id === layoutId || layout.slug === layoutId)) throw Error("Layout no encontrado");
+        const template: PageTemplate = { id: "tpl_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: name.trim(), slug: normalized, description: description?.trim() || "AI-created visual template", blocks, layoutId };
+        s.setTemplates((all) => [template, ...all]);
+        return { status: "created", template, ui_effect: "page_template_created" };
+      },
+    }),
+    defineTool({
+      stableKey: "page.create_layout",
+      name: "create_page_layout",
+      title: "Crear layout visual",
+      description: "Crea un layout reutilizable con regiones y reglas de diseño; úsala cuando el agente deba definir una base consistente para páginas y devuelve el layout disponible en el editor.",
+      inputSchema: { type: "object", properties: { name: { type: "string" }, slug: { type: "string" }, regions: { type: "array", items: { type: "string" } }, rules: { type: "object" } }, required: ["name", "slug", "regions", "rules"], additionalProperties: false },
+      async execute({ name, slug, regions, rules }: { name: string; slug: string; regions: string[]; rules: { fontFamily: string; headingScale: string; accent: string; maxWidth: string; spacing: string; radius: string } }) {
+        const normalized = slug.trim().toLowerCase();
+        if (!name.trim() || !/^[a-z0-9-]+$/.test(normalized) || !regions.length) throw Error("Nombre, slug o regiones de layout inválidos");
+        if (s.layouts.some((layout) => layout.slug === normalized)) throw Error("El slug de layout ya existe");
+        const layout: PageLayout = { id: "layout_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: name.trim(), slug: normalized, regions: [...new Set(regions.map((region) => region.trim()).filter(Boolean))], rules };
+        s.setLayouts((all) => [layout, ...all]);
+        return { status: "created", layout, ui_effect: "page_layout_created" };
+      },
+    }),
+    defineTool({
       stableKey: "page.update_visual_page",
       name: "update_visual_page",
       title: "Editar página visual",
