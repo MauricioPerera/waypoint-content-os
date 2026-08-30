@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { WebmcpRegistrar } from '../src/mcp/register';
 
 type View = 'overview' | 'entries' | 'schema' | 'taxonomies' | 'relations';
-type Entry = { id:string; title:string; type:string; status:'Published'|'Draft'; updated:string; relation:string };
+type Entry = { id:string; title:string; type:string; status:'Published'|'Draft'; updated:string; relation:string; metadata?:Record<string,unknown>; data?:Record<string,unknown> };
 type ContentType = { icon:string; name:string; count:number; tone:string; desc:string; slug:string; fields:string[] };
 type Term = { id:string; name:string; slug:string; parent:string|null; description?:string };
 type Taxonomy = { name:string; slug:string; hierarchical:boolean; terms:Term[] };
@@ -29,7 +29,7 @@ export default function Home(){
  useEffect(()=>{const raw=window.localStorage.getItem('waypoint.model');if(raw)try{const data=JSON.parse(raw);if(data.entries)setEntries(data.entries);if(data.types)setTypes(data.types);if(data.taxonomies)setTaxonomies(data.taxonomies);if(data.relations)setRelations(data.relations);if(data.revisions)setRevisions(data.revisions)}catch{/* keep seed */}},[]);
  useEffect(()=>{window.localStorage.setItem('waypoint.model',JSON.stringify({entries,types,taxonomies,relations,revisions}));window.dispatchEvent(new Event('waypoint-model-updated'))},[entries,types,taxonomies,relations,revisions]);
  const notify=(message:string)=>{setToast(message);window.setTimeout(()=>setToast(''),2600)};
- const createEntry=(title:string,type:string)=>{setEntries(x=>[{id:'ent_'+Math.random().toString(16).slice(2,8).toUpperCase(),title,type,status:'Draft',updated:'Just now',relation:'No relations yet'},...x]);setShowEntry(false);notify('Draft created')};
+ const createEntry=(title:string,type:string,data:Record<string,unknown>={})=>{setEntries(x=>[{id:'ent_'+Math.random().toString(16).slice(2,8).toUpperCase(),title,type,status:'Draft',updated:'Just now',relation:'No relations yet',data},...x]);setShowEntry(false);notify('Draft created')};
  const createContentType=(name:string,slug:string,fields:string[])=>{const s=slug.trim().toLowerCase();if(!/^[a-z0-9-]+$/.test(s)||types.some(t=>t.slug===s))throw Error('Slug inválido o duplicado');setTypes(x=>[...x,{icon:'◇',name:name.trim(),count:0,tone:'lavender',desc:'Agent-created content type',slug:s,fields}]);notify('Content type created')};
  const createTerm=(taxonomy:string,name:string,slug:string,parent:string|null,description:string)=>{const s=slug.trim().toLowerCase();if(!/^[a-z0-9-]+$/.test(s))throw Error('Slug inválido');if(taxonomies.find(t=>t.slug===taxonomy)?.terms.some(term=>term.slug===s))throw Error('El término ya existe');setTaxonomies(x=>x.map(t=>t.slug===taxonomy?{...t,terms:[...t.terms,{id:'term_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),slug:s,parent,description}]}:t));setShowTerm(false);notify('Term created')};
  const state={entries,setEntries,contentTypes:types,setContentTypes:setTypes,taxonomies,setTaxonomies,relations,setRelations,revisions,setRevisions,activeType:'All content',setActiveType:()=>{},createEntry,createContentType,notify};
