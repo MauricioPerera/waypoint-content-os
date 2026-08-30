@@ -993,6 +993,17 @@ export default function Home() {
           {view === "settings" && (
             <Settings
               settings={settings}
+              changePassword={async (currentPassword, password) => {
+                const response = await fetch("/api/auth/password", {
+                  method: "POST",
+                  credentials: "same-origin",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ currentPassword, password }),
+                });
+                const payload = (await response.json()) as { error?: string };
+                if (!response.ok) throw new Error(payload.error || "No se pudo cambiar la contraseña");
+                notify("Password updated");
+              }}
               save={(next) => {
                 setSettings(next);
                 window.localStorage.setItem(
@@ -1315,11 +1326,17 @@ function Nav({
 function Settings({
   settings,
   save,
+  changePassword,
 }: {
   settings: SiteSettings;
   save: (settings: SiteSettings) => void;
+  changePassword: (currentPassword: string, password: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(settings);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
   useEffect(() => setDraft(settings), [settings]);
   return (
     <div className="page">
@@ -1398,6 +1415,15 @@ function Settings({
               Save settings
             </button>
           </div>
+        </div>
+      </section>
+      <section className="card entries-card">
+        <div className="card-heading"><div><p className="eyebrow">SECURITY</p><h2>Change password</h2></div></div>
+        <div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}>
+          <label>Current password<input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+          <label>New password<input type="password" minLength={12} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="12+ characters" /></label>
+          {passwordMessage && <p className="subhead">{passwordMessage}</p>}
+          <div className="modal-actions"><button className="primary-button" disabled={passwordBusy || currentPassword.length === 0 || newPassword.length < 12} onClick={async () => { setPasswordBusy(true); setPasswordMessage(""); try { await changePassword(currentPassword, newPassword); setCurrentPassword(""); setNewPassword(""); setPasswordMessage("Password updated successfully."); } catch (error) { setPasswordMessage(error instanceof Error ? error.message : "Could not update password."); } finally { setPasswordBusy(false); } }}>{passwordBusy ? "Updating…" : "Update password"}</button></div>
         </div>
       </section>
     </div>
