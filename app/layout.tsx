@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import './taxonomies.css';
+import './relations.css';
 
 export const metadata: Metadata = {
   title: 'Waypoint — Agent-first content OS',
