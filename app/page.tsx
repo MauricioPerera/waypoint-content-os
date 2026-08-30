@@ -2358,6 +2358,13 @@ function Plugins({
     }).catch(() => undefined);
     window.dispatchEvent(new Event("waypoint-model-updated"));
   };
+  const recordTestRun = (run: { id: string; kind: "hook" | "action"; label: string; createdAt: string }) => {
+    setTestRuns((runs) => {
+      const next = [run, ...runs].slice(0, 10);
+      window.localStorage.setItem("waypoint.extension-test-runs", JSON.stringify(next));
+      return next;
+    });
+  };
   useEffect(() => {
     const sync = () => {
       try {
@@ -2373,6 +2380,12 @@ function Plugins({
       }
     };
     sync();
+    try {
+      const storedRuns = JSON.parse(window.localStorage.getItem("waypoint.extension-test-runs") || "[]");
+      if (Array.isArray(storedRuns)) setTestRuns(storedRuns);
+    } catch {
+      setTestRuns([]);
+    }
     fetch("/api/registry/hooks", { credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload) => {
@@ -2439,12 +2452,12 @@ function Plugins({
   };
   const testHook = (hook: Hook) => {
     window.dispatchEvent(new CustomEvent("waypoint-hook", { detail: { hook, event: hook.event, payload: { source: "manual-test" }, emittedAt: new Date().toISOString() } }));
-    setTestRuns((runs) => [{ id: hook.id + Date.now(), kind: "hook" as const, label: hook.name, createdAt: new Date().toISOString() }, ...runs].slice(0, 10));
+    recordTestRun({ id: hook.id + Date.now(), kind: "hook", label: hook.name, createdAt: new Date().toISOString() });
     setRegistryNotice(`Hook ${hook.name} emitted successfully.`);
   };
   const runAction = (action: Action) => {
     window.dispatchEvent(new CustomEvent("waypoint-action", { detail: { action, input: {}, runAt: new Date().toISOString() } }));
-    setTestRuns((runs) => [{ id: action.id + Date.now(), kind: "action" as const, label: action.label, createdAt: new Date().toISOString() }, ...runs].slice(0, 10));
+    recordTestRun({ id: action.id + Date.now(), kind: "action", label: action.label, createdAt: new Date().toISOString() });
     setRegistryNotice(`Action ${action.label} dispatched safely.`);
   };
   const installPlugin = () => {
