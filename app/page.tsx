@@ -690,6 +690,39 @@ export default function Home() {
     emitRegisteredHooks("entry.deleted", { entryId: entry.id });
     notify("Entry deleted");
   };
+  const removeType = (type: ContentType) => {
+    if (!window.confirm(`Delete content type ${type.name}?`)) return;
+    setTypes((all) => all.filter((item) => item.slug !== type.slug));
+    setEntries((all) => all.filter((entry) => entry.type !== type.name));
+    emitRegisteredHooks("content_type.deleted", { slug: type.slug });
+    notify("Content type deleted");
+  };
+  const updateType = (type: ContentType) => { setTypes((all) => all.map((item) => item.slug === type.slug ? type : item)); emitRegisteredHooks("content_type.updated", { contentType: type }); notify("Content type updated"); };
+  const removeTaxonomy = (taxonomy: Taxonomy) => {
+    if (!window.confirm(`Delete taxonomy ${taxonomy.name}?`)) return;
+    setTaxonomies((all) => all.filter((item) => item.slug !== taxonomy.slug));
+    setTermAssignments((all) => all.filter((item) => item.taxonomy !== taxonomy.slug));
+    emitRegisteredHooks("taxonomy.deleted", { slug: taxonomy.slug });
+    notify("Taxonomy deleted");
+  };
+  const updateTaxonomy = (taxonomy: Taxonomy) => { setTaxonomies((all) => all.map((item) => item.slug === taxonomy.slug ? taxonomy : item)); emitRegisteredHooks("taxonomy.updated", { taxonomy }); notify("Taxonomy updated"); };
+  const removeTerm = (taxonomy: Taxonomy, term: Term) => {
+    setTaxonomies((all) => all.map((item) => item.slug === taxonomy.slug ? { ...item, terms: item.terms.filter((candidate) => candidate.id !== term.id && candidate.parent !== term.id) } : item));
+    emitRegisteredHooks("term.deleted", { taxonomy: taxonomy.slug, termId: term.id });
+    notify("Term deleted");
+  };
+  const removeRelation = (relation: Relation) => {
+    if (!window.confirm(`Delete relation ${relation.name}?`)) return;
+    setRelations((all) => all.filter((item) => item.id !== relation.id));
+    setConnections((all) => all.filter((item) => item.relation !== relation.slug));
+    emitRegisteredHooks("relation.deleted", { relationId: relation.id });
+    notify("Relation deleted");
+  };
+  const updateRelation = (relation: Relation) => { setRelations((all) => all.map((item) => item.id === relation.id ? relation : item)); emitRegisteredHooks("relation.updated", { relation }); notify("Relation updated"); };
+  const updateComment = (comment: Comment) => { setComments((all) => all.map((item) => item.id === comment.id ? { ...comment, updatedAt: new Date().toISOString() } : item)); notify("Comment updated"); };
+  const removeComment = (comment: Comment) => { if (!window.confirm("Delete this comment?")) return; setComments((all) => all.filter((item) => item.id !== comment.id)); notify("Comment deleted"); };
+  const removeMedia = (asset: MediaAsset) => { if (!window.confirm(`Delete ${asset.name}?`)) return; setMedia((all) => all.filter((item) => item.id !== asset.id)); notify("Media deleted"); };
+  const removeMenu = (menu: Menu) => { if (!window.confirm(`Delete menu ${menu.name}?`)) return; setMenus((all) => all.filter((item) => item.id !== menu.id)); notify("Menu deleted"); };
   const createContentType = (
     name: string,
     slug: string,
@@ -874,11 +907,16 @@ export default function Home() {
               types={types}
               entries={entries}
               create={() => setShowType(true)}
+              remove={removeType}
+              update={updateType}
             />
           )}{" "}
           {view === "taxonomies" && (
             <Taxonomies
               taxonomies={taxonomies}
+              remove={removeTaxonomy}
+              removeTerm={removeTerm}
+              update={updateTaxonomy}
               create={() => setShowTaxonomy(true)}
               addTerm={(taxonomy) => {
                 setTermTaxonomy(taxonomy);
@@ -893,6 +931,8 @@ export default function Home() {
               entries={entries}
               relations={relations}
               create={() => setShowRelation(true)}
+              remove={removeRelation}
+              update={updateRelation}
             />
           )}{" "}
           {view === "users" && (
@@ -1002,11 +1042,11 @@ export default function Home() {
               }}
             />
           )}{" "}
-          {view === "media" && <Media media={media} />}{" "}
+          {view === "media" && <Media media={media} remove={removeMedia} />} {" "}
           {view === "comments" && (
-            <Comments comments={comments} entries={entries} />
+            <Comments comments={comments} entries={entries} update={updateComment} remove={removeComment} />
           )}{" "}
-          {view === "menus" && <Menus menus={menus} />}
+          {view === "menus" && <Menus menus={menus} remove={removeMenu} />}
           {view === "settings" && (
             <Settings
               settings={settings}
@@ -1967,7 +2007,7 @@ function Users({
     </div>
   );
 }
-function Media({ media }: { media: MediaAsset[] }) {
+function Media({ media, remove }: { media: MediaAsset[]; remove: (asset: MediaAsset) => void }) {
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -2007,6 +2047,7 @@ function Media({ media }: { media: MediaAsset[] }) {
                 </small>
               </span>
               <strong>{asset.alt || "No alt text"}</strong>
+              <button className="text-button" onClick={() => remove(asset)}>Delete</button>
             </div>
           ))}
         </div>
@@ -2017,9 +2058,13 @@ function Media({ media }: { media: MediaAsset[] }) {
 function Comments({
   comments,
   entries,
+  update,
+  remove,
 }: {
   comments: Comment[];
   entries: Entry[];
+  update: (comment: Comment) => void;
+  remove: (comment: Comment) => void;
 }) {
   return (
     <div className="page">
@@ -2072,6 +2117,10 @@ function Comments({
                   <td>{comment.authorName}</td>
                   <td>
                     <Status label={comment.status} />
+                    <select className="filter-button" value={comment.status} onChange={(event) => update({ ...comment, status: event.target.value as Comment["status"] })}>
+                      <option>Pending</option><option>Approved</option><option>Spam</option>
+                    </select>
+                    <button className="text-button" onClick={() => remove(comment)}>Delete</button>
                   </td>
                 </tr>
               ))}
@@ -2082,7 +2131,7 @@ function Comments({
     </div>
   );
 }
-function Menus({ menus }: { menus: Menu[] }) {
+function Menus({ menus, remove }: { menus: Menu[]; remove: (menu: Menu) => void }) {
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -2109,6 +2158,7 @@ function Menus({ menus }: { menus: Menu[] }) {
                   menu.{menu.slug} · {menu.location || "unassigned"}
                 </small>
               </div>
+              <button className="text-button" onClick={() => remove(menu)}>Delete</button>
             </div>
             <div className="terms-list">
               {menu.items
@@ -3133,12 +3183,18 @@ function Schema({
   types,
   entries,
   create,
+  remove,
+  update,
 }: {
   types: ContentType[];
   entries: Entry[];
   create: () => void;
+  remove: (type: ContentType) => void;
+  update: (type: ContentType) => void;
 }) {
   const primary = types[0];
+  const [editing, setEditing] = useState<ContentType>();
+  const [fieldsText, setFieldsText] = useState("");
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -3174,6 +3230,7 @@ function Schema({
                 }{" "}
                 entries
               </strong>
+              <button className="text-button" onClick={() => { setEditing(t); setFieldsText(t.fields.join(", ")); }}>Edit</button><button className="text-button" onClick={() => remove(t)}>Delete</button>
             </div>
           ))}
         </section>
@@ -3206,19 +3263,28 @@ function Schema({
           <button className="add-field">＋ Add field</button>
         </section>
       </div>
+      {editing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">CONTENT TYPE</p><h2>Edit {editing.name}</h2></div><button className="text-button" onClick={() => setEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label>Description<input value={editing.desc} onChange={(event) => setEditing({ ...editing, desc: event.target.value })} /></label><label>Fields (comma separated)<input value={fieldsText} onChange={(event) => setFieldsText(event.target.value)} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { update({ ...editing, fields: fieldsText.split(",").map((field) => field.trim()).filter(Boolean) }); setEditing(undefined); }}>Save type</button></div></div></section>}
     </div>
   );
 }
 function Taxonomies({
   taxonomies,
+  remove,
+  removeTerm,
+  update,
   create,
   addTerm,
 }: {
   taxonomies: Taxonomy[];
+  remove: (taxonomy: Taxonomy) => void;
+  removeTerm: (taxonomy: Taxonomy, term: Term) => void;
+  update: (taxonomy: Taxonomy) => void;
   create: () => void;
   addTerm: (slug: string) => void;
 }) {
   const [assignments, setAssignments] = useState<TermAssignment[]>([]);
+  const [editing, setEditing] = useState<Taxonomy>();
+  const [termEditing, setTermEditing] = useState<{ taxonomy: Taxonomy; term: Term }>();
   useEffect(() => {
     const raw = window.localStorage.getItem("waypoint.model");
     if (raw)
@@ -3252,6 +3318,7 @@ function Taxonomies({
                   taxonomy.{t.slug} · {t.hierarchical ? "Hierarchical" : "Flat"}
                 </small>
               </div>
+              <button className="text-button" onClick={() => setEditing(t)}>Edit</button><button className="text-button" onClick={() => remove(t)}>Delete</button>
               <button className="dots">•••</button>
             </div>
             <div className="terms-list">
@@ -3275,6 +3342,7 @@ function Taxonomies({
                     }{" "}
                     entries
                   </span>
+                  <button className="text-button" onClick={() => setTermEditing({ taxonomy: t, term })}>Edit</button><button className="text-button" onClick={() => removeTerm(t, term)}>Delete</button>
                 </div>
               ))}
             </div>
@@ -3289,6 +3357,8 @@ function Taxonomies({
           <small>Categories, tags, collections or any vocabulary.</small>
         </section>
       </div>
+      {editing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><h2>Edit taxonomy</h2><button className="text-button" onClick={() => setEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label><input type="checkbox" checked={editing.hierarchical} onChange={(event) => setEditing({ ...editing, hierarchical: event.target.checked })} /> Hierarchical</label><div className="modal-actions"><button className="primary-button" onClick={() => { update(editing); setEditing(undefined); }}>Save taxonomy</button></div></div></section>}
+      {termEditing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><h2>Edit term</h2><button className="text-button" onClick={() => setTermEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={termEditing.term.name} onChange={(event) => setTermEditing({ ...termEditing, term: { ...termEditing.term, name: event.target.value } })} /></label><label>Description<input value={termEditing.term.description || ""} onChange={(event) => setTermEditing({ ...termEditing, term: { ...termEditing.term, description: event.target.value } })} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { const next = { ...termEditing.taxonomy, terms: termEditing.taxonomy.terms.map((term) => term.id === termEditing.term.id ? termEditing.term : term) }; update(next); setTermEditing(undefined); }}>Save term</button></div></div></section>}
     </div>
   );
 }
@@ -3298,13 +3368,18 @@ function Relations({
   entries,
   relations,
   create,
+  remove,
+  update,
 }: {
   siteName: string;
   types: ContentType[];
   entries: Entry[];
   relations: Relation[];
   create: () => void;
+  remove: (relation: Relation) => void;
+  update: (relation: Relation) => void;
 }) {
+  const [editing, setEditing] = useState<Relation>();
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -3373,10 +3448,13 @@ function Relations({
                 {relation.fromType} → {relation.toType}
               </span>
               <small>{relation.cardinality === "one" ? "One" : "Many"}</small>
+              <button className="text-button" onClick={() => setEditing(relation)}>Edit</button>
+              <button className="text-button" onClick={() => remove(relation)}>Delete</button>
             </div>
           ))}
         </div>
       </section>
+      {editing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><h2>Edit relation</h2><button className="text-button" onClick={() => setEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label>Cardinality<select value={editing.cardinality} onChange={(event) => setEditing({ ...editing, cardinality: event.target.value as Relation["cardinality"] })}><option value="one">One</option><option value="many">Many</option></select></label><div className="modal-actions"><button className="primary-button" onClick={() => { update(editing); setEditing(undefined); }}>Save relation</button></div></div></section>}
     </div>
   );
 }
