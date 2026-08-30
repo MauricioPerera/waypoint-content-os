@@ -715,7 +715,7 @@ export default function Home() {
               create={() => setShowRelation(true)}
             />
           )}{" "}
-          {view === "users" && <Users roles={roles} create={(user) => { if (users.some((item) => item.email.toLowerCase() === user.email.toLowerCase())) return; setUsers((all) => [user, ...all]); emitRegisteredHooks("user.created", { user }); notify("User created"); }} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); emitRegisteredHooks("user.updated", { user: next }); notify("User updated"); }} />}{" "}
+          {view === "users" && <Users roles={roles} create={(user) => { if (users.some((item) => item.email.toLowerCase() === user.email.toLowerCase())) return; setUsers((all) => [user, ...all]); emitRegisteredHooks("user.created", { user }); notify("User created"); }} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); emitRegisteredHooks("user.updated", { user: next }); notify("User updated"); }} remove={(user) => { if (!window.confirm(`Delete user ${user.name}?`)) return; setUsers((all) => all.filter((item) => item.id !== user.id)); setEntries((all) => all.map((entry) => entry.authorUserId === user.id ? { ...entry, authorUserId: undefined } : entry)); emitRegisteredHooks("user.deleted", { userId: user.id }); notify("User deleted"); }} />}{" "}
           {view === "plugins" && <Plugins plugins={plugins} install={(plugin) => { if (plugins.some((item) => item.slug === plugin.slug)) return; setPlugins((all) => [plugin, ...all]); emitRegisteredHooks("plugin.installed", { plugin }); notify("Plugin installed"); }} toggle={(plugin) => { const updated = { ...plugin, status: plugin.status === "Active" ? "Inactive" as const : "Active" as const }; setPlugins((all) => all.map((item) => item.id === plugin.id ? updated : item)); emitRegisteredHooks("plugin.status_changed", { plugin: updated }); notify(updated.status === "Active" ? "Plugin enabled" : "Plugin disabled"); }} />}{" "}
           {view === "media" && <Media media={media} />}{" "}
           {view === "comments" && (
@@ -999,7 +999,7 @@ function Settings({
     </div>
   );
 }
-function Users({ users, roles, create, update }: { users: User[]; roles: Role[]; create: (user: User) => void; update: (user: User) => void }) {
+function Users({ users, roles, create, update, remove }: { users: User[]; roles: Role[]; create: (user: User) => void; update: (user: User) => void; remove: (user: User) => void }) {
   const [editing, setEditing] = useState<User>();
   const [metadataText, setMetadataText] = useState("");
   const [creating, setCreating] = useState(false);
@@ -1063,7 +1063,7 @@ function Users({ users, roles, create, update }: { users: User[]; roles: Role[];
                   </td>
                   <td>{user.capabilities.length} granted</td>
                   <td>{Object.keys(user.metadata || {}).length} keys</td>
-                  <td><button className="text-button" onClick={() => openEditor(user)}>Edit</button></td>
+                  <td><button className="text-button" onClick={() => openEditor(user)}>Edit</button><button className="text-button" onClick={() => remove(user)}>Delete</button></td>
                 </tr>
               ))}
             </tbody>
