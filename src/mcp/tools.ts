@@ -7408,6 +7408,7 @@ export function createTools(s: State) {
               "user.update_user",
               "user.bulk_set_user_metadata",
               "role.create_role",
+              "role.update_role",
               "media.register_media_asset",
               "media.bulk_attach",
               "media.update_metadata",
