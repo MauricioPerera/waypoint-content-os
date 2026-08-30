@@ -1,186 +1,9811 @@
-import { defineTool } from '@nekuda/webmcp-sdk';
-export type Entry={id:string;title:string;slug?:string;type:string;status:'Published'|'Draft';updated:string;relation:string;authorUserId?:string;parentEntryId?:string;scheduledAt?:string;deletedAt?:string;metadata?:Record<string,unknown>;data?:Record<string,unknown>};
-export type ContentType={icon:string;name:string;count:number;tone:string;desc:string;slug:string;fields:string[];fieldTypes?:Record<string,'text'|'number'|'boolean'|'url'|'date'|'json'>;requiredFields?:string[]};
-export type Term={id:string;name:string;slug:string;parent:string|null;description?:string};
-export type Taxonomy={name:string;slug:string;hierarchical:boolean;terms:Term[]};
-export type Relation={id:string;name:string;slug:string;fromType:string;toType:string;cardinality:'one'|'many'};
-export type Connection={id:string;relation:string;fromEntryId:string;toEntryId:string;createdAt:string};
-export type TermAssignment={entryId:string;taxonomy:string;termIds:string[];updatedAt:string};
-export type Revision={id:string;entryId:string;createdAt:string;action:string;before:Entry;after:Entry};
-export type User={id:string;name:string;email:string;role:string;status:'Active'|'Invited';metadata?:Record<string,unknown>;capabilities:string[]};
-export type Role={id:string;name:string;slug:string;description:string;capabilities:string[];system?:boolean};
-export type MediaAsset={id:string;name:string;url:string;mimeType:string;size:number;width?:number;height?:number;alt?:string;metadata?:Record<string,unknown>;attachedEntryIds:string[];createdAt:string};
-export type Comment={id:string;entryId:string;parentCommentId?:string;authorUserId?:string;authorName:string;authorEmail?:string;content:string;status:'Pending'|'Approved'|'Spam';metadata?:Record<string,unknown>;createdAt:string;updatedAt:string};
-export type MenuItem={id:string;label:string;url?:string;entryId?:string;parentId?:string;order:number;openInNewTab?:boolean};
-export type Menu={id:string;name:string;slug:string;location?:string;items:MenuItem[]};
-export type Plugin={id:string;name:string;slug:string;version:string;author:string;description:string;status:'Active'|'Inactive';capabilities:string[]};
-export type Hook={id:string;name:string;event:string;priority:number;enabled:boolean;pluginSlug?:string;description?:string};
-export type Action={id:string;name:string;label:string;description:string;pluginSlug?:string;capabilities?:string[]};
-export type State={entries:Entry[];setEntries:(v:Entry[]|((x:Entry[])=>Entry[]))=>void;contentTypes:ContentType[];setContentTypes:(v:ContentType[]|((x:ContentType[])=>ContentType[]))=>void;taxonomies:Taxonomy[];setTaxonomies:(v:Taxonomy[]|((x:Taxonomy[])=>Taxonomy[]))=>void;relations:Relation[];setRelations:(v:Relation[]|((x:Relation[])=>Relation[]))=>void;connections:Connection[];setConnections:(v:Connection[]|((x:Connection[])=>Connection[]))=>void;termAssignments:TermAssignment[];setTermAssignments:(v:TermAssignment[]|((x:TermAssignment[])=>TermAssignment[]))=>void;revisions:Revision[];setRevisions:(v:Revision[]|((x:Revision[])=>Revision[]))=>void;users:User[];setUsers:(v:User[]|((x:User[])=>User[]))=>void;roles:Role[];setRoles:(v:Role[]|((x:Role[])=>Role[]))=>void;plugins:Plugin[];setPlugins:(v:Plugin[]|((x:Plugin[])=>Plugin[]))=>void;media:MediaAsset[];setMedia:(v:MediaAsset[]|((x:MediaAsset[])=>MediaAsset[]))=>void;comments:Comment[];setComments:(v:Comment[]|((x:Comment[])=>Comment[]))=>void;menus:Menu[];setMenus:(v:Menu[]|((x:Menu[])=>Menu[]))=>void;activeType:string;setActiveType:(v:string)=>void;activeStatus:string;setActiveStatus:(v:string)=>void;createEntry:(title:string,type:string,data?:Record<string,unknown>)=>Entry;createContentType:(name:string,slug:string,fields:string[],fieldTypes?:ContentType['fieldTypes'],requiredFields?:string[])=>ContentType;notify:(v:string)=>void};
-export function createTools(s:State){const findTaxonomy=(slug:string)=>s.taxonomies.find(t=>t.slug===slug||t.name===slug);const validateData=(model:ContentType,data:Record<string,unknown>)=>{const errors:string[]=[];for(const field of model.requiredFields||[])if(data[field]===undefined||data[field]===null||data[field]==='')errors.push('Campo obligatorio ausente: '+field);for(const [field,kind] of Object.entries(model.fieldTypes||{})){const value=data[field];if(value===undefined||value===null)continue;const valid=kind==='text'?typeof value==='string':kind==='number'?typeof value==='number'&&Number.isFinite(value):kind==='boolean'?typeof value==='boolean':kind==='url'?typeof value==='string'&&(value.startsWith('http://')||value.startsWith('https://')):kind==='date'?typeof value==='string'&&!Number.isNaN(Date.parse(value)):true;if(!valid)errors.push('Valor inválido para '+field+' ('+kind+')')}return errors};const fingerprint=(value:unknown)=>{const text=JSON.stringify(value);let hash=0;for(let index=0;index<text.length;index++)hash=(hash*31+text.charCodeAt(index))|0;return'prev_'+Math.abs(hash).toString(16)};const readRegistry=(key:string)=>{const raw=window.localStorage.getItem(key);if(!raw)return[];try{const value=JSON.parse(raw);return Array.isArray(value)?value:[]}catch{return[]}};const writeRegistry=(key:string,value:unknown[])=>{window.localStorage.setItem(key,JSON.stringify(value));window.dispatchEvent(new Event('waypoint-model-updated'))};return[
- defineTool({stableKey:'automation.list_hooks',name:'list_hooks',title:'Listar hooks',description:'Lista los hooks declarativos registrados para que un agente conozca los eventos disponibles y sus prioridades.',inputSchema:{type:'object',properties:{event:{type:'string'},enabled:{type:'boolean'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({event,enabled}:{event?:string;enabled?:boolean}){const hooks=readRegistry('waypoint.hooks').filter((hook:Hook)=>(!event||hook.event===event)&&(enabled===undefined||hook.enabled===enabled));return{hooks,count:hooks.length,events:[...new Set(hooks.map((hook:Hook)=>hook.event))],ui_effect:'hooks_listed'}}}),
- defineTool({stableKey:'automation.register_hook',name:'register_hook',title:'Registrar hook',description:'Registra una suscripción declarativa a un evento del CMS; no ejecuta código arbitrario y solo publica payloads controlados.',inputSchema:{type:'object',properties:{name:{type:'string'},event:{type:'string'},priority:{type:'number'},enabled:{type:'boolean'},pluginSlug:{type:'string'},description:{type:'string'}},required:['name','event'],additionalProperties:false},async execute({name,event,priority,enabled,pluginSlug,description}:{name:string;event:string;priority?:number;enabled?:boolean;pluginSlug?:string;description?:string}){if(!name.trim()||!event.trim())throw Error('name y event son obligatorios');const hooks=readRegistry('waypoint.hooks') as Hook[];if(hooks.some(hook=>hook.name===name.trim()))throw Error('El hook ya existe');const hook={id:'hook_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),event:event.trim(),priority:Number.isFinite(priority)?priority!:10,enabled:enabled!==false,pluginSlug:pluginSlug?.trim()||undefined,description:description?.trim()||undefined};writeRegistry('waypoint.hooks',[...hooks,hook]);return{status:'registered',hook,ui_effect:'hook_registered'}}}),
- defineTool({stableKey:'automation.remove_hook',name:'remove_hook',title:'Eliminar hook',description:'Prepara o elimina una suscripción declarativa; requiere confirm:true para borrar el registro.',inputSchema:{type:'object',properties:{hook:{type:'string'},confirm:{type:'boolean'}},required:['hook'],additionalProperties:false},async execute({hook,confirm}:{hook:string;confirm?:boolean}){const hooks=readRegistry('waypoint.hooks') as Hook[];const current=hooks.find(item=>item.id===hook||item.name===hook);if(!current)throw Error('Hook no encontrado');if(!confirm)return{status:'confirmation_required',hook:current,note:'Repite con confirm:true para eliminar este hook'};writeRegistry('waypoint.hooks',hooks.filter(item=>item.id!==current.id));return{status:'removed',hookId:current.id,ui_effect:'hook_removed'}}}),
- defineTool({stableKey:'automation.list_actions',name:'list_actions',title:'Listar acciones',description:'Lista las acciones declarativas disponibles para que el agente descubra capacidades automatizables sin ejecutar código externo.',inputSchema:{type:'object',properties:{pluginSlug:{type:'string'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({pluginSlug}:{pluginSlug?:string}){const actions=readRegistry('waypoint.actions').filter((action:Action)=>!pluginSlug||action.pluginSlug===pluginSlug);return{actions,count:actions.length,ui_effect:'actions_listed'}}}),
- defineTool({stableKey:'automation.register_action',name:'register_action',title:'Registrar acción',description:'Registra una acción declarativa con capacidades explícitas; su ejecución se limita a emitir un evento seguro al runtime.',inputSchema:{type:'object',properties:{name:{type:'string'},label:{type:'string'},description:{type:'string'},pluginSlug:{type:'string'},capabilities:{type:'array',items:{type:'string'}}},required:['name','label','description'],additionalProperties:false},async execute({name,label,description,pluginSlug,capabilities}:{name:string;label:string;description:string;pluginSlug?:string;capabilities?:string[]}){const actions=readRegistry('waypoint.actions') as Action[];if(!name.trim()||!label.trim()||!description.trim())throw Error('name, label y description son obligatorios');if(actions.some(action=>action.name===name.trim()))throw Error('La acción ya existe');const action={id:'act_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),label:label.trim(),description:description.trim(),pluginSlug:pluginSlug?.trim()||undefined,capabilities:[...new Set(capabilities||[])]};writeRegistry('waypoint.actions',[...actions,action]);return{status:'registered',action,ui_effect:'action_registered'}}}),
- defineTool({stableKey:'automation.dispatch_action',name:'dispatch_action',title:'Despachar acción',description:'Despacha una acción registrada con un payload JSON para que la aplicación y sus hooks reaccionen; no evalúa ni ejecuta funciones recibidas.',inputSchema:{type:'object',properties:{action:{type:'string'},payload:{type:'object'}},required:['action'],additionalProperties:false},async execute({action,payload}:{action:string;payload?:Record<string,unknown>}){const actions=readRegistry('waypoint.actions') as Action[];const current=actions.find(item=>item.id===action||item.name===action);if(!current)throw Error('Acción no encontrada');const detail={action:current.name,payload:payload||{},dispatchedAt:new Date().toISOString()};window.dispatchEvent(new CustomEvent('waypoint-action',{detail}));window.dispatchEvent(new CustomEvent('waypoint-hook',{detail:{event:'action:'+current.name,...detail}}));return{status:'dispatched',action:current,detail,ui_effect:'action_dispatched'}}}),
- defineTool({stableKey:'schema.get_content_model',name:'get_content_model',title:'Inspeccionar modelo',description:'Devuelve una descripción completa y legible del modelo actual para que el agente descubra tipos, usuarios, roles, plugins, medios, campos, taxonomías, relaciones, comentarios y menús antes de actuar.',inputSchema:{type:'object',properties:{},additionalProperties:false},async execute(){return{version:6,contentTypes:s.contentTypes.map(t=>({name:t.name,slug:t.slug,fields:t.fields,fieldTypes:t.fieldTypes||{},requiredFields:t.requiredFields||[]})),users:s.users.map(user=>({id:user.id,name:user.name,email:user.email,role:user.role,status:user.status,capabilities:user.capabilities})),roles:s.roles,plugins:s.plugins,media:s.media,taxonomies:s.taxonomies.map(t=>({name:t.name,slug:t.slug,hierarchical:t.hierarchical,terms:t.terms})),relations:s.relations,comments:s.comments,menus:s.menus,connectionCount:s.connections.length,termAssignmentCount:s.termAssignments.length,userCount:s.users.length,pluginCount:s.plugins.length,mediaCount:s.media.length,counts:{contentTypes:s.contentTypes.length,users:s.users.length,roles:s.roles.length,plugins:s.plugins.length,media:s.media.length,taxonomies:s.taxonomies.length,relations:s.relations.length,comments:s.comments.length,menus:s.menus.length,connections:s.connections.length,termAssignments:s.termAssignments.length}}}}),
- defineTool({stableKey:'schema.get_workspace_model',name:'get_workspace_model',title:'Inspeccionar workspace',description:'Devuelve usuarios, roles, plugins, medios, comentarios y menús en una sola respuesta para que el agente descubra las capacidades operativas del CMS.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){return{users:s.users,roles:s.roles,plugins:s.plugins,media:s.media,comments:s.comments,menus:s.menus,counts:{users:s.users.length,roles:s.roles.length,plugins:s.plugins.length,media:s.media.length,comments:s.comments.length,menus:s.menus.length},note:'Modelo operativo del workspace'}}}),
- defineTool({stableKey:'user.list_users',name:'list_users',title:'Listar usuarios',description:'Lista los usuarios del workspace con sus roles, estado, capacidades y metadatos básicos para identificar responsables antes de asignar contenido.',inputSchema:{type:'object',properties:{role:{type:'string'},status:{type:'string',enum:['Active','Invited']}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({role,status}:{role?:string;status?:'Active'|'Invited'}){const users=s.users.filter(user=>(!role||user.role===role)&&(!status||user.status===status));return{users,count:users.length,note:users.length?'':'No hay usuarios que coincidan'}}}),
- defineTool({stableKey:'user.check_capability',name:'check_user_capability',title:'Comprobar capacidad',description:'Comprueba si un usuario tiene una capacidad declarada directa o heredada de su rol; informa, pero no sustituye la autorización del servidor.',inputSchema:{type:'object',properties:{userId:{type:'string'},capability:{type:'string'}},required:['userId','capability'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({userId,capability}:{userId:string;capability:string}){const user=s.users.find(item=>item.id===userId);if(!user)throw Error('Usuario no encontrado');const role=s.roles.find(item=>item.slug===user.role||item.name===user.role);const direct=user.capabilities.includes(capability);const inherited=role?.capabilities.includes(capability)??false;return{userId,capability,allowed:direct||inherited,role:user.role,source:direct?'user':inherited?'role':null,note:'La autorización definitiva debe verificarse en el servidor'}}}),
- defineTool({stableKey:'role.list_roles',name:'list_roles',title:'Listar roles',description:'Lista los roles disponibles con sus capacidades para que el agente pueda elegir permisos coherentes al administrar usuarios.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){return{roles:s.roles,count:s.roles.length,note:s.roles.length?'':'No hay roles definidos'}}}),
- defineTool({stableKey:'role.create_role',name:'create_role',title:'Crear rol',description:'Crea un rol reutilizable con una lista explícita de capacidades para administrar acceso editorial.',inputSchema:{type:'object',properties:{name:{type:'string'},slug:{type:'string'},description:{type:'string'},capabilities:{type:'array',items:{type:'string'}}},required:['name','slug'],additionalProperties:false},async execute({name,slug,description,capabilities}:{name:string;slug:string;description?:string;capabilities?:string[]}){const normalized=slug.trim().toLowerCase();if(!name.trim()||!/^[a-z0-9-]+$/.test(normalized))throw Error('Nombre o slug inválido');if(s.roles.some(role=>role.slug===normalized))throw Error('El rol ya existe');const role={id:'role_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),slug:normalized,description:description?.trim()||'',capabilities:[...new Set(capabilities||[])]};s.setRoles(all=>[role,...all]);return{status:'created',role,ui_effect:'role_created'}}}),
- defineTool({stableKey:'role.update_role',name:'update_role',title:'Actualizar rol',description:'Actualiza la descripción o capacidades de un rol; los usuarios conservarán la referencia al rol por su slug.',inputSchema:{type:'object',properties:{role:{type:'string'},name:{type:'string'},description:{type:'string'},capabilities:{type:'array',items:{type:'string'}}},required:['role'],additionalProperties:false},async execute({role,name,description,capabilities}:{role:string;name?:string;description?:string;capabilities?:string[]}){const current=s.roles.find(item=>item.id===role||item.slug===role||item.name===role);if(!current)throw Error('Rol no encontrado');const updated={...current,...(name===undefined?{}:{name:name.trim()}),...(description===undefined?{}:{description:description.trim()}),...(capabilities===undefined?{}:{capabilities:[...new Set(capabilities)]})};s.setRoles(all=>all.map(item=>item.id===current.id?updated:item));return{status:'updated',role:updated,ui_effect:'role_updated'}}}),
- defineTool({stableKey:'user.get_user',name:'get_user',title:'Leer usuario',description:'Devuelve el perfil completo de un usuario, incluyendo rol, capacidades y metadatos, para preparar una operación editorial contextualizada.',inputSchema:{type:'object',properties:{userId:{type:'string'}},required:['userId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({userId}:{userId:string}){const user=s.users.find(item=>item.id===userId);if(!user)throw Error('Usuario no encontrado');return{user,ui_effect:'user_opened'}}}),
- defineTool({stableKey:'user.create_user',name:'create_user',title:'Crear usuario',description:'Crea un usuario invitado o activo con un rol existente; no autentica ni envía correos desde el navegador.',inputSchema:{type:'object',properties:{name:{type:'string'},email:{type:'string'},role:{type:'string'},status:{type:'string',enum:['Active','Invited']},metadata:{type:'object'}},required:['name','email','role'],additionalProperties:false},async execute({name,email,role,status,metadata}:{name:string;email:string;role:string;status?:'Active'|'Invited';metadata?:Record<string,unknown>}){if(!name.trim()||!email.trim()||!email.includes('@'))throw Error('Nombre o email inválido');const selected=s.roles.find(item=>item.slug===role||item.name===role);if(!selected)throw Error('Rol no encontrado');if(s.users.some(user=>user.email.toLowerCase()===email.trim().toLowerCase()))throw Error('El email ya está registrado');const user={id:'usr_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),email:email.trim().toLowerCase(),role:selected.slug,status:status||'Invited',capabilities:selected.capabilities,metadata:metadata||{}};s.setUsers(all=>[user,...all]);return{status:'created',user,ui_effect:'user_created'}}}),
- defineTool({stableKey:'user.update_user',name:'update_user',title:'Actualizar usuario',description:'Actualiza el perfil, rol, estado, capacidades o metadatos de un usuario existente y devuelve el perfil resultante.',inputSchema:{type:'object',properties:{userId:{type:'string'},name:{type:'string'},email:{type:'string'},role:{type:'string'},status:{type:'string',enum:['Active','Invited']},capabilities:{type:'array',items:{type:'string'}},metadata:{type:'object'}},required:['userId'],additionalProperties:false},async execute({userId,name,email,role,status,capabilities,metadata}:{userId:string;name?:string;email?:string;role?:string;status?:'Active'|'Invited';capabilities?:string[];metadata?:Record<string,unknown>}){const current=s.users.find(user=>user.id===userId);if(!current)throw Error('Usuario no encontrado');if(email&&!email.includes('@'))throw Error('Email inválido');if(email&&s.users.some(user=>user.id!==userId&&user.email.toLowerCase()===email.trim().toLowerCase()))throw Error('El email ya está registrado');const selected=role?s.roles.find(item=>item.slug===role||item.name===role):undefined;if(role&&!selected)throw Error('Rol no encontrado');const user={...current,...(name===undefined?{}:{name:name.trim()}),...(email===undefined?{}:{email:email.trim().toLowerCase()}),...(role===undefined?{}:{role:selected!.slug,capabilities:selected!.capabilities}),...(status===undefined?{}:{status}),...(capabilities===undefined||role!==undefined?{}:{capabilities:[...new Set(capabilities)]}),...(metadata===undefined?{}:{metadata:{...(current.metadata||{}),...metadata}})};s.setUsers(all=>all.map(item=>item.id===userId?user:item));return{status:'updated',user,ui_effect:'user_updated'}}}),
- defineTool({stableKey:'user.delete_user',name:'delete_user',title:'Eliminar usuario',description:'Prepara o elimina un usuario y quita su autoría de las entradas relacionadas; requiere confirm:true porque borra el perfil persistido.',inputSchema:{type:'object',properties:{userId:{type:'string'},confirm:{type:'boolean'}},required:['userId'],additionalProperties:false},async execute({userId,confirm}:{userId:string;confirm?:boolean}){const user=s.users.find(item=>item.id===userId);if(!user)throw Error('Usuario no encontrado');const authored=s.entries.filter(entry=>entry.authorUserId===userId).length;if(!confirm)return{status:'confirmation_required',userId,name:user.name,authoredEntries:authored,note:'Repite con confirm:true para eliminar este usuario'};s.setUsers(all=>all.filter(item=>item.id!==userId));s.setEntries(all=>all.map(entry=>entry.authorUserId===userId?{...entry,authorUserId:undefined}:entry));return{status:'deleted',userId,name:user.name,authoredEntries:authored,ui_effect:'user_deleted'}}}),
- defineTool({stableKey:'user.get_metadata',name:'get_user_metadata',title:'Leer metadatos de usuario',description:'Devuelve todos los metadatos personalizados de un usuario o una clave concreta para segmentación y automatizaciones editoriales.',inputSchema:{type:'object',properties:{userId:{type:'string'},key:{type:'string'}},required:['userId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({userId,key}:{userId:string;key?:string}){const user=s.users.find(item=>item.id===userId);if(!user)throw Error('Usuario no encontrado');return{userId,key:key||null,value:key?user.metadata?.[key]:user.metadata||{},ui_effect:'user_metadata_read'}}}),
- defineTool({stableKey:'user.set_metadata',name:'set_user_metadata',title:'Escribir metadatos de usuario',description:'Crea o reemplaza un metadato personalizado de usuario y devuelve el perfil actualizado para que el agente pueda continuar su flujo.',inputSchema:{type:'object',properties:{userId:{type:'string'},key:{type:'string'},value:{}},required:['userId','key','value'],additionalProperties:false},async execute({userId,key,value}:{userId:string;key:string;value:unknown}){const current=s.users.find(user=>user.id===userId);if(!current)throw Error('Usuario no encontrado');if(!key.trim())throw Error('La clave es obligatoria');const user={...current,metadata:{...(current.metadata||{}),[key.trim()]:value}};s.setUsers(all=>all.map(item=>item.id===userId?user:item));return{status:'updated',userId,key:key.trim(),value,ui_effect:'user_metadata_updated'}}}),
- defineTool({stableKey:'user.delete_metadata',name:'delete_user_metadata',title:'Eliminar metadato de usuario',description:'Prepara o elimina un metadato personalizado de usuario; requiere confirm:true porque borra información persistida.',inputSchema:{type:'object',properties:{userId:{type:'string'},key:{type:'string'},confirm:{type:'boolean'}},required:['userId','key'],additionalProperties:false},async execute({userId,key,confirm}:{userId:string;key:string;confirm?:boolean}){const current=s.users.find(user=>user.id===userId);if(!current)throw Error('Usuario no encontrado');const metadata={...(current.metadata||{})};if(!(key in metadata))return{userId,key,status:'not_found'};if(!confirm)return{userId,key,status:'confirmation_required',value:metadata[key],note:'Repite con confirm:true para eliminar este metadato'};delete metadata[key];s.setUsers(all=>all.map(item=>item.id===userId?{...item,metadata}:item));return{userId,key,status:'deleted',ui_effect:'user_metadata_deleted'}}}),
- defineTool({stableKey:'content.assign_author',name:'assign_entry_author',title:'Asignar autor',description:'Asigna un usuario existente como autor de una entrada y devuelve la relación editorial actualizada.',inputSchema:{type:'object',properties:{entryId:{type:'string'},userId:{type:'string'}},required:['entryId','userId'],additionalProperties:false},async execute({entryId,userId}:{entryId:string;userId:string}){const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada');const user=s.users.find(item=>item.id===userId);if(!user)throw Error('Usuario no encontrado');const updated={...entry,authorUserId:userId,updated:'Just now'};s.setEntries(all=>all.map(item=>item.id===entryId?updated:item));return{status:'assigned',entry:updated,author:user,ui_effect:'entry_author_assigned'}}}),
- defineTool({stableKey:'user.list_authored_content',name:'list_user_content',title:'Listar contenido del usuario',description:'Devuelve las entradas cuyo autor es un usuario concreto, filtradas opcionalmente por estado editorial.',inputSchema:{type:'object',properties:{userId:{type:'string'},status:{type:'string',enum:['Published','Draft']}},required:['userId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({userId,status}:{userId:string;status?:'Published'|'Draft'}){const user=s.users.find(item=>item.id===userId);if(!user)throw Error('Usuario no encontrado');const entries=s.entries.filter(entry=>entry.authorUserId===userId&&!entry.deletedAt&&(!status||entry.status===status));return{userId,author:user.name,entries,count:entries.length,note:entries.length?'':'El usuario no tiene contenido asignado'}}}),
- defineTool({stableKey:'content.set_slug',name:'set_entry_slug',title:'Definir permalink',description:'Crea o actualiza el slug público de una entrada validando formato y unicidad dentro de su tipo de contenido.',inputSchema:{type:'object',properties:{entryId:{type:'string'},slug:{type:'string'}},required:['entryId','slug'],additionalProperties:false},async execute({entryId,slug}:{entryId:string;slug:string}){const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada');const normalized=slug.trim().toLowerCase();if(!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalized))throw Error('Slug inválido');if(s.entries.some(item=>item.id!==entryId&&item.type===entry.type&&item.slug===normalized))throw Error('El slug ya existe para este tipo');const updated={...entry,slug:normalized,updated:'Just now'};s.setEntries(all=>all.map(item=>item.id===entryId?updated:item));return{status:'updated',entryId,slug:normalized,permalink:'/'+entry.type.toLowerCase()+'/'+normalized,ui_effect:'entry_slug_updated'}}}),
- defineTool({stableKey:'plugin.list_plugins',name:'list_plugins',title:'Listar plugins',description:'Lista los plugins registrados con su versión, estado y capacidades declaradas para que el agente sepa qué extensiones están disponibles.',inputSchema:{type:'object',properties:{status:{type:'string',enum:['Active','Inactive']}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({status}:{status?:'Active'|'Inactive'}){const plugins=s.plugins.filter(plugin=>!status||plugin.status===status);return{plugins,count:plugins.length,note:plugins.length?'':'No hay plugins que coincidan'}}}),
- defineTool({stableKey:'plugin.get_plugin',name:'get_plugin',title:'Leer plugin',description:'Devuelve el manifiesto de un plugin registrado, sin cargar ni ejecutar código externo.',inputSchema:{type:'object',properties:{plugin:{type:'string'}},required:['plugin'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({plugin}:{plugin:string}){const item=s.plugins.find(candidate=>candidate.id===plugin||candidate.slug===plugin||candidate.name===plugin);if(!item)throw Error('Plugin no encontrado');return{plugin:item,ui_effect:'plugin_opened'}}}),
- defineTool({stableKey:'plugin.install_plugin',name:'install_plugin',title:'Registrar plugin',description:'Registra un manifiesto declarativo de plugin, sus capacidades y dependencias; no ejecuta código ni concede permisos de servidor.',inputSchema:{type:'object',properties:{name:{type:'string'},slug:{type:'string'},version:{type:'string'},author:{type:'string'},description:{type:'string'},capabilities:{type:'array',items:{type:'string'}},dependencies:{type:'array',items:{type:'string'}},status:{type:'string',enum:['Active','Inactive']}},required:['name','slug','version','author'],additionalProperties:false},async execute({name,slug,version,author,description,capabilities,dependencies,status}:{name:string;slug:string;version:string;author:string;description?:string;capabilities?:string[];dependencies?:string[];status?:'Active'|'Inactive'}){const normalized=slug.trim().toLowerCase();if(!/^[a-z0-9-]+$/.test(normalized))throw Error('Slug de plugin inválido');if(s.plugins.some(plugin=>plugin.slug===normalized))throw Error('El plugin ya está registrado');const normalizedDependencies=[...new Set((dependencies||[]).map(value=>value.trim().toLowerCase()).filter(Boolean))];if(normalizedDependencies.includes(normalized))throw Error('Un plugin no puede depender de sí mismo');const missing=normalizedDependencies.filter(value=>!s.plugins.some(plugin=>plugin.slug===value));if(missing.length)throw Error('Dependencias no registradas: '+missing.join(', '));const item={id:'plg_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),slug:normalized,version:version.trim(),author:author.trim(),description:description?.trim()||'',status:status||'Inactive',capabilities:[...new Set(capabilities||[])],dependencies:normalizedDependencies};s.setPlugins(all=>[item,...all]);return{status:'registered',plugin:item,note:'Manifiesto registrado; el runtime no ejecuta código externo',ui_effect:'plugin_registered'}}}),
- defineTool({stableKey:'plugin.set_status',name:'set_plugin_status',title:'Activar plugin',description:'Cambia el estado declarativo de un plugin registrado entre Active e Inactive; la activación no sustituye la autorización del servidor.',inputSchema:{type:'object',properties:{plugin:{type:'string'},status:{type:'string',enum:['Active','Inactive']}},required:['plugin','status'],additionalProperties:false},async execute({plugin,status}:{plugin:string;status:'Active'|'Inactive'}){const current=s.plugins.find(item=>item.id===plugin||item.slug===plugin||item.name===plugin);if(!current)throw Error('Plugin no encontrado');const updated={...current,status};s.setPlugins(all=>all.map(item=>item.id===current.id?updated:item));return{status:'updated',plugin:updated,ui_effect:'plugin_status_updated'}}}),
- defineTool({stableKey:'media.list_assets',name:'list_media_assets',title:'Listar medios',description:'Lista assets multimedia registrados y sus vínculos con entradas para que el agente pueda reutilizar imágenes, videos o documentos.',inputSchema:{type:'object',properties:{mimeType:{type:'string'},query:{type:'string'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({mimeType,query}:{mimeType?:string;query?:string}){const needle=query?.toLowerCase();const media=s.media.filter(asset=>(!mimeType||asset.mimeType.startsWith(mimeType))&&(!needle||asset.name.toLowerCase().includes(needle)||asset.alt?.toLowerCase().includes(needle)));return{media,count:media.length,note:media.length?'':'No hay medios que coincidan'}}}),
- defineTool({stableKey:'media.register_asset',name:'register_media_asset',title:'Registrar medio',description:'Registra los metadatos de un asset multimedia ya disponible en una URL; no sube archivos ni descarga contenido externo desde el navegador.',inputSchema:{type:'object',properties:{name:{type:'string'},url:{type:'string'},mimeType:{type:'string'},size:{type:'number'},width:{type:'number'},height:{type:'number'},alt:{type:'string'},metadata:{type:'object'}},required:['name','url','mimeType'],additionalProperties:false},async execute({name,url,mimeType,size,width,height,alt,metadata}:{name:string;url:string;mimeType:string;size?:number;width?:number;height?:number;alt?:string;metadata?:Record<string,unknown>}){if(!name.trim()||!/^https?:\/\//.test(url))throw Error('Nombre o URL inválida');const asset={id:'med_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),url,mimeType,size:size||0,width,height,alt:alt?.trim()||'',metadata:metadata||{},attachedEntryIds:[],createdAt:new Date().toISOString()};s.setMedia(all=>[asset,...all]);return{status:'registered',media:asset,ui_effect:'media_registered'}}}),
- defineTool({stableKey:'media.attach_to_entry',name:'attach_media_to_entry',title:'Adjuntar medio',description:'Vincula un asset multimedia existente a una entrada para que su contenido pueda reutilizarlo en el flujo editorial.',inputSchema:{type:'object',properties:{mediaId:{type:'string'},entryId:{type:'string'}},required:['mediaId','entryId'],additionalProperties:false},async execute({mediaId,entryId}:{mediaId:string;entryId:string}){const asset=s.media.find(item=>item.id===mediaId);if(!asset)throw Error('Medio no encontrado');if(!s.entries.some(item=>item.id===entryId))throw Error('Entrada no encontrada');if(asset.attachedEntryIds.includes(entryId))return{status:'unchanged',mediaId,entryId};const updated={...asset,attachedEntryIds:[...asset.attachedEntryIds,entryId]};s.setMedia(all=>all.map(item=>item.id===mediaId?updated:item));return{status:'attached',mediaId,entryId,ui_effect:'media_attached'}}}),
- defineTool({stableKey:'media.detach_from_entry',name:'detach_media_from_entry',title:'Desvincular medio',description:'Prepara o desvincula un asset multimedia de una entrada; requiere confirm:true para eliminar el vínculo persistido.',inputSchema:{type:'object',properties:{mediaId:{type:'string'},entryId:{type:'string'},confirm:{type:'boolean'}},required:['mediaId','entryId'],additionalProperties:false},async execute({mediaId,entryId,confirm}:{mediaId:string;entryId:string;confirm?:boolean}){const asset=s.media.find(item=>item.id===mediaId);if(!asset)throw Error('Medio no encontrado');if(!asset.attachedEntryIds.includes(entryId))return{status:'not_found',mediaId,entryId};if(!confirm)return{status:'confirmation_required',mediaId,entryId,note:'Repite con confirm:true para desvincular este medio'};s.setMedia(all=>all.map(item=>item.id===mediaId?{...item,attachedEntryIds:item.attachedEntryIds.filter(id=>id!==entryId)}:item));return{status:'detached',mediaId,entryId,ui_effect:'media_detached'}}}),
- defineTool({stableKey:'comment.list_comments',name:'list_comments',title:'Listar comentarios',description:'Lista comentarios por entrada y estado de moderación para que el agente pueda priorizar la revisión editorial.',inputSchema:{type:'object',properties:{entryId:{type:'string'},status:{type:'string',enum:['Pending','Approved','Spam']}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({entryId,status}:{entryId?:string;status?:'Pending'|'Approved'|'Spam'}){const comments=s.comments.filter(comment=>(!entryId||comment.entryId===entryId)&&(!status||comment.status===status));return{comments,count:comments.length,note:comments.length?'':'No hay comentarios que coincidan'}}}),
- defineTool({stableKey:'comment.get_stats',name:'get_comment_stats',title:'Resumir comentarios',description:'Devuelve estadísticas de moderación y distribución por entrada para que el agente pueda priorizar la cola editorial.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const byStatus={Pending:s.comments.filter(comment=>comment.status==='Pending').length,Approved:s.comments.filter(comment=>comment.status==='Approved').length,Spam:s.comments.filter(comment=>comment.status==='Spam').length};const byEntry=Object.fromEntries(s.entries.map(entry=>[entry.id,s.comments.filter(comment=>comment.entryId===entry.id).length]));return{total:s.comments.length,byStatus,byEntry,note:s.comments.length?'':'No hay comentarios registrados'}}}),
- defineTool({stableKey:'menu.list_menus',name:'list_menus',title:'Listar menús',description:'Lista los menús de navegación y sus elementos ordenados para que el agente pueda inspeccionar la estructura pública del sitio.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){return{menus:s.menus,count:s.menus.length,note:s.menus.length?'':'No hay menús definidos'}}}),
- defineTool({stableKey:'menu.get_navigation_model',name:'get_navigation_model',title:'Resumir navegación',description:'Devuelve la navegación completa agrupada por menú, con elementos, destinos y jerarquía para que el agente pueda planificar cambios de sitio.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const menus=s.menus.map(menu=>({...menu,items:[...menu.items].sort((a,b)=>a.order-b.order)}));return{menus,count:menus.length,itemCount:menus.reduce((total,menu)=>total+menu.items.length,0),note:menus.length?'':'No hay navegación configurada'}}}),
- defineTool({stableKey:'menu.create_menu',name:'create_menu',title:'Crear menú',description:'Crea un menú de navegación vacío con slug y ubicación opcional para que el agente pueda construir la navegación.',inputSchema:{type:'object',properties:{name:{type:'string'},slug:{type:'string'},location:{type:'string'}},required:['name','slug'],additionalProperties:false},async execute({name,slug,location}:{name:string;slug:string;location?:string}){const normalized=slug.trim().toLowerCase();if(!name.trim()||!/^[a-z0-9-]+$/.test(normalized))throw Error('Nombre o slug inválido');if(s.menus.some(menu=>menu.slug===normalized))throw Error('El menú ya existe');const menu={id:'menu_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),slug:normalized,location:location?.trim(),items:[]};s.setMenus(all=>[menu,...all]);return{status:'created',menu,ui_effect:'menu_created'}}}),
- defineTool({stableKey:'menu.update_menu',name:'update_menu',title:'Actualizar menú',description:'Actualiza el nombre, slug o ubicación de un menú sin perder sus elementos.',inputSchema:{type:'object',properties:{menu:{type:'string'},name:{type:'string'},slug:{type:'string'},location:{type:'string'}},required:['menu'],additionalProperties:false},async execute({menu,name,slug,location}:{menu:string;name?:string;slug?:string;location?:string}){const current=s.menus.find(item=>item.id===menu||item.slug===menu||item.name===menu);if(!current)throw Error('Menú no encontrado');const nextSlug=slug?.trim().toLowerCase()||current.slug;if(!/^[a-z0-9-]+$/.test(nextSlug))throw Error('Slug inválido');if(nextSlug!==current.slug&&s.menus.some(item=>item.slug===nextSlug))throw Error('El menú ya existe');const updated={...current,...(name===undefined?{}:{name:name.trim()}),slug:nextSlug,...(location===undefined?{}:{location:location.trim()})};s.setMenus(all=>all.map(item=>item.id===current.id?updated:item));return{status:'updated',menu:updated,ui_effect:'menu_updated'}}}),
- defineTool({stableKey:'menu.delete_menu',name:'delete_menu',title:'Eliminar menú',description:'Prepara o elimina un menú y todos sus elementos; requiere confirm:true porque borra configuración de navegación persistida.',inputSchema:{type:'object',properties:{menu:{type:'string'},confirm:{type:'boolean'}},required:['menu'],additionalProperties:false},async execute({menu,confirm}:{menu:string;confirm?:boolean}){const current=s.menus.find(item=>item.id===menu||item.slug===menu||item.name===menu);if(!current)throw Error('Menú no encontrado');if(!confirm)return{status:'confirmation_required',menuId:current.id,name:current.name,itemCount:current.items.length,note:'Repite con confirm:true para eliminar este menú'};s.setMenus(all=>all.filter(item=>item.id!==current.id));return{status:'deleted',menuId:current.id,itemCount:current.items.length,ui_effect:'menu_deleted'}}}),
- defineTool({stableKey:'menu.add_item',name:'add_menu_item',title:'Añadir elemento de menú',description:'Añade un enlace externo o una referencia a una entrada existente dentro de un menú, con orden y padre opcionales.',inputSchema:{type:'object',properties:{menu:{type:'string'},label:{type:'string'},url:{type:'string'},entryId:{type:'string'},parentId:{type:'string'},order:{type:'number'},openInNewTab:{type:'boolean'}},required:['menu','label'],additionalProperties:false},async execute({menu,label,url,entryId,parentId,order,openInNewTab}:{menu:string;label:string;url?:string;entryId?:string;parentId?:string;order?:number;openInNewTab?:boolean}){const current=s.menus.find(item=>item.id===menu||item.slug===menu||item.name===menu);if(!current)throw Error('Menú no encontrado');if(!url&&!entryId)throw Error('El elemento requiere url o entryId');if(url&&!(url.startsWith('http://')||url.startsWith('https://')))throw Error('URL inválida');if(entryId&&!s.entries.some(entry=>entry.id===entryId))throw Error('Entrada no encontrada');if(parentId&&!current.items.some(item=>item.id===parentId))throw Error('Elemento padre no encontrado');const item={id:'mi_'+Math.random().toString(16).slice(2,8).toUpperCase(),label:label.trim(),url,entryId,parentId,order:order??current.items.length,openInNewTab};const updated={...current,items:[...current.items,item].sort((a,b)=>a.order-b.order)};s.setMenus(all=>all.map(candidate=>candidate.id===current.id?updated:candidate));return{status:'created',menuId:current.id,item,ui_effect:'menu_item_added'}}}),
- defineTool({stableKey:'menu.update_item',name:'update_menu_item',title:'Actualizar elemento de menú',description:'Actualiza etiqueta, destino, padre, orden o apertura de un elemento de menú y mantiene la estructura ordenada.',inputSchema:{type:'object',properties:{menu:{type:'string'},itemId:{type:'string'},label:{type:'string'},url:{type:'string'},entryId:{type:'string'},parentId:{type:'string'},order:{type:'number'},openInNewTab:{type:'boolean'}},required:['menu','itemId'],additionalProperties:false},async execute({menu,itemId,label,url,entryId,parentId,order,openInNewTab}:{menu:string;itemId:string;label?:string;url?:string;entryId?:string;parentId?:string;order?:number;openInNewTab?:boolean}){const current=s.menus.find(item=>item.id===menu||item.slug===menu||item.name===menu);if(!current)throw Error('Menú no encontrado');const existing=current.items.find(item=>item.id===itemId);if(!existing)throw Error('Elemento de menú no encontrado');if(url&&!(url.startsWith('http://')||url.startsWith('https://')))throw Error('URL inválida');if(entryId&&!s.entries.some(entry=>entry.id===entryId))throw Error('Entrada no encontrada');if(parentId&&(parentId===itemId||!current.items.some(item=>item.id===parentId)))throw Error('Elemento padre no encontrado');if(url===undefined&&entryId===undefined&&!existing.url&&!existing.entryId)throw Error('El elemento requiere url o entryId');const updatedItem={...existing,...(label===undefined?{}:{label:label.trim()}),...(url===undefined?{}:{url,entryId:undefined}),...(entryId===undefined?{}:{entryId,url:undefined}),...(parentId===undefined?{}:{parentId}),...(order===undefined?{}:{order}),...(openInNewTab===undefined?{}:{openInNewTab})};const updated={...current,items:current.items.map(item=>item.id===itemId?updatedItem:item).sort((a,b)=>a.order-b.order)};s.setMenus(all=>all.map(candidate=>candidate.id===current.id?updated:candidate));return{status:'updated',menuId:current.id,item:updatedItem,ui_effect:'menu_item_updated'}}}),
- defineTool({stableKey:'menu.delete_item',name:'delete_menu_item',title:'Eliminar elemento de menú',description:'Prepara o elimina un elemento de menú y sus referencias; requiere confirm:true para borrar la configuración persistida.',inputSchema:{type:'object',properties:{menu:{type:'string'},itemId:{type:'string'},confirm:{type:'boolean'}},required:['menu','itemId'],additionalProperties:false},async execute({menu,itemId,confirm}:{menu:string;itemId:string;confirm?:boolean}){const current=s.menus.find(item=>item.id===menu||item.slug===menu||item.name===menu);if(!current)throw Error('Menú no encontrado');const item=current.items.find(candidate=>candidate.id===itemId);if(!item)throw Error('Elemento de menú no encontrado');if(!confirm)return{status:'confirmation_required',menuId:current.id,item,note:'Repite con confirm:true para eliminar este elemento'};const updated={...current,items:current.items.filter(candidate=>candidate.id!==itemId).map(candidate=>candidate.parentId===itemId?{...candidate,parentId:undefined}:candidate)};s.setMenus(all=>all.map(candidate=>candidate.id===current.id?updated:candidate));return{status:'deleted',menuId:current.id,itemId,ui_effect:'menu_item_deleted'}}}),
- defineTool({stableKey:'comment.create_comment',name:'create_comment',title:'Crear comentario',description:'Crea un comentario asociado a una entrada, opcionalmente como respuesta a otro comentario, y lo deja Pending para moderación.',inputSchema:{type:'object',properties:{entryId:{type:'string'},parentCommentId:{type:'string'},authorUserId:{type:'string'},authorName:{type:'string'},authorEmail:{type:'string'},content:{type:'string'},status:{type:'string',enum:['Pending','Approved','Spam']},metadata:{type:'object'}},required:['entryId','authorName','content'],additionalProperties:false},async execute({entryId,parentCommentId,authorUserId,authorName,authorEmail,content,status,metadata}:{entryId:string;parentCommentId?:string;authorUserId?:string;authorName:string;authorEmail?:string;content:string;status?:'Pending'|'Approved'|'Spam';metadata?:Record<string,unknown>}){if(!s.entries.some(entry=>entry.id===entryId))throw Error('Entrada no encontrada');if(authorUserId&&!s.users.some(user=>user.id===authorUserId))throw Error('Usuario autor no encontrado');const parent=parentCommentId?s.comments.find(comment=>comment.id===parentCommentId):undefined;if(parentCommentId&&!parent)throw Error('Comentario padre no encontrado');if(parent&&parent.entryId!==entryId)throw Error('El comentario padre pertenece a otra entrada');if(!content.trim())throw Error('El comentario no puede estar vacío');const now=new Date().toISOString();const comment={id:'cmt_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,parentCommentId,authorUserId,authorName:authorName.trim(),authorEmail:authorEmail?.trim(),content:content.trim(),status:status||'Pending',metadata:metadata||{},createdAt:now,updatedAt:now};s.setComments(all=>[comment,...all]);return{status:'created',comment,ui_effect:'comment_created'}}}),
- defineTool({stableKey:'comment.moderate_comment',name:'moderate_comment',title:'Moderar comentario',description:'Cambia el estado de moderación de un comentario entre Pending, Approved y Spam, dejando visible el resultado para el agente.',inputSchema:{type:'object',properties:{commentId:{type:'string'},status:{type:'string',enum:['Pending','Approved','Spam']}},required:['commentId','status'],additionalProperties:false},async execute({commentId,status}:{commentId:string;status:'Pending'|'Approved'|'Spam'}){const current=s.comments.find(comment=>comment.id===commentId);if(!current)throw Error('Comentario no encontrado');const comment={...current,status,updatedAt:new Date().toISOString()};s.setComments(all=>all.map(item=>item.id===commentId?comment:item));return{status:'updated',comment,ui_effect:'comment_moderated'}}}),
- defineTool({stableKey:'comment.delete_comment',name:'delete_comment',title:'Eliminar comentario',description:'Prepara o elimina un comentario moderado; requiere confirm:true porque borra contenido persistido.',inputSchema:{type:'object',properties:{commentId:{type:'string'},confirm:{type:'boolean'}},required:['commentId'],additionalProperties:false},async execute({commentId,confirm}:{commentId:string;confirm?:boolean}){const comment=s.comments.find(item=>item.id===commentId);if(!comment)throw Error('Comentario no encontrado');if(!confirm)return{status:'confirmation_required',commentId,content:comment.content,note:'Repite con confirm:true para eliminar este comentario'};s.setComments(all=>all.filter(item=>item.id!==commentId));return{status:'deleted',commentId,ui_effect:'comment_deleted'}}}),
- defineTool({stableKey:'schema.validate_content_model',name:'validate_content_model',title:'Validar modelo',description:'Ejecuta un preflight de integridad sobre tipos, taxonomías, términos jerárquicos, relaciones, conexiones y asignaciones de términos.',inputSchema:{type:'object',properties:{},additionalProperties:false},async execute(){const errors:string[]=[];const slugs=new Set<string>();for(const type of s.contentTypes){if(!type.name||!type.slug)errors.push('Tipo sin nombre o slug');if(slugs.has(type.slug))errors.push('Slug de tipo duplicado: '+type.slug);slugs.add(type.slug);if(new Set(type.fields).size!==type.fields.length)errors.push('Campos duplicados en '+type.slug)}for(const taxonomy of s.taxonomies){if(slugs.has(taxonomy.slug))errors.push('Slug duplicado entre tipo y taxonomía: '+taxonomy.slug);slugs.add(taxonomy.slug);const termSlugs=new Set<string>();for(const term of taxonomy.terms){if(termSlugs.has(term.slug))errors.push('Término duplicado en '+taxonomy.slug+': '+term.slug);termSlugs.add(term.slug);if(term.parent&&!taxonomy.terms.some(parent=>parent.id===term.parent))errors.push('Padre inexistente para '+term.slug)}}for(const relation of s.relations){if(!s.contentTypes.some(type=>type.name===relation.fromType||type.slug===relation.fromType))errors.push('Origen inexistente en relación '+relation.slug);if(!s.contentTypes.some(type=>type.name===relation.toType||type.slug===relation.toType))errors.push('Destino inexistente en relación '+relation.slug)}for(const connection of s.connections){const relation=s.relations.find(item=>item.id===connection.relation);const from=s.entries.find(entry=>entry.id===connection.fromEntryId);const to=s.entries.find(entry=>entry.id===connection.toEntryId);if(!relation)errors.push('Relación inexistente en conexión '+connection.id);if(!from||!to)errors.push('Entrada inexistente en conexión '+connection.id);if(relation&&from&&to){const fromType=s.contentTypes.find(type=>type.name===relation.fromType||type.slug===relation.fromType);const toType=s.contentTypes.find(type=>type.name===relation.toType||type.slug===relation.toType);if((from.type!==relation.fromType&&from.type!==fromType?.name)||(to.type!==relation.toType&&to.type!==toType?.name))errors.push('Tipos incompatibles en conexión '+connection.id)}}for(const relation of s.relations.filter(item=>item.cardinality==='one')){const origins=new Set(s.connections.filter(connection=>connection.relation===relation.id).map(connection=>connection.fromEntryId));for(const origin of origins)if(s.connections.filter(connection=>connection.relation===relation.id&&connection.fromEntryId===origin).length>1)errors.push('Cardinalidad one excedida en '+relation.slug+' para '+origin)}for(const assignment of s.termAssignments){const taxonomy=s.taxonomies.find(item=>item.slug===assignment.taxonomy);if(!taxonomy)errors.push('Taxonomía inexistente en asignación de '+assignment.entryId);if(!s.entries.some(entry=>entry.id===assignment.entryId))errors.push('Entrada inexistente en asignación de '+assignment.entryId);if(taxonomy)for(const termId of assignment.termIds)if(!taxonomy.terms.some(term=>term.id===termId))errors.push('Término inexistente en asignación de '+assignment.entryId+': '+termId)}return{valid:errors.length===0,errors,checked:{contentTypes:s.contentTypes.length,taxonomies:s.taxonomies.length,relations:s.relations.length,connections:s.connections.length,termAssignments:s.termAssignments.length},ui_effect:'model_validated'}}}),
- defineTool({stableKey:'schema.export_content_model',name:'export_content_model',title:'Exportar modelo',description:'Exporta tipos, usuarios, roles, plugins, medios, entradas, taxonomías, términos, relaciones, conexiones, asignaciones, revisiones, comentarios y menús en un paquete portable versionado.',inputSchema:{type:'object',properties:{includeEntries:{type:'boolean'}},additionalProperties:false},async execute({includeEntries}:{includeEntries?:boolean}){const withEntries=includeEntries!==false;return{version:6,exportedAt:new Date().toISOString(),contentTypes:s.contentTypes,users:s.users,roles:s.roles,plugins:s.plugins,media:s.media,comments:s.comments,menus:s.menus,taxonomies:s.taxonomies,relations:s.relations,connections:withEntries?s.connections:[],termAssignments:withEntries?s.termAssignments:[],revisions:withEntries?s.revisions:[],entries:withEntries?s.entries:[]}}}),
- defineTool({stableKey:'schema.import_content_model',name:'import_content_model',title:'Importar modelo',description:'Prepara o restaura un paquete de modelo previamente exportado, incluidos usuarios, roles, plugins, medios, comentarios y menús si están presentes. Requiere confirm:true para reemplazar el estado actual.',inputSchema:{type:'object',properties:{model:{type:'object'},includeEntries:{type:'boolean'},confirm:{type:'boolean'}},required:['model'],additionalProperties:false},async execute({model,includeEntries,confirm}:{model:{contentTypes?:ContentType[];users?:User[];roles?:Role[];plugins?:Plugin[];media?:MediaAsset[];comments?:Comment[];menus?:Menu[];taxonomies?:Taxonomy[];relations?:Relation[];connections?:Connection[];termAssignments?:TermAssignment[];revisions?:Revision[];entries?:Entry[]};includeEntries?:boolean;confirm?:boolean}){if(!Array.isArray(model.contentTypes)||!Array.isArray(model.taxonomies)||!Array.isArray(model.relations))throw Error('Paquete de modelo incompleto');const impact={contentTypes:model.contentTypes.length,users:model.users?.length||0,roles:model.roles?.length||0,plugins:model.plugins?.length||0,media:model.media?.length||0,comments:model.comments?.length||0,menus:model.menus?.length||0,taxonomies:model.taxonomies.length,relations:model.relations.length,connections:model.connections?.length||0,termAssignments:model.termAssignments?.length||0,revisions:model.revisions?.length||0,entries:model.entries?.length||0};if(!confirm)return{status:'confirmation_required',impact,note:'Repite con confirm:true para reemplazar el modelo'};s.setContentTypes(model.contentTypes);if(Array.isArray(model.users))s.setUsers(model.users);if(Array.isArray(model.roles))s.setRoles(model.roles);if(Array.isArray(model.plugins))s.setPlugins(model.plugins);if(Array.isArray(model.media))s.setMedia(model.media);if(Array.isArray(model.comments))s.setComments(model.comments);if(Array.isArray(model.menus))s.setMenus(model.menus);s.setTaxonomies(model.taxonomies);s.setRelations(model.relations);if(includeEntries!==false&&Array.isArray(model.entries))s.setEntries(model.entries);if(includeEntries!==false&&Array.isArray(model.connections))s.setConnections(model.connections);if(includeEntries!==false&&Array.isArray(model.termAssignments))s.setTermAssignments(model.termAssignments);if(includeEntries!==false&&Array.isArray(model.revisions))s.setRevisions(model.revisions);return{status:'imported',...impact,ui_effect:'model_imported'}}}),
- defineTool({stableKey:'taxonomy.create_taxonomy',name:'create_taxonomy',title:'Crear taxonomía',description:'Crea una taxonomía para clasificar entradas. Puede ser jerárquica para soportar términos padre e hijo.',inputSchema:{type:'object',properties:{name:{type:'string'},slug:{type:'string'},hierarchical:{type:'boolean'}},required:['name','slug'],additionalProperties:false},async execute({name,slug,hierarchical}:{name:string;slug:string;hierarchical?:boolean}){const normalizedSlug=slug.trim().toLowerCase();if(!normalizedSlug||!/^[a-z0-9-]+$/.test(normalizedSlug))throw Error('El slug debe usar letras minúsculas, números o guiones');if(findTaxonomy(normalizedSlug)||s.contentTypes.some(type=>type.slug===normalizedSlug))throw Error('El slug ya existe en el modelo');if(!name.trim())throw Error('El nombre es obligatorio');const next={name:name.trim(),slug:normalizedSlug,hierarchical:Boolean(hierarchical),terms:[]};s.setTaxonomies(current=>[...current,next]);return{status:'created',name:next.name,slug:normalizedSlug,hierarchical:next.hierarchical,ui_effect:'taxonomy_created'}}}),
- defineTool({stableKey:'taxonomy.list_taxonomies',name:'list_taxonomies',title:'Listar taxonomías',description:'Devuelve el registro completo de taxonomías y términos disponible para el agente.',inputSchema:{type:'object',properties:{},additionalProperties:false},async execute(){return{taxonomies:s.taxonomies,count:s.taxonomies.length}}}),
- defineTool({stableKey:'taxonomy.update_taxonomy',name:'update_taxonomy',title:'Actualizar taxonomía',description:'Actualiza el nombre, slug o modo jerárquico de una taxonomía sin perder sus términos.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},name:{type:'string'},slug:{type:'string'},hierarchical:{type:'boolean'}},required:['taxonomy'],additionalProperties:false},async execute({taxonomy,name,slug,hierarchical}:{taxonomy:string;name?:string;slug?:string;hierarchical?:boolean}){const current=findTaxonomy(taxonomy);if(!current)throw Error('Taxonomía no encontrada');const nextSlug=slug?.trim().toLowerCase()||current.slug;if(!/^[a-z0-9-]+$/.test(nextSlug))throw Error('El slug debe usar letras minúsculas, números o guiones');if(nextSlug!==current.slug&&(s.taxonomies.some(item=>item.slug===nextSlug)||s.contentTypes.some(item=>item.slug===nextSlug)))throw Error('El slug ya existe en el modelo');const updated={...current,name:name?.trim()||current.name,slug:nextSlug,hierarchical:hierarchical===undefined?current.hierarchical:hierarchical};s.setTaxonomies(all=>all.map(item=>item.slug===current.slug?updated:item));if(nextSlug!==current.slug)s.setTermAssignments(all=>all.map(item=>item.taxonomy===current.slug?{...item,taxonomy:nextSlug}:item));return{status:'updated',taxonomy:updated,ui_effect:'taxonomy_updated'}}}),
- defineTool({stableKey:'taxonomy.delete_taxonomy',name:'delete_taxonomy',title:'Eliminar taxonomía',description:'Prepara o elimina una taxonomía únicamente cuando no tiene términos ni asignaciones en entradas. Requiere confirm:true para ejecutar.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},confirm:{type:'boolean'}},required:['taxonomy'],additionalProperties:false},async execute({taxonomy,confirm}:{taxonomy:string;confirm?:boolean}){const current=findTaxonomy(taxonomy);if(!current)throw Error('Taxonomía no encontrada');if(current.terms.length)throw Error('No puedes eliminar una taxonomía con términos');const assignments=s.termAssignments.filter(item=>item.taxonomy===current.slug).length;if(assignments)throw Error('No puedes eliminar una taxonomía con asignaciones');if(!confirm)return{status:'confirmation_required',taxonomy:current.slug,note:'Repite con confirm:true para eliminar esta taxonomía'};s.setTaxonomies(all=>all.filter(item=>item.slug!==current.slug));return{status:'deleted',taxonomy:current.slug,ui_effect:'taxonomy_deleted'}}}),
- defineTool({stableKey:'taxonomy.create_term',name:'create_term',title:'Crear término',description:'Crea un término dentro de una taxonomía existente, con soporte para jerarquías.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},name:{type:'string'},slug:{type:'string'},parent:{type:['string','null']},description:{type:'string'}},required:['taxonomy','name','slug'],additionalProperties:false},async execute({taxonomy,name,slug,parent,description}:{taxonomy:string;name:string;slug:string;parent?:string|null;description?:string}){const model=findTaxonomy(taxonomy);if(!model)throw Error('Taxonomía no encontrada');const normalizedSlug=slug.trim().toLowerCase();if(!name.trim()||!/^[a-z0-9-]+$/.test(normalizedSlug))throw Error('Nombre o slug inválido');if(model.terms.some(t=>t.slug===normalizedSlug))throw Error('El término ya existe');if(parent&&!model.hierarchical)throw Error('La taxonomía no admite términos padre');if(parent&&!model.terms.some(t=>t.id===parent||t.slug===parent))throw Error('Término padre no encontrado');const term={id:'term_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),slug:normalizedSlug,parent:parent||null,description};s.setTaxonomies(current=>current.map(t=>t.slug===model.slug?{...t,terms:[...t.terms,term]}:t));return{status:'created',taxonomy:model.slug,term,ui_effect:'term_created'}}}),
- defineTool({stableKey:'taxonomy.list_terms',name:'list_taxonomy_terms',title:'Listar términos',description:'Lista términos de una taxonomía para que el agente pueda navegar categorías, etiquetas y jerarquías. Permite buscar por nombre o limitar la rama a un padre.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},query:{type:'string'},parent:{type:['string','null']}},required:['taxonomy'],additionalProperties:false},async execute({taxonomy,query,parent}:{taxonomy:string;query?:string;parent?:string|null}){const model=findTaxonomy(taxonomy);if(!model)throw Error('Taxonomía no encontrada');const parentId=parent===undefined?undefined:parent===null?null:model.terms.find(term=>term.id===parent||term.slug===parent)?.id;if(parent!==undefined&&parentId===undefined)throw Error('Término padre no encontrado');const needle=query?.toLowerCase();const terms=model.terms.filter(term=>(parentId===undefined||term.parent===parentId)&&(!needle||JSON.stringify(term).toLowerCase().includes(needle)));return{taxonomy:model.name,slug:model.slug,hierarchical:model.hierarchical,terms,count:terms.length,note:terms.length?'':'No hay términos que coincidan'}}}),
- defineTool({stableKey:'taxonomy.update_term',name:'update_term',title:'Actualizar término',description:'Actualiza nombre, slug, descripción o término padre sin romper la jerarquía.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},term:{type:'string'},name:{type:'string'},slug:{type:'string'},parent:{type:['string','null']},description:{type:'string'}},required:['taxonomy','term'],additionalProperties:false},async execute({taxonomy,term,name,slug,parent,description}:{taxonomy:string;term:string;name?:string;slug?:string;parent?:string|null;description?:string}){const model=findTaxonomy(taxonomy);if(!model)throw Error('Taxonomía no encontrada');const current=model.terms.find(t=>t.id===term||t.slug===term);if(!current)throw Error('Término no encontrado');if(parent===current.id)throw Error('Un término no puede ser su propio padre');if(parent&&!model.hierarchical)throw Error('La taxonomía no admite términos padre');if(parent&&parent!==current.id&&!model.terms.some(t=>t.id===parent||t.slug===parent))throw Error('Término padre no encontrado');const parentId=parent===undefined?current.parent:parent;let cursor=parentId;while(cursor){if(cursor===current.id)throw Error('La actualización crearía un ciclo');cursor=model.terms.find(item=>item.id===cursor||item.slug===cursor)?.parent||null}const nextSlug=slug?.trim().toLowerCase()||current.slug;if(!/^[a-z0-9-]+$/.test(nextSlug))throw Error('Slug inválido');if(model.terms.some(t=>t.id!==current.id&&t.slug===nextSlug))throw Error('El slug ya existe');const updated={...current,name:name?.trim()||current.name,slug:nextSlug,parent:parentId,description:description===undefined?current.description:description};s.setTaxonomies(all=>all.map(t=>t.slug===model.slug?{...t,terms:t.terms.map(item=>item.id===current.id?updated:item)}:t));return{status:'updated',taxonomy:model.slug,term:updated,ui_effect:'term_updated'}}}),
- defineTool({stableKey:'taxonomy.delete_term',name:'delete_term',title:'Eliminar término',description:'Prepara o elimina un término solo si no tiene términos hijos ni está asignado a entradas. Requiere confirm:true para ejecutar.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},term:{type:'string'},confirm:{type:'boolean'}},required:['taxonomy','term'],additionalProperties:false},async execute({taxonomy,term,confirm}:{taxonomy:string;term:string;confirm?:boolean}){const model=findTaxonomy(taxonomy);if(!model)throw Error('Taxonomía no encontrada');const current=model.terms.find(t=>t.id===term||t.slug===term);if(!current)throw Error('Término no encontrado');if(model.terms.some(t=>t.parent===current.id))throw Error('No puedes eliminar un término con hijos');if(s.termAssignments.some(item=>item.taxonomy===model.slug&&item.termIds.includes(current.id)))throw Error('No puedes eliminar un término asignado a entradas');if(!confirm)return{status:'confirmation_required',taxonomy:model.slug,term:current.slug,note:'Repite con confirm:true para eliminar este término'};s.setTaxonomies(all=>all.map(t=>t.slug===model.slug?{...t,terms:t.terms.filter(item=>item.id!==current.id)}:t));return{status:'deleted',taxonomy:model.slug,term:current.slug,ui_effect:'term_deleted'}}}),
- defineTool({stableKey:'taxonomy.set_entry_terms',name:'set_entry_terms',title:'Asignar términos',description:'Reemplaza la asignación estructurada de términos de una entrada dentro de una taxonomía, crea una revisión y actualiza su etiqueta visible. Una lista vacía elimina la asignación.',inputSchema:{type:'object',properties:{entryId:{type:'string'},taxonomy:{type:'string'},terms:{type:'array',items:{type:'string'}}},required:['entryId','taxonomy','terms'],additionalProperties:false},async execute({entryId,taxonomy,terms}:{entryId:string;taxonomy:string;terms:string[]}){const model=findTaxonomy(taxonomy);if(!model)throw Error('Taxonomía no encontrada');const resolved=terms.map(value=>model.terms.find(t=>t.id===value||t.slug===value||t.name===value));if(resolved.some(t=>!t))throw Error('Uno o más términos no existen');const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');const assignment=resolved.length?{entryId,taxonomy:model.slug,termIds:resolved.map(t=>t!.id),updatedAt:new Date().toISOString()}:null;s.setTermAssignments(all=>[...all.filter(item=>!(item.entryId===entryId&&item.taxonomy===model.slug)),...(assignment?[assignment]:[])]);const label=model.name+': '+resolved.map(t=>t!.name).join(', ');const visibleRelations=entry.relation.split(' · ').filter(part=>part!=='No relations yet'&&!part.startsWith(model.name+':'));const updatedLabel=resolved.length?[...visibleRelations,label].join(' · '):visibleRelations.join(' · ')||'No relations yet';const updated={...entry,relation:updatedLabel,updated:'Just now'};s.setEntries(all=>all.map(e=>e.id===entryId?updated:e));const revision={id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,createdAt:new Date().toISOString(),action:'terms_update',before:entry,after:updated};s.setRevisions(all=>[...all,revision]);return{entryId,taxonomy:model.slug,terms:resolved.map(t=>t!.slug),assignment,revisionId:revision.id,ui_effect:'terms_assigned'}}}),
- defineTool({stableKey:'taxonomy.get_entry_terms',name:'get_entry_terms',title:'Leer términos de entrada',description:'Devuelve las asignaciones estructuradas de términos de una entrada, con sus nombres y slugs.',inputSchema:{type:'object',properties:{entryId:{type:'string'},taxonomy:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId,taxonomy}:{entryId:string;taxonomy?:string}){if(!s.entries.some(e=>e.id===entryId))throw Error('Entrada no encontrada');const assignments=s.termAssignments.filter(item=>item.entryId===entryId&&(!taxonomy||item.taxonomy===taxonomy)).map(item=>({...item,taxonomyData:findTaxonomy(item.taxonomy),terms:item.termIds.map(id=>findTaxonomy(item.taxonomy)?.terms.find(term=>term.id===id)).filter(Boolean)}));return{entryId,assignments,count:assignments.length,note:assignments.length?'':'La entrada no tiene términos asignados'}}}),
- defineTool({stableKey:'relation.create_relation',name:'create_relation',title:'Crear relación',description:'Define una relación entre dos tipos de contenido con cardinalidad uno o muchos.',inputSchema:{type:'object',properties:{name:{type:'string'},slug:{type:'string'},fromType:{type:'string'},toType:{type:'string'},cardinality:{type:'string',enum:['one','many']}},required:['name','slug','fromType','toType'],additionalProperties:false},async execute({name,slug,fromType,toType,cardinality}:{name:string;slug:string;fromType:string;toType:string;cardinality?:'one'|'many'}){const normalized=slug.trim().toLowerCase();if(!name.trim()||!/^[a-z0-9-]+$/.test(normalized))throw Error('Nombre o slug inválido');if(s.relations.some(r=>r.slug===normalized)||s.contentTypes.some(t=>t.slug===normalized)||s.taxonomies.some(t=>t.slug===normalized))throw Error('El slug ya existe en el modelo');if(!s.contentTypes.some(t=>t.name===fromType||t.slug===fromType)||!s.contentTypes.some(t=>t.name===toType||t.slug===toType))throw Error('Tipo de contenido no encontrado');const next={id:'rel_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),slug:normalized,fromType,toType,cardinality:cardinality||'many'};s.setRelations(all=>[...all,next]);return{status:'created',relation:next,ui_effect:'relation_created'}}}),
- defineTool({stableKey:'relation.update_relation',name:'update_relation',title:'Actualizar relación',description:'Actualiza una relación existente y conserva sus conexiones. La cardinalidad one solo se permite si no hay múltiples destinos por origen.',inputSchema:{type:'object',properties:{relation:{type:'string'},name:{type:'string'},slug:{type:'string'},cardinality:{type:'string',enum:['one','many']}},required:['relation'],additionalProperties:false},async execute({relation,name,slug,cardinality}:{relation:string;name?:string;slug?:string;cardinality?:'one'|'many'}){const current=s.relations.find(item=>item.id===relation||item.slug===relation||item.name===relation);if(!current)throw Error('Relación no encontrada');const nextSlug=slug?.trim().toLowerCase()||current.slug;if(!/^[a-z0-9-]+$/.test(nextSlug))throw Error('El slug debe usar letras minúsculas, números o guiones');if(nextSlug!==current.slug&&s.relations.some(item=>item.id!==current.id&&item.slug===nextSlug))throw Error('El slug ya existe');if(cardinality==='one'&&s.connections.some(connection=>connection.relation===current.id&&s.connections.filter(item=>item.relation===current.id&&item.fromEntryId===connection.fromEntryId).length>1))throw Error('No puedes cambiar a cardinalidad one con conexiones múltiples');const updated={...current,name:name?.trim()||current.name,slug:nextSlug,cardinality:cardinality||current.cardinality};s.setRelations(all=>all.map(item=>item.id===current.id?updated:item));return{status:'updated',relation:updated,ui_effect:'relation_updated'}}}),
- defineTool({stableKey:'relation.delete_relation',name:'delete_relation',title:'Eliminar relación',description:'Prepara o elimina una relación únicamente cuando no tiene conexiones activas. Requiere confirm:true para ejecutar.',inputSchema:{type:'object',properties:{relation:{type:'string'},confirm:{type:'boolean'}},required:['relation'],additionalProperties:false},async execute({relation,confirm}:{relation:string;confirm?:boolean}){const current=s.relations.find(item=>item.id===relation||item.slug===relation||item.name===relation);if(!current)throw Error('Relación no encontrada');const connections=s.connections.filter(item=>item.relation===current.id).length;if(connections)throw Error('No puedes eliminar '+current.name+' porque tiene '+connections+' conexiones');if(!confirm)return{status:'confirmation_required',relation:current.slug,note:'Repite con confirm:true para eliminar esta relación'};s.setRelations(all=>all.filter(item=>item.id!==current.id));return{status:'deleted',relation:current.slug,ui_effect:'relation_deleted'}}}),
- defineTool({stableKey:'relation.list_relations',name:'list_relations',title:'Listar relaciones',description:'Devuelve todas las relaciones definidas en el modelo de contenido con su uso actual.',inputSchema:{type:'object',properties:{},additionalProperties:false},async execute(){const relations=s.relations.map(relation=>({...relation,connectionCount:s.connections.filter(connection=>connection.relation===relation.id).length}));return{relations,count:relations.length,totalConnections:s.connections.length}}}),
- defineTool({stableKey:'relation.connect_entries',name:'connect_entries',title:'Conectar entradas',description:'Conecta entradas con una relación definida, persiste cada arista y respeta la cardinalidad configurada.',inputSchema:{type:'object',properties:{relation:{type:'string'},fromEntryId:{type:'string'},toEntryIds:{type:'array',items:{type:'string'}}},required:['relation','fromEntryId','toEntryIds'],additionalProperties:false},async execute({relation,fromEntryId,toEntryIds}:{relation:string;fromEntryId:string;toEntryIds:string[]}){const model=s.relations.find(r=>r.id===relation||r.slug===relation||r.name===relation);if(!model)throw Error('Relación no encontrada');const from=s.entries.find(e=>e.id===fromEntryId);const targets=toEntryIds.map(id=>s.entries.find(e=>e.id===id));if(!from||targets.some(e=>!e))throw Error('Entrada origen o destino no encontrada');if(!targets.length)throw Error('Debes indicar al menos un destino');if(!targets.every(e=>e!.type===model.toType)&&!targets.every(e=>e!.type===s.contentTypes.find(t=>t.slug===model.toType)?.name))throw Error('El destino no coincide con el tipo de la relación');if(from.type!==model.fromType&&from.type!==s.contentTypes.find(t=>t.slug===model.fromType)?.name)throw Error('El origen no coincide con el tipo de la relación');if(model.cardinality==='one'&&toEntryIds.length>1)throw Error('La relación admite un solo destino');const next=toEntryIds.filter(toEntryId=>!s.connections.some(c=>c.relation===model.id&&c.fromEntryId===fromEntryId&&c.toEntryId===toEntryId)).map(toEntryId=>({id:'conn_'+Math.random().toString(16).slice(2,8).toUpperCase(),relation:model.id,fromEntryId,toEntryId,createdAt:new Date().toISOString()}));s.setConnections(all=>model.cardinality==='one'?all.filter(c=>!(c.relation===model.id&&c.fromEntryId===fromEntryId)).concat(next):all.concat(next));const targetLabel=model.name+': '+targets.map(e=>e!.title).join(', ');s.setEntries(all=>all.map(e=>e.id===fromEntryId?{...e,relation:e.relation==='No relations yet'?targetLabel:e.relation+' · '+targetLabel,updated:'Just now'}:e));return{status:'connected',relation:model.slug,fromEntryId,toEntryIds:next.map(c=>c.toEntryId),connections:next,ui_effect:'entries_connected'}}}),
- defineTool({stableKey:'relation.disconnect_entries',name:'disconnect_entries',title:'Desconectar entradas',description:'Prepara o elimina conexiones específicas. Requiere confirm:true para modificar el grafo y devuelve la lista afectada antes de ejecutar.',inputSchema:{type:'object',properties:{relation:{type:'string'},fromEntryId:{type:'string'},toEntryIds:{type:'array',items:{type:'string'}},confirm:{type:'boolean'}},required:['relation','fromEntryId','toEntryIds'],additionalProperties:false},async execute({relation,fromEntryId,toEntryIds,confirm}:{relation:string;fromEntryId:string;toEntryIds:string[];confirm?:boolean}){const model=s.relations.find(r=>r.id===relation||r.slug===relation||r.name===relation);if(!model)throw Error('Relación no encontrada');const selected=s.connections.filter(connection=>connection.relation===model.id&&connection.fromEntryId===fromEntryId&&toEntryIds.includes(connection.toEntryId));if(!confirm)return{status:'confirmation_required',relation:model.slug,fromEntryId,toEntryIds:selected.map(connection=>connection.toEntryId),count:selected.length,note:'Repite con confirm:true para eliminar estas conexiones'};const remaining=s.connections.filter(connection=>!(connection.relation===model.id&&connection.fromEntryId===fromEntryId&&toEntryIds.includes(connection.toEntryId)));s.setConnections(remaining);const remainingTargets=remaining.filter(connection=>connection.relation===model.id&&connection.fromEntryId===fromEntryId).map(connection=>s.entries.find(entry=>entry.id===connection.toEntryId)?.title).filter(Boolean);const source=s.entries.find(entry=>entry.id===fromEntryId);if(source){const visibleRelations=source.relation.split(' · ').filter(part=>part!=='No relations yet'&&!part.startsWith(model.name+':'));const updatedLabel=remainingTargets.length?[...visibleRelations,model.name+': '+remainingTargets.join(', ')].join(' · '):visibleRelations.join(' · ')||'No relations yet';s.setEntries(all=>all.map(entry=>entry.id===fromEntryId?{...entry,relation:updatedLabel,updated:'Just now'}:entry))}return{status:'disconnected',relation:model.slug,fromEntryId,toEntryIds:selected.map(connection=>connection.toEntryId),count:selected.length,ui_effect:'entries_disconnected'}}}),
- defineTool({stableKey:'relation.list_connections',name:'list_relation_connections',title:'Listar conexiones',description:'Devuelve las conexiones estructuradas de una relación o entrada, incluyendo títulos y tipos para navegar el grafo.',inputSchema:{type:'object',properties:{relation:{type:'string'},entryId:{type:'string'}},additionalProperties:false},async execute({relation,entryId}:{relation?:string;entryId?:string}){const model=relation?s.relations.find(r=>r.id===relation||r.slug===relation||r.name===relation):undefined;if(relation&&!model)throw Error('Relación no encontrada');const rows=s.connections.filter(c=>(!model||c.relation===model.id)&&(!entryId||(c.fromEntryId===entryId||c.toEntryId===entryId))).map(c=>({...c,relation:model?.slug||s.relations.find(r=>r.id===c.relation)?.slug||c.relation,from:s.entries.find(e=>e.id===c.fromEntryId),to:s.entries.find(e=>e.id===c.toEntryId)}));return{connections:rows,count:rows.length,note:rows.length?'':'No hay conexiones que coincidan'}}}),
- defineTool({stableKey:'schema.create_content_type',name:'create_content_type',title:'Crear tipo de contenido',description:'Crea un nuevo tipo de entrada con campos tipados y campos obligatorios; queda disponible para futuras entradas y se refleja en el schema.',inputSchema:{type:'object',properties:{name:{type:'string'},slug:{type:'string'},fields:{type:'array',items:{type:'string'}},fieldTypes:{type:'object'},requiredFields:{type:'array',items:{type:'string'}}},required:['name','slug'],additionalProperties:false},async execute({name,slug,fields,fieldTypes,requiredFields}:{name:string;slug:string;fields?:string[];fieldTypes?:ContentType['fieldTypes'];requiredFields?:string[]}){const normalizedSlug=slug.trim().toLowerCase();const nextFields=fields?.length?fields:['title'];if(!name.trim()||!normalizedSlug||!/^[a-z0-9-]+$/.test(normalizedSlug))throw Error('Nombre o slug inválido');if(s.contentTypes.some(type=>type.slug===normalizedSlug)||s.taxonomies.some(taxonomy=>taxonomy.slug===normalizedSlug))throw Error('El slug ya existe en el modelo');if(new Set(nextFields).size!==nextFields.length)throw Error('No puede haber campos duplicados');if(requiredFields?.some(field=>!nextFields.includes(field)))throw Error('Un campo obligatorio no existe en fields');if(fieldTypes&&Object.keys(fieldTypes).some(field=>!nextFields.includes(field)))throw Error('Un campo tipado no existe en fields');const type=s.createContentType(name,normalizedSlug,nextFields,fieldTypes,requiredFields);return{status:'created',contentType:type,name:type.name,slug:type.slug,fields:type.fields,fieldTypes:type.fieldTypes||{},requiredFields:type.requiredFields||[],ui_effect:'schema_updated'}}}),
- defineTool({stableKey:'schema.update_content_type',name:'update_content_type',title:'Actualizar tipo de contenido',description:'Actualiza el nombre, slug o campos de un tipo existente y conserva sus entradas. No permite eliminar campos que todavía contienen datos.',inputSchema:{type:'object',properties:{type:{type:'string'},name:{type:'string'},slug:{type:'string'},fields:{type:'array',items:{type:'string'}}},required:['type'],additionalProperties:false},async execute({type,name,slug,fields}:{type:string;name?:string;slug?:string;fields?:string[]}){const current=s.contentTypes.find(t=>t.name===type||t.slug===type);if(!current)throw Error('Tipo de contenido no encontrado');const nextSlug=slug?.trim().toLowerCase()||current.slug;if(!/^[a-z0-9-]+$/.test(nextSlug))throw Error('Slug inválido');if(nextSlug!==current.slug&&(s.contentTypes.some(item=>item.slug===nextSlug)||s.taxonomies.some(item=>item.slug===nextSlug)))throw Error('El slug ya existe en el modelo');const nextFields=fields||current.fields;if(new Set(nextFields).size!==nextFields.length)throw Error('No puede haber campos duplicados');const removed=current.fields.filter(field=>!nextFields.includes(field));const populated=s.entries.filter(entry=>entry.type===current.name&&removed.some(field=>entry.data&&entry.data[field]!==undefined));if(populated.length)throw Error('No puedes eliminar campos con datos existentes: '+removed.filter(field=>populated.some(entry=>entry.data&&entry.data[field]!==undefined)).join(', '));const updated={...current,name:name?.trim()||current.name,slug:nextSlug,fields:nextFields};s.setContentTypes(all=>all.map(item=>item.slug===current.slug?updated:item));return{status:'updated',contentType:updated,ui_effect:'schema_updated'}}}),
- defineTool({stableKey:'schema.delete_content_type',name:'delete_content_type',title:'Eliminar tipo de contenido',description:'Prepara o elimina un tipo solo cuando no tiene entradas ni relaciones asociadas. Requiere confirm:true para ejecutar.',inputSchema:{type:'object',properties:{type:{type:'string'},confirm:{type:'boolean'}},required:['type'],additionalProperties:false},async execute({type,confirm}:{type:string;confirm?:boolean}){const current=s.contentTypes.find(t=>t.name===type||t.slug===type);if(!current)throw Error('Tipo de contenido no encontrado');const count=s.entries.filter(e=>e.type===current.name).length;if(count)throw Error('No puedes eliminar '+current.name+' porque tiene '+count+' entradas');const related=s.relations.filter(relation=>relation.fromType===current.name||relation.fromType===current.slug||relation.toType===current.name||relation.toType===current.slug).length;if(related)throw Error('No puedes eliminar '+current.name+' porque participa en '+related+' relaciones');if(!confirm)return{status:'confirmation_required',type:current.slug,note:'Repite con confirm:true para eliminar este tipo'};s.setContentTypes(all=>all.filter(item=>item.slug!==current.slug));return{status:'deleted',type:current.slug,ui_effect:'schema_updated'}}}),
- defineTool({stableKey:'content.list_entries',name:'list_content_entries',title:'Listar entradas',description:'Devuelve entradas paginadas, filtradas opcionalmente por tipo, estado, texto, campos estructurados, metadatos o términos de taxonomía.',inputSchema:{type:'object',properties:{type:{type:'string'},status:{type:'string',enum:['Published','Draft']},query:{type:'string'},taxonomy:{type:'string'},terms:{type:'array',items:{type:'string'}},limit:{type:'number'},offset:{type:'number'}},additionalProperties:false},async execute({type,status,query,taxonomy,terms,limit,offset}:{type?:string;status?:'Published'|'Draft';query?:string;taxonomy?:string;terms?:string[];limit?:number;offset?:number}){const requestedType=type?s.contentTypes.find(item=>item.name===type||item.slug===type):undefined;const typeName=requestedType?.name||type;const taxonomyModel=taxonomy?findTaxonomy(taxonomy):undefined;if(taxonomy&&!taxonomyModel)throw Error('Taxonomía no encontrada');const requestedTerms=(terms||[]).map(value=>taxonomyModel?.terms.find(item=>item.id===value||item.slug===value||item.name===value)?.id);if(requestedTerms.some(value=>!value))throw Error('Uno o más términos no existen');const needle=query?.toLowerCase();const matching=s.entries.filter(e=>{const assignment=taxonomyModel?s.termAssignments.find(item=>item.entryId===e.id&&item.taxonomy===taxonomyModel.slug):undefined;const hasTerms=!requestedTerms?.length||Boolean(assignment&&requestedTerms.every(value=>assignment.termIds.includes(value!)));return(!typeName||e.type===typeName)&&(!status||e.status===status)&&hasTerms&&(!needle||JSON.stringify({title:e.title,type:e.type,relation:e.relation,data:e.data||{},metadata:e.metadata||{}}).toLowerCase().includes(needle))});const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{entries:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay entradas que coincidan'}}}),
- defineTool({stableKey:'content.get_entry',name:'get_content_entry',title:'Leer entrada',description:'Devuelve una entrada completa, incluidos metadatos, relaciones y estado editorial.',inputSchema:{type:'object',properties:{entryId:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId}:{entryId:string}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');return{entry,ui_effect:'entry_opened'}}}),
- defineTool({stableKey:'content.get_entry_context',name:'get_entry_context',title:'Leer contexto de entrada',description:'Devuelve una entrada junto con términos, conexiones y revisiones para que el agente tenga todo el contexto editorial en una sola llamada.',inputSchema:{type:'object',properties:{entryId:{type:'string'},includeRevisions:{type:'boolean'}},required:['entryId'],additionalProperties:false},async execute({entryId,includeRevisions}:{entryId:string;includeRevisions?:boolean}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');const assignments=s.termAssignments.filter(item=>item.entryId===entryId).map(item=>({...item,taxonomyData:findTaxonomy(item.taxonomy),terms:item.termIds.map(id=>findTaxonomy(item.taxonomy)?.terms.find(term=>term.id===id)).filter(Boolean)}));const connections=s.connections.filter(item=>item.fromEntryId===entryId||item.toEntryId===entryId).map(item=>({...item,relationData:s.relations.find(relation=>relation.id===item.relation),from:s.entries.find(candidate=>candidate.id===item.fromEntryId),to:s.entries.find(candidate=>candidate.id===item.toEntryId)}));return{entry,terms:assignments,connections,revisions:includeRevisions===false?[]:s.revisions.filter(item=>item.entryId===entryId),counts:{terms:assignments.length,connections:connections.length,revisions:includeRevisions===false?0:s.revisions.filter(item=>item.entryId===entryId).length},ui_effect:'entry_context_opened'}}}),
- defineTool({stableKey:'content.duplicate_entry',name:'duplicate_content_entry',title:'Duplicar entrada',description:'Crea un borrador duplicado de una entrada existente, copiando metadatos y términos, pero dejando las relaciones para una conexión explícita.',inputSchema:{type:'object',properties:{entryId:{type:'string'},title:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId,title}:{entryId:string;title?:string}){const source=s.entries.find(e=>e.id===entryId);if(!source)throw Error('Entrada no encontrada');const copy={...source,id:'ent_'+Math.random().toString(16).slice(2,8).toUpperCase(),title:title?.trim()||source.title+' — Copy',status:'Draft' as const,updated:'Just now',metadata:{...(source.metadata||{})},data:{...(source.data||{})}};s.setEntries(all=>[copy,...all]);const assignments=s.termAssignments.filter(item=>item.entryId===entryId).map(item=>({...item,entryId:copy.id,updatedAt:new Date().toISOString()}));if(assignments.length)s.setTermAssignments(all=>[...all,...assignments]);return{status:'created',sourceId:entryId,entry:copy,termAssignments:assignments,connectionsCopied:0,ui_effect:'entry_duplicated'}}}),
- defineTool({stableKey:'content.upsert_entries',name:'upsert_content_entries',title:'Sincronizar entradas',description:'Crea o actualiza entradas en lote de forma idempotente. Valida tipos y campos estructurados antes de guardar; si una entrada incluye un id existente se actualiza y sin id se crea un draft.',inputSchema:{type:'object',properties:{entries:{type:'array',items:{type:'object'}}},required:['entries'],additionalProperties:false},async execute({entries}:{entries:Array<Partial<Entry>&{id?:string;title:string;type:string}>}){const known=new Map(s.entries.map(e=>[e.id,e]));const created:Entry[]=[];const updated:Entry[]=[];for(const input of entries){if(!input.title||!input.type)throw Error('Cada entrada requiere title y type');const requested=s.contentTypes.find(type=>type.name===input.type||type.slug===input.type);if(!requested)throw Error('Tipo de contenido no encontrado: '+input.type);const current=input.id?known.get(input.id):undefined;if(input.id&&!current)throw Error('Entrada no encontrada: '+input.id);if(current&&current.type!==requested.name)throw Error('No puedes cambiar el tipo de una entrada existente');const data=input.data||{};const unknown=Object.keys(data).filter(key=>!requested.fields.includes(key));if(unknown.length)throw Error('Campos no definidos en el schema: '+unknown.join(', '));if(current){updated.push({...current,...input,type:current.type,data:{...(current.data||{}),...data},updated:'Just now'} as Entry)}else{const next={id:input.id||'ent_'+Math.random().toString(16).slice(2,8).toUpperCase(),title:input.title,type:requested.name,status:input.status||'Draft',updated:'Just now',relation:input.relation||'No relations yet',metadata:input.metadata||{},data};created.push(next)}}s.setEntries(all=>{const changes=new Map([...updated,...created].map(e=>[e.id,e]));return all.map(e=>changes.get(e.id)||e).concat(created.filter(e=>!all.some(current=>current.id===e.id))) });return{status:'synced',created:created.map(e=>e.id),updated:updated.map(e=>e.id),ui_effect:'entries_upserted'}}}),
- defineTool({stableKey:'content.create_entry',name:'create_content_entry',title:'Crear entrada',description:'Crea un borrador usando cualquier tipo de contenido definido en el schema, validando campos tipados y obligatorios.',inputSchema:{type:'object',properties:{title:{type:'string'},type:{type:'string'},data:{type:'object'}},required:['title','type'],additionalProperties:false},async execute({title,type,data}:{title:string;type:string;data?:Record<string,unknown>}){if(!s.contentTypes.some(t=>t.name===type||t.slug===type))throw Error('Tipo de contenido no encontrado');const resolved=s.contentTypes.find(t=>t.name===type||t.slug===type)!;const values=data||{};const unknown=Object.keys(values).filter(key=>!resolved.fields.includes(key));if(unknown.length)throw Error('Campos no definidos en el schema: '+unknown.join(', '));const errors=validateData(resolved,values);if(errors.length)throw Error(errors.join('; '));const entry=s.createEntry(title,resolved.name,values);return{status:'created',entryId:entry.id,entry,title,type:resolved.name,data:values,ui_effect:'entry_created'}}}),
- defineTool({stableKey:'content.get_fields',name:'get_entry_fields',title:'Leer campos',description:'Devuelve los valores estructurados de una entrada y los campos definidos por su tipo, incluidos tipos y obligatoriedad.',inputSchema:{type:'object',properties:{entryId:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId}:{entryId:string}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');const model=s.contentTypes.find(t=>t.name===entry.type);return{entryId,type:entry.type,schema:model?.fields||[],fieldTypes:model?.fieldTypes||{},requiredFields:model?.requiredFields||[],data:entry.data||{},ui_effect:'fields_read'}}}),
- defineTool({stableKey:'content.set_field',name:'set_entry_field',title:'Escribir campo',description:'Actualiza un campo estructurado de una entrada validando que exista en el tipo y que su valor cumpla el tipo declarado.',inputSchema:{type:'object',properties:{entryId:{type:'string'},field:{type:'string'},value:{}},required:['entryId','field','value'],additionalProperties:false},async execute({entryId,field,value}:{entryId:string;field:string;value:unknown}){const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada');const model=s.contentTypes.find(item=>item.name===entry.type);if(!model||!model.fields.includes(field))throw Error('Campo no definido en el schema: '+field);const errors=validateData(model,{...(entry.data||{}),[field]:value});if(errors.some(error=>error.includes('Valor inválido para '+field)))throw Error(errors.filter(error=>error.includes('Valor inválido para '+field)).join('; '));const updated={...entry,data:{...(entry.data||{}),[field]:value},updated:'Just now'};const revision={id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,createdAt:new Date().toISOString(),action:'field_update',before:entry,after:updated};s.setEntries(all=>all.map(item=>item.id===entryId?updated:item));s.setRevisions(all=>[...all,revision]);return{status:'updated',entryId,field,value,revisionId:revision.id,ui_effect:'entry_field_updated'}}}),
- defineTool({stableKey:'content.update_entry',name:'update_content_entry',title:'Actualizar entrada',description:'Actualiza campos editables y datos estructurados de una entrada, sin perder metadatos ni relaciones, y crea una revisión.',inputSchema:{type:'object',properties:{entryId:{type:'string'},title:{type:'string'},status:{type:'string',enum:['Published','Draft']},relation:{type:'string'},data:{type:'object'}},required:['entryId'],additionalProperties:false},async execute({entryId,title,status,relation,data}:{entryId:string;title?:string;status?:'Published'|'Draft';relation?:string;data?:Record<string,unknown>}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');const model=s.contentTypes.find(t=>t.name===entry.type);const unknown=Object.keys(data||{}).filter(key=>!model?.fields.includes(key));if(unknown.length)throw Error('Campos no definidos en el schema: '+unknown.join(', '));const updated={...entry,...(title===undefined?{}:{title:title.trim()}),...(status===undefined?{}:{status}),...(relation===undefined?{}:{relation}),...(data===undefined?{}:{data:{...(entry.data||{}),...data}}),updated:'Just now'};const revision={id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,createdAt:new Date().toISOString(),action:'update',before:entry,after:updated};s.setRevisions(all=>[...all,revision]);s.setEntries(all=>all.map(e=>e.id===entryId?updated:e));return{status:'updated',entry:updated,revisionId:revision.id,ui_effect:'entry_updated'}}}),
- defineTool({stableKey:'content.preview_update',name:'preview_entry_update',title:'Previsualizar actualización',description:'Valida una actualización y devuelve el diff sin modificar la entrada ni crear una revisión. Usa el previewId devuelto para aplicarla de forma segura.',inputSchema:{type:'object',properties:{entryId:{type:'string'},title:{type:'string'},status:{type:'string',enum:['Published','Draft']},relation:{type:'string'},data:{type:'object'}},required:['entryId'],additionalProperties:false},async execute({entryId,title,status,relation,data}:{entryId:string;title?:string;status?:'Published'|'Draft';relation?:string;data?:Record<string,unknown>}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');const model=s.contentTypes.find(t=>t.name===entry.type);const unknown=Object.keys(data||{}).filter(key=>!model?.fields.includes(key));if(unknown.length)throw Error('Campos no definidos en el schema: '+unknown.join(', '));const proposed={...entry,...(title===undefined?{}:{title:title.trim()}),...(status===undefined?{}:{status}),...(relation===undefined?{}:{relation}),...(data===undefined?{}:{data:{...(entry.data||{}),...data}})};const changes=Object.keys(proposed).filter(key=>JSON.stringify(entry[key as keyof Entry])!==JSON.stringify(proposed[key as keyof Entry])).map(key=>({field:key,before:entry[key as keyof Entry],after:proposed[key as keyof Entry]}));const previewId=fingerprint({entryId,entry,proposed});return{status:'preview',previewId,entryId,changes,willCreateRevision:changes.length>0,ui_effect:'update_preview_ready'}}}),
- defineTool({stableKey:'content.apply_preview',name:'apply_previewed_entry_update',title:'Aplicar actualización previsualizada',description:'Aplica una actualización únicamente si coincide con una previsualización vigente; si la entrada cambió, rechaza la operación para evitar sobrescribir trabajo reciente.',inputSchema:{type:'object',properties:{previewId:{type:'string'},entryId:{type:'string'},title:{type:'string'},status:{type:'string',enum:['Published','Draft']},relation:{type:'string'},data:{type:'object'}},required:['previewId','entryId'],additionalProperties:false},async execute({previewId,entryId,title,status,relation,data}:{previewId:string;entryId:string;title?:string;status?:'Published'|'Draft';relation?:string;data?:Record<string,unknown>}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');const model=s.contentTypes.find(t=>t.name===entry.type);const unknown=Object.keys(data||{}).filter(key=>!model?.fields.includes(key));if(unknown.length)throw Error('Campos no definidos en el schema: '+unknown.join(', '));const proposed={...entry,...(title===undefined?{}:{title:title.trim()}),...(status===undefined?{}:{status}),...(relation===undefined?{}:{relation}),...(data===undefined?{}:{data:{...(entry.data||{}),...data}})};if(fingerprint({entryId,entry,proposed})!==previewId)throw Error('La previsualización está obsoleta; genera una nueva antes de aplicar');const changes=Object.keys(proposed).filter(key=>JSON.stringify(entry[key as keyof Entry])!==JSON.stringify(proposed[key as keyof Entry]));if(!changes.length)return{status:'unchanged',entry,previewId,ui_effect:'entry_update_noop'};const updated={...proposed,updated:'Just now'};const revision={id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,createdAt:new Date().toISOString(),action:'update',before:entry,after:updated};s.setRevisions(all=>[...all,revision]);s.setEntries(all=>all.map(e=>e.id===entryId?updated:e));return{status:'updated',entry:updated,revisionId:revision.id,previewId,ui_effect:'entry_updated'}}}),
- defineTool({stableKey:'content.list_revisions',name:'list_entry_revisions',title:'Listar revisiones de entrada',description:'Devuelve el historial completo de una entrada, ordenado de la revisión más reciente a la más antigua y con paginación para que un agente pueda reconstruir sus cambios.',inputSchema:{type:'object',properties:{entryId:{type:'string'},limit:{type:'number'},offset:{type:'number'}},required:['entryId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({entryId,limit,offset}:{entryId:string;limit?:number;offset?:number}){if(!s.entries.some(entry=>entry.id===entryId))throw Error('Entrada no encontrada');const matching=s.revisions.filter(revision=>revision.entryId===entryId).slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{entryId,revisions:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay revisiones registradas para esta entrada',ui_effect:'entry_revisions_read'}}}),
- defineTool({stableKey:'content.restore_revision',name:'restore_entry_revision',title:'Restaurar revisión de entrada',description:'Previsualiza y, con confirm:true, restaura una revisión anterior como el estado actual de una entrada sin eliminar su historial.',inputSchema:{type:'object',properties:{entryId:{type:'string'},revisionId:{type:'string'},confirm:{type:'boolean'}},required:['entryId','revisionId'],additionalProperties:false},async execute({entryId,revisionId,confirm}:{entryId:string;revisionId:string;confirm?:boolean}){const current=s.entries.find(entry=>entry.id===entryId);if(!current)throw Error('Entrada no encontrada');const revision=s.revisions.find(item=>item.id===revisionId&&item.entryId===entryId);if(!revision)throw Error('Revisión no encontrada para esta entrada');const restored={...revision.after,id:entryId,deletedAt:current.deletedAt,updated:'Just now'};if(!confirm)return{status:'confirmation_required',entryId,revisionId,current:{title:current.title,status:current.status,updated:current.updated},restoreTo:{title:restored.title,status:restored.status,updated:restored.updated},note:'Repite con confirm:true para restaurar esta revisión'};const audit={id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,createdAt:new Date().toISOString(),action:'revision_restore',before:current,after:restored};s.setEntries(all=>all.map(entry=>entry.id===entryId?restored:entry));s.setRevisions(all=>[...all,audit]);return{status:'restored',entry:restored,revisionId:audit.id,sourceRevisionId:revisionId,ui_effect:'entry_revision_restored'}}}),
- defineTool({stableKey:'content.set_parent',name:'set_entry_parent',title:'Jerarquizar entrada',description:'Asigna o elimina el padre de una entrada para construir páginas y CPT jerárquicos, rechazando referencias inexistentes y ciclos.',inputSchema:{type:'object',properties:{entryId:{type:'string'},parentEntryId:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId,parentEntryId}:{entryId:string;parentEntryId?:string}){const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada');if(parentEntryId===entryId)throw Error('Una entrada no puede ser su propio padre');if(parentEntryId&&!s.entries.some(item=>item.id===parentEntryId))throw Error('Entrada padre no encontrada');let cursor=parentEntryId;while(cursor){if(cursor===entryId)throw Error('La jerarquía produciría un ciclo');cursor=s.entries.find(item=>item.id===cursor)?.parentEntryId}const updated={...entry,parentEntryId:parentEntryId||undefined,updated:'Just now'};s.setEntries(all=>all.map(item=>item.id===entryId?updated:item));return{status:'updated',entry:updated,ui_effect:'entry_hierarchy_updated'}}}),
- defineTool({stableKey:'content.list_children',name:'list_entry_children',title:'Listar hijos de entrada',description:'Devuelve las entradas hijas directas de una página o entrada jerárquica.',inputSchema:{type:'object',properties:{parentEntryId:{type:'string'}},required:['parentEntryId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({parentEntryId}:{parentEntryId:string}){if(!s.entries.some(item=>item.id===parentEntryId))throw Error('Entrada padre no encontrada');const entries=s.entries.filter(item=>item.parentEntryId===parentEntryId);return{parentEntryId,entries,count:entries.length,note:entries.length?'':'No hay entradas hijas'}}}),
- defineTool({stableKey:'content.trash_entry',name:'trash_content_entry',title:'Enviar entrada a papelera',description:'Mueve una entrada a la papelera de forma reversible, conservando sus metadatos, términos y relaciones.',inputSchema:{type:'object',properties:{entryId:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId}:{entryId:string}){const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada');if(entry.deletedAt)return{status:'unchanged',entryId,note:'La entrada ya está en la papelera'};const deletedAt=new Date().toISOString();s.setEntries(all=>all.map(item=>item.id===entryId?{...item,deletedAt,updated:'Just now'}:item));return{status:'trashed',entryId,title:entry.title,deletedAt,ui_effect:'entry_trashed'}}}),
- defineTool({stableKey:'content.list_trash',name:'list_trashed_entries',title:'Listar papelera',description:'Devuelve las entradas enviadas a la papelera para que el agente pueda revisarlas o restaurarlas.',inputSchema:{type:'object',properties:{limit:{type:'number'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({limit}:{limit?:number}){const page=s.entries.filter(entry=>entry.deletedAt).slice(0,Math.min(Math.max(limit||25,1),100));return{entries:page,count:page.length,note:page.length?'':'La papelera está vacía'}}}),
- defineTool({stableKey:'content.restore_entry',name:'restore_trashed_entry',title:'Restaurar entrada',description:'Restaura una entrada de la papelera y la devuelve a su estado editorial anterior.',inputSchema:{type:'object',properties:{entryId:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId}:{entryId:string}){const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada');if(!entry.deletedAt)return{status:'unchanged',entryId,note:'La entrada no está en la papelera'};const restored={...entry,deletedAt:undefined,updated:'Just now'};s.setEntries(all=>all.map(item=>item.id===entryId?restored:item));return{status:'restored',entry:restored,ui_effect:'entry_restored'}}}),
- defineTool({stableKey:'content.delete_entry',name:'delete_content_entry',title:'Eliminar entrada',description:'Prepara o elimina una entrada y limpia sus conexiones y asignaciones de términos. Requiere confirm:true para ejecutar.',inputSchema:{type:'object',properties:{entryId:{type:'string'},confirm:{type:'boolean'}},required:['entryId'],additionalProperties:false},async execute({entryId,confirm}:{entryId:string;confirm?:boolean}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');const removedConnections=s.connections.filter(connection=>connection.fromEntryId===entryId||connection.toEntryId===entryId).length;const removedAssignments=s.termAssignments.filter(item=>item.entryId===entryId).length;if(!confirm)return{status:'confirmation_required',entryId,title:entry.title,removedConnections,removedAssignments,note:'Repite con confirm:true para eliminar esta entrada'};s.setEntries(all=>all.filter(e=>e.id!==entryId));s.setConnections(all=>all.filter(connection=>connection.fromEntryId!==entryId&&connection.toEntryId!==entryId));s.setTermAssignments(all=>all.filter(item=>item.entryId!==entryId));return{status:'deleted',entryId,title:entry.title,removedConnections,removedAssignments,ui_effect:'entry_deleted'}}}),
- defineTool({stableKey:'content.get_metadata',name:'get_entry_metadata',title:'Leer metadatos',description:'Devuelve todos los metadatos personalizados de una entrada o una clave concreta.',inputSchema:{type:'object',properties:{entryId:{type:'string'},key:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId,key}:{entryId:string;key?:string}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');return{entryId,key:key||null,value:key?entry.metadata?.[key]:entry.metadata||{},ui_effect:'metadata_read'}}}),
- defineTool({stableKey:'content.set_metadata',name:'set_entry_metadata',title:'Escribir metadatos',description:'Crea o reemplaza un metadato personalizado en una entrada y registra una revisión.',inputSchema:{type:'object',properties:{entryId:{type:'string'},key:{type:'string'},value:{}},required:['entryId','key','value'],additionalProperties:false},async execute({entryId,key,value}:{entryId:string;key:string;value:unknown}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');const updated={...entry,metadata:{...(entry.metadata||{}),[key]:value},updated:'Just now'};s.setEntries(all=>all.map(e=>e.id===entryId?updated:e));const revision={id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,createdAt:new Date().toISOString(),action:'metadata_update',before:entry,after:updated};s.setRevisions(all=>[...all,revision]);return{entryId,key,value,revisionId:revision.id,ui_effect:'metadata_updated'}}}),
- defineTool({stableKey:'content.delete_metadata',name:'delete_entry_metadata',title:'Eliminar metadato',description:'Prepara o elimina una clave de metadatos personalizada de una entrada y registra una revisión. Requiere confirm:true para ejecutar.',inputSchema:{type:'object',properties:{entryId:{type:'string'},key:{type:'string'},confirm:{type:'boolean'}},required:['entryId','key'],additionalProperties:false},async execute({entryId,key,confirm}:{entryId:string;key:string;confirm?:boolean}){const entry=s.entries.find(e=>e.id===entryId);if(!entry)throw Error('Entrada no encontrada');const metadata={...(entry.metadata||{})};if(!(key in metadata))return{entryId,key,status:'not_found'};const removedValue=metadata[key];if(!confirm)return{entryId,key,status:'confirmation_required',value:removedValue,note:'Repite con confirm:true para eliminar este metadato'};delete metadata[key];const updated={...entry,metadata,updated:'Just now'};s.setEntries(all=>all.map(e=>e.id===entryId?updated:e));const revision={id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,createdAt:new Date().toISOString(),action:'metadata_delete',before:entry,after:updated};s.setRevisions(all=>[...all,revision]);return{entryId,key,status:'deleted',revisionId:revision.id,ui_effect:'metadata_deleted'}}}),
- defineTool({stableKey:'content.set_type_filter',name:'filter_content_type',title:'Filtrar por tipo',description:'Actualiza el filtro visible de entradas. Acepta tipos creados dinámicamente.',inputSchema:{type:'object',properties:{type:{type:'string'}},required:['type'],additionalProperties:false},async execute({type}:{type:string}){if(type!=='All content'&&!s.contentTypes.some(item=>item.name===type||item.slug===type))throw Error('Tipo de contenido no encontrado');const resolved=type==='All content'?'All content':s.contentTypes.find(item=>item.name===type||item.slug===type)!.name;s.setActiveType(resolved);return{activeType:resolved,ui_effect:'filter_updated'}}}),
- defineTool({stableKey:'content.set_status_filter',name:'filter_content_status',title:'Filtrar por estado',description:'Actualiza el filtro visible de entradas entre todos los estados, Published o Draft.',inputSchema:{type:'object',properties:{status:{type:'string',enum:['All statuses','Published','Draft']}},required:['status'],additionalProperties:false},async execute({status}:{status:'All statuses'|'Published'|'Draft'}){s.setActiveStatus(status);return{activeStatus:status,ui_effect:'filter_updated'}}}),
- defineTool({stableKey:'content.schedule_entry',name:'schedule_content_entry',title:'Programar entrada',description:'Programa una entrada para una fecha futura y la mantiene como Draft hasta que un proceso de publicación la haga disponible; registra una revisión del cambio.',inputSchema:{type:'object',properties:{entryId:{type:'string'},publishAt:{type:'string',format:'date-time'}},required:['entryId','publishAt'],additionalProperties:false},async execute({entryId,publishAt}:{entryId:string;publishAt:string}){const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada');const timestamp=Date.parse(publishAt);if(!Number.isFinite(timestamp)||timestamp<=Date.now())throw Error('publishAt debe ser una fecha futura válida');const updated={...entry,status:'Draft' as const,scheduledAt:new Date(timestamp).toISOString(),updated:'Just now'};const revision={id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,createdAt:new Date().toISOString(),action:'schedule',before:entry,after:updated};s.setEntries(all=>all.map(item=>item.id===entryId?updated:item));s.setRevisions(all=>[...all,revision]);return{status:'scheduled',entry:updated,revisionId:revision.id,ui_effect:'entry_scheduled'}}}),
- defineTool({stableKey:'content.publish_due_entries',name:'publish_due_entries',title:'Publicar entradas vencidas',description:'Publica las entradas programadas cuya fecha ya llegó, validando sus tipos y campos antes de cambiar su estado y registrando revisiones.',inputSchema:{type:'object',properties:{now:{type:'string',format:'date-time'}},additionalProperties:false},async execute({now}:{now?:string}){const current=now?Date.parse(now):Date.now();if(!Number.isFinite(current))throw Error('now no es una fecha válida');const due=s.entries.filter(entry=>entry.status==='Draft'&&entry.scheduledAt&&Date.parse(entry.scheduledAt)<=current);for(const entry of due){const model=s.contentTypes.find(type=>type.name===entry.type);if(!model)throw Error('Tipo de contenido inexistente: '+entry.type);const unknown=Object.keys(entry.data||{}).filter(key=>!model.fields.includes(key));if(unknown.length)throw Error('Campos no definidos en el schema: '+unknown.join(', '))}const updated=due.map(entry=>({...entry,status:'Published' as const,scheduledAt:undefined,updated:'Just now'}));const revisions=due.map((entry,index)=>({id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId:entry.id,createdAt:new Date().toISOString(),action:'publish_due',before:entry,after:updated[index]}));s.setEntries(all=>all.map(entry=>updated.find(item=>item.id===entry.id)||entry));s.setRevisions(all=>[...all,...revisions]);return{status:'published',entryIds:due.map(entry=>entry.id),count:due.length,revisionIds:revisions.map(revision=>revision.id),note:due.length?'':'No hay entradas programadas vencidas',ui_effect:'scheduled_entries_published'}}}),
- defineTool({stableKey:'content.publish_entry',name:'publish_content_entry',title:'Publicar entrada',description:'Valida campos tipados y obligatorios antes de publicar una entrada existente por su id.',inputSchema:{type:'object',properties:{entryId:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId}:{entryId:string}){const item=s.entries.find(e=>e.id===entryId);if(!item)throw Error('Entrada no encontrada');const model=s.contentTypes.find(type=>type.name===item.type);if(!model)throw Error('Tipo de contenido inexistente');const values=item.data||{};const unknown=Object.keys(values).filter(key=>!model.fields.includes(key));if(unknown.length)throw Error('Campos no definidos en el schema: '+unknown.join(', '));const errors=validateData(model,values);if(errors.length)throw Error(errors.join('; '));s.setEntries(s.entries.map(e=>e.id===entryId?{...e,status:'Published',updated:'Just now'}:e));return{entryId,status:'Published',validated:true,ui_effect:'entry_published'}}}),
- defineTool({stableKey:'content.resolve_relations',name:'resolve_content_relations',title:'Resolver relaciones',description:'Devuelve las conexiones estructuradas de una entrada para navegar el grafo de contenido.',inputSchema:{type:'object',properties:{entryId:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId}:{entryId:string}){const item=s.entries.find(e=>e.id===entryId);if(!item)throw Error('Entrada no encontrada');const connections=s.connections.filter(c=>c.fromEntryId===entryId||c.toEntryId===entryId).map(c=>({...c,relation:s.relations.find(r=>r.id===c.relation)?.slug||c.relation,from:s.entries.find(e=>e.id===c.fromEntryId),to:s.entries.find(e=>e.id===c.toEntryId)}));return{entryId,title:item.title,relations:item.relation,connections,count:connections.length,ui_effect:'relations_inspected'}}}),
- defineTool({stableKey:'schema.get_content_stats',name:'get_content_stats',title:'Resumir contenido',description:'Devuelve estadísticas agregadas del workspace para que el agente pueda planificar operaciones sin recorrer todas las entradas.',inputSchema:{type:'object',properties:{},additionalProperties:false},async execute(){const byType=Object.fromEntries(s.contentTypes.map(type=>[type.name,s.entries.filter(entry=>entry.type===type.name).length]));const byStatus={Published:s.entries.filter(entry=>entry.status==='Published').length,Draft:s.entries.filter(entry=>entry.status==='Draft').length};return{entries:{total:s.entries.length,byType,byStatus},schema:{contentTypes:s.contentTypes.length,taxonomies:s.taxonomies.length,terms:s.taxonomies.reduce((total,taxonomy)=>total+taxonomy.terms.length,0),relations:s.relations.length,connections:s.connections.length,termAssignments:s.termAssignments.length},ui_effect:'content_stats_read'}}}),
- defineTool({stableKey:'schema.list_content_types',name:'list_content_types',title:'Listar tipos de contenido',description:'Devuelve los tipos de contenido disponibles con sus slugs, campos y cantidad real de entradas.',inputSchema:{type:'object',properties:{},additionalProperties:false},async execute(){const contentTypes=s.contentTypes.map(type=>({...type,entryCount:s.entries.filter(entry=>entry.type===type.name).length,fieldCount:type.fields.length}));return{contentTypes,count:contentTypes.length,note:contentTypes.length?'':'No hay tipos de contenido'}}}),
- defineTool({stableKey:'content.validate_entry',name:'validate_content_entry',title:'Validar entrada',description:'Comprueba que una entrada tenga un tipo válido, campos definidos en su schema y referencias de relaciones y términos existentes antes de publicarla.',inputSchema:{type:'object',properties:{entryId:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId}:{entryId:string}){const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada');const errors:string[]=[];const model=s.contentTypes.find(item=>item.name===entry.type);if(!model)errors.push('Tipo de contenido inexistente: '+entry.type);for(const key of Object.keys(entry.data||{}))if(model&&!model.fields.includes(key))errors.push('Campo no definido en el schema: '+key);for(const connection of s.connections.filter(item=>item.fromEntryId===entryId||item.toEntryId===entryId)){if(!s.relations.some(item=>item.id===connection.relation))errors.push('Relación inexistente: '+connection.relation);if(!s.entries.some(item=>item.id===connection.fromEntryId))errors.push('Origen inexistente: '+connection.fromEntryId);if(!s.entries.some(item=>item.id===connection.toEntryId))errors.push('Destino inexistente: '+connection.toEntryId)}for(const assignment of s.termAssignments.filter(item=>item.entryId===entryId)){const taxonomy=findTaxonomy(assignment.taxonomy);if(!taxonomy)errors.push('Taxonomía inexistente: '+assignment.taxonomy);else for(const termId of assignment.termIds)if(!taxonomy.terms.some(term=>term.id===termId))errors.push('Término inexistente: '+termId)}return{entryId,valid:errors.length===0,errors,status:entry.status,ui_effect:'entry_validated'}}}),
- defineTool({stableKey:'taxonomy.get_context',name:'get_taxonomy_context',title:'Leer contexto taxonómico',description:'Devuelve una taxonomía con su jerarquía, términos y cantidad de entradas asignadas para apoyar decisiones de clasificación.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'}},required:['taxonomy'],additionalProperties:false},async execute({taxonomy}:{taxonomy:string}){const model=findTaxonomy(taxonomy);if(!model)throw Error('Taxonomía no encontrada');const terms=model.terms.map(term=>({...term,entryCount:s.termAssignments.filter(assignment=>assignment.taxonomy===model.slug&&assignment.termIds.includes(term.id)).length}));return{taxonomy:model.name,slug:model.slug,hierarchical:model.hierarchical,terms,count:terms.length,assignedEntries:new Set(s.termAssignments.filter(assignment=>assignment.taxonomy===model.slug).map(assignment=>assignment.entryId)).size,ui_effect:'taxonomy_context_read'}}}),
- defineTool({stableKey:'schema.preview_import',name:'preview_import_content_model',title:'Previsualizar importación',description:'Valida un paquete de modelo y devuelve el impacto de reemplazar el estado actual, incluidos usuarios, roles, plugins, medios, comentarios y menús, sin modificarlo.',inputSchema:{type:'object',properties:{model:{type:'object'}},required:['model'],additionalProperties:false},async execute({model}:{model:{version?:number;contentTypes?:ContentType[];users?:User[];roles?:Role[];plugins?:Plugin[];media?:MediaAsset[];comments?:Comment[];menus?:Menu[];taxonomies?:Taxonomy[];relations?:Relation[];connections?:Connection[];termAssignments?:TermAssignment[];revisions?:Revision[];entries?:Entry[]}}){if(model.version!==undefined&&(!Number.isInteger(model.version)||model.version<1||model.version>6))throw Error('Versión de paquete no compatible');if(!Array.isArray(model.contentTypes)||!Array.isArray(model.taxonomies)||!Array.isArray(model.relations))throw Error('Paquete de modelo incompleto');return{status:'preview',version:model.version||1,willReplace:{contentTypes:model.contentTypes.length,users:model.users?.length||0,roles:model.roles?.length||0,plugins:model.plugins?.length||0,media:model.media?.length||0,comments:model.comments?.length||0,menus:model.menus?.length||0,taxonomies:model.taxonomies.length,relations:model.relations.length,connections:model.connections?.length||0,termAssignments:model.termAssignments?.length||0,revisions:model.revisions?.length||0,entries:model.entries?.length||0},ui_effect:'import_preview_ready'}}}),
- defineTool({stableKey:'relation.get_graph',name:'get_relation_graph',title:'Leer grafo de relaciones',description:'Devuelve nodos de tipos de contenido y aristas de entradas enriquecidas con títulos, tipos y relación para navegación agentiva.',inputSchema:{type:'object',properties:{relation:{type:'string'},entryId:{type:'string'}},additionalProperties:false},async execute({relation,entryId}:{relation?:string;entryId?:string}){const model=relation?s.relations.find(item=>item.id===relation||item.slug===relation||item.name===relation):undefined;if(relation&&!model)throw Error('Relación no encontrada');const connections=s.connections.filter(item=>(!model||item.relation===model.id)&&(!entryId||(item.fromEntryId===entryId||item.toEntryId===entryId)));const nodes=s.contentTypes.map(type=>({type:type.name,slug:type.slug,entryCount:s.entries.filter(entry=>entry.type===type.name).length}));const edges=connections.map(item=>({id:item.id,relation:s.relations.find(candidate=>candidate.id===item.relation),from:s.entries.find(entry=>entry.id===item.fromEntryId),to:s.entries.find(entry=>entry.id===item.toEntryId)}));return{nodes,edges,count:edges.length,note:edges.length?'':'No hay conexiones que coincidan',ui_effect:'relation_graph_read'}}}),
- defineTool({stableKey:'taxonomy.find_entries_by_terms',name:'find_entries_by_terms',title:'Buscar por términos',description:'Busca entradas asignadas a todos los términos indicados de una taxonomía y devuelve resultados paginados.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},terms:{type:'array',items:{type:'string'}},limit:{type:'number'},offset:{type:'number'}},required:['taxonomy','terms'],additionalProperties:false},async execute({taxonomy,terms,limit,offset}:{taxonomy:string;terms:string[];limit?:number;offset?:number}){const model=findTaxonomy(taxonomy);if(!model)throw Error('Taxonomía no encontrada');const termIds=terms.map(value=>model.terms.find(term=>term.id===value||term.slug===value||term.name===value)?.id);if(termIds.some(id=>!id))throw Error('Uno o más términos no existen');const matching=s.entries.filter(entry=>{const assignment=s.termAssignments.find(item=>item.entryId===entry.id&&item.taxonomy===model.slug);return Boolean(assignment&&termIds.every(id=>assignment.termIds.includes(id!)))});const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const entries=matching.slice(start,start+pageSize);return{taxonomy:model.slug,terms:termIds,entries,count:entries.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+entries.length<matching.length,note:matching.length?'':'No hay entradas con esos términos'}}}),
- defineTool({stableKey:'taxonomy.bulk_set_entry_terms',name:'bulk_set_entry_terms',title:'Clasificar entradas en lote',description:'Reemplaza términos de varias entradas de forma atómica. Valida todas las entradas, taxonomías y términos antes de guardar.',inputSchema:{type:'object',properties:{assignments:{type:'array',items:{type:'object',properties:{entryId:{type:'string'},taxonomy:{type:'string'},terms:{type:'array',items:{type:'string'}}},required:['entryId','taxonomy','terms'],additionalProperties:false}}},required:['assignments'],additionalProperties:false},async execute({assignments}:{assignments:Array<{entryId:string;taxonomy:string;terms:string[]}>}){const prepared=assignments.map(input=>{const entry=s.entries.find(item=>item.id===input.entryId);if(!entry)throw Error('Entrada no encontrada: '+input.entryId);const taxonomy=findTaxonomy(input.taxonomy);if(!taxonomy)throw Error('Taxonomía no encontrada: '+input.taxonomy);const terms=input.terms.map(value=>taxonomy.terms.find(term=>term.id===value||term.slug===value||term.name===value));if(terms.some(term=>!term))throw Error('Término no encontrado en '+taxonomy.slug);return{entry,taxonomy,termIds:terms.map(term=>term!.id)}});s.setTermAssignments(all=>{let next=all;for(const item of prepared){const assignment={entryId:item.entry.id,taxonomy:item.taxonomy.slug,termIds:item.termIds,updatedAt:new Date().toISOString()};next=[...next.filter(current=>!(current.entryId===assignment.entryId&&current.taxonomy===assignment.taxonomy)),...(assignment.termIds.length?[assignment]:[])]}return next});return{status:'classified',updated:prepared.map(item=>({entryId:item.entry.id,taxonomy:item.taxonomy.slug,termIds:item.termIds})),count:prepared.length,ui_effect:'entries_terms_bulk_updated'}}}),
- defineTool({stableKey:'schema.export_workspace_model',name:'export_workspace_model',title:'Exportar workspace completo',description:'Exporta el modelo portable completo del CMS, incluyendo contenido, schema, usuarios, roles, plugins, medios, comentarios, menús, taxonomías, relaciones, conexiones y revisiones.',inputSchema:{type:'object',properties:{includeEntries:{type:'boolean'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({includeEntries}:{includeEntries?:boolean}){const withEntries=includeEntries!==false;return{version:6,exportedAt:new Date().toISOString(),contentTypes:s.contentTypes,users:s.users,roles:s.roles,plugins:s.plugins,media:s.media,comments:s.comments,menus:s.menus,taxonomies:s.taxonomies,relations:s.relations,connections:withEntries?s.connections:[],termAssignments:withEntries?s.termAssignments:[],revisions:withEntries?s.revisions:[],entries:withEntries?s.entries:[]}}}),
- defineTool({stableKey:'schema.import_workspace_model',name:'import_workspace_model',title:'Importar workspace completo',description:'Previsualiza o restaura un workspace exportado, incluidos roles, comentarios y menús. Requiere confirm:true para reemplazar el estado persistido.',inputSchema:{type:'object',properties:{model:{type:'object'},includeEntries:{type:'boolean'},confirm:{type:'boolean'}},required:['model'],additionalProperties:false},async execute({model,includeEntries,confirm}:{model:{version?:number;contentTypes?:ContentType[];users?:User[];roles?:Role[];plugins?:Plugin[];media?:MediaAsset[];comments?:Comment[];menus?:Menu[];taxonomies?:Taxonomy[];relations?:Relation[];connections?:Connection[];termAssignments?:TermAssignment[];revisions?:Revision[];entries?:Entry[]};includeEntries?:boolean;confirm?:boolean}){if(model.version!==undefined&&(!Number.isInteger(model.version)||model.version<1||model.version>6))throw Error('Versión de workspace no compatible');if(!Array.isArray(model.contentTypes)||!Array.isArray(model.taxonomies)||!Array.isArray(model.relations))throw Error('Workspace incompleto: contentTypes, taxonomies y relations son obligatorios');const impact={contentTypes:model.contentTypes.length,users:model.users?.length||0,roles:model.roles?.length||0,plugins:model.plugins?.length||0,media:model.media?.length||0,comments:model.comments?.length||0,menus:model.menus?.length||0,taxonomies:model.taxonomies.length,relations:model.relations.length,entries:model.entries?.length||0};if(!confirm)return{status:'confirmation_required',impact,note:'Repite con confirm:true para reemplazar el workspace'};s.setContentTypes(model.contentTypes);if(Array.isArray(model.users))s.setUsers(model.users);if(Array.isArray(model.roles))s.setRoles(model.roles);if(Array.isArray(model.plugins))s.setPlugins(model.plugins);if(Array.isArray(model.media))s.setMedia(model.media);if(Array.isArray(model.comments))s.setComments(model.comments);if(Array.isArray(model.menus))s.setMenus(model.menus);s.setTaxonomies(model.taxonomies);s.setRelations(model.relations);if(includeEntries!==false&&Array.isArray(model.entries))s.setEntries(model.entries);if(includeEntries!==false&&Array.isArray(model.connections))s.setConnections(model.connections);if(includeEntries!==false&&Array.isArray(model.termAssignments))s.setTermAssignments(model.termAssignments);if(includeEntries!==false&&Array.isArray(model.revisions))s.setRevisions(model.revisions);return{status:'imported',...impact,ui_effect:'workspace_imported'}}}),
- defineTool({stableKey:'schema.validate_workspace',name:'validate_workspace',title:'Validar integridad del workspace',description:'Revisa referencias entre entradas, usuarios, roles, plugins, medios, comentarios, menús, taxonomías y relaciones sin modificar datos.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const errors:string[]=[];const entryIds=new Set(s.entries.map(entry=>entry.id));const userIds=new Set(s.users.map(user=>user.id));const roleSlugs=new Set(s.roles.map(role=>role.slug));const typeNames=new Set(s.contentTypes.map(type=>type.name));const relationIds=new Set(s.relations.map(relation=>relation.id));const taxonomyMap=new Map(s.taxonomies.map(taxonomy=>[taxonomy.slug,taxonomy]));for(const entry of s.entries){if(!typeNames.has(entry.type))errors.push('Entrada '+entry.id+': tipo inexistente '+entry.type);if(entry.authorUserId&&!userIds.has(entry.authorUserId))errors.push('Entrada '+entry.id+': autor inexistente '+entry.authorUserId);if(entry.parentEntryId&&!entryIds.has(entry.parentEntryId))errors.push('Entrada '+entry.id+': padre inexistente '+entry.parentEntryId)}for(const user of s.users)if(!roleSlugs.has(user.role))errors.push('Usuario '+user.id+': rol inexistente '+user.role);for(const connection of s.connections){if(!relationIds.has(connection.relation))errors.push('Conexión '+connection.id+': relación inexistente '+connection.relation);if(!entryIds.has(connection.fromEntryId)||!entryIds.has(connection.toEntryId))errors.push('Conexión '+connection.id+': entrada origen o destino inexistente')}for(const assignment of s.termAssignments){const taxonomy=taxonomyMap.get(assignment.taxonomy);if(!taxonomy)errors.push('Asignación '+assignment.entryId+': taxonomía inexistente '+assignment.taxonomy);else for(const termId of assignment.termIds)if(!taxonomy.terms.some(term=>term.id===termId))errors.push('Asignación '+assignment.entryId+': término inexistente '+termId)}for(const comment of s.comments){if(!entryIds.has(comment.entryId))errors.push('Comentario '+comment.id+': entrada inexistente '+comment.entryId);if(comment.authorUserId&&!userIds.has(comment.authorUserId))errors.push('Comentario '+comment.id+': autor inexistente '+comment.authorUserId);if(comment.parentCommentId&&!s.comments.some(parent=>parent.id===comment.parentCommentId))errors.push('Comentario '+comment.id+': padre inexistente '+comment.parentCommentId)}for(const menu of s.menus)for(const item of menu.items){if(item.entryId&&!entryIds.has(item.entryId))errors.push('Menú '+menu.slug+': entrada inexistente '+item.entryId);if(item.parentId&&!menu.items.some(parent=>parent.id===item.parentId))errors.push('Menú '+menu.slug+': padre inexistente '+item.parentId)}for(const asset of s.media)for(const entryId of asset.attachedEntryIds)if(!entryIds.has(entryId))errors.push('Medio '+asset.id+': entrada adjunta inexistente '+entryId);return{valid:errors.length===0,errors,errorCount:errors.length,checked:{entries:s.entries.length,users:s.users.length,roles:s.roles.length,connections:s.connections.length,termAssignments:s.termAssignments.length,comments:s.comments.length,menus:s.menus.length,media:s.media.length},note:errors.length?'Corrige las referencias antes de importar o publicar':'No se detectaron referencias rotas',ui_effect:'workspace_validated'}}}),
- defineTool({stableKey:'plugin.set_dependencies',name:'set_plugin_dependencies',title:'Definir dependencias de plugin',description:'Declara los plugins requeridos por una extensión para que el agente pueda comprobar compatibilidad antes de activarla.',inputSchema:{type:'object',properties:{plugin:{type:'string'},dependencies:{type:'array',items:{type:'string'}}},required:['plugin','dependencies'],additionalProperties:false},async execute({plugin,dependencies}:{plugin:string;dependencies:string[]}){const current=s.plugins.find(item=>item.id===plugin||item.slug===plugin||item.name===plugin);if(!current)throw Error('Plugin no encontrado');const normalized=[...new Set(dependencies.map(value=>value.trim().toLowerCase()).filter(Boolean))];if(normalized.includes(current.slug))throw Error('Un plugin no puede depender de sí mismo');const missing=normalized.filter(slug=>!s.plugins.some(item=>item.slug===slug));if(missing.length)throw Error('Dependencias no registradas: '+missing.join(', '));const updated={...current,dependencies:normalized};s.setPlugins(all=>all.map(item=>item.id===current.id?updated:item));return{status:'updated',plugin:updated,dependencies:normalized,ui_effect:'plugin_dependencies_updated'}}}),
- defineTool({stableKey:'plugin.check_dependencies',name:'check_plugin_dependencies',title:'Comprobar dependencias',description:'Comprueba si las dependencias declaradas de un plugin existen y están activas antes de una activación.',inputSchema:{type:'object',properties:{plugin:{type:'string'}},required:['plugin'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({plugin}:{plugin:string}){const current=s.plugins.find(item=>item.id===plugin||item.slug===plugin||item.name===plugin);if(!current)throw Error('Plugin no encontrado');const dependencies=(current as Plugin & {dependencies?:string[]}).dependencies||[];const checks=dependencies.map(slug=>{const dependency=s.plugins.find(item=>item.slug===slug);return{slug,registered:Boolean(dependency),active:dependency?.status==='Active',version:dependency?.version||null}});return{plugin:current.slug,dependencies:checks,ready:checks.every(item=>item.registered&&item.active),note:checks.length?'Activa primero las dependencias que estén pendientes':'El plugin no declara dependencias',ui_effect:'plugin_dependencies_checked'}}}),
- defineTool({stableKey:'plugin.activate',name:'activate_plugin',title:'Activar plugin con dependencias',description:'Activa un plugin solo cuando todas sus dependencias declaradas existen y están activas.',inputSchema:{type:'object',properties:{plugin:{type:'string'}},required:['plugin'],additionalProperties:false},async execute({plugin}:{plugin:string}){const current=s.plugins.find(item=>item.id===plugin||item.slug===plugin||item.name===plugin);if(!current)throw Error('Plugin no encontrado');const dependencies=(current as Plugin & {dependencies?:string[]}).dependencies||[];const missing=dependencies.filter(slug=>{const dependency=s.plugins.find(item=>item.slug===slug);return !dependency||dependency.status!=='Active'});if(missing.length)throw Error('Dependencias no activas: '+missing.join(', '));const updated={...current,status:'Active' as const};s.setPlugins(all=>all.map(item=>item.id===current.id?updated:item));return{status:'active',plugin:updated,ui_effect:'plugin_activated'}}}),
- defineTool({stableKey:'plugin.uninstall',name:'uninstall_plugin',title:'Desinstalar plugin',description:'Prepara o elimina el manifiesto de un plugin y bloquea la operación si otro plugin activo depende de él.',inputSchema:{type:'object',properties:{plugin:{type:'string'},confirm:{type:'boolean'}},required:['plugin'],additionalProperties:false},async execute({plugin,confirm}:{plugin:string;confirm?:boolean}){const current=s.plugins.find(item=>item.id===plugin||item.slug===plugin||item.name===plugin);if(!current)throw Error('Plugin no encontrado');const dependents=s.plugins.filter(item=>item.id!==current.id&&item.status==='Active'&&((item as Plugin & {dependencies?:string[]}).dependencies||[]).includes(current.slug)).map(item=>item.slug);if(dependents.length)throw Error('No se puede desinstalar: plugins activos dependientes '+dependents.join(', '));if(!confirm)return{status:'confirmation_required',plugin:current.slug,name:current.name,note:'Repite con confirm:true para eliminar el manifiesto'};s.setPlugins(all=>all.filter(item=>item.id!==current.id));return{status:'uninstalled',plugin:current.slug,ui_effect:'plugin_uninstalled'}}}),
- defineTool({stableKey:'role.delete_role',name:'delete_role',title:'Eliminar rol',description:'Prepara o elimina un rol personalizado y bloquea la operación si es un rol del sistema o todavía está asignado a usuarios.',inputSchema:{type:'object',properties:{role:{type:'string'},confirm:{type:'boolean'}},required:['role'],additionalProperties:false},async execute({role,confirm}:{role:string;confirm?:boolean}){const current=s.roles.find(item=>item.id===role||item.slug===role||item.name===role);if(!current)throw Error('Rol no encontrado');if(current.system)throw Error('No se puede eliminar un rol del sistema');const assigned=s.users.filter(user=>user.role===current.slug||user.role===current.name).map(user=>({id:user.id,name:user.name}));if(assigned.length)throw Error('No se puede eliminar: el rol está asignado a '+assigned.length+' usuario(s)');if(!confirm)return{status:'confirmation_required',role:current.slug,name:current.name,note:'Repite con confirm:true para eliminar este rol'};s.setRoles(all=>all.filter(item=>item.id!==current.id));return{status:'deleted',role:current.slug,ui_effect:'role_deleted'}}}),
- defineTool({stableKey:'role.assign_users',name:'assign_users_to_role',title:'Asignar usuarios a rol',description:'Asigna varios usuarios a un rol existente en una operación validada, sincronizando sus capacidades con las del rol.',inputSchema:{type:'object',properties:{role:{type:'string'},userIds:{type:'array',items:{type:'string'}}},required:['role','userIds'],additionalProperties:false},async execute({role,userIds}:{role:string;userIds:string[]}){const selected=s.roles.find(item=>item.id===role||item.slug===role||item.name===role);if(!selected)throw Error('Rol no encontrado');const unique=[...new Set(userIds)];const missing=unique.filter(id=>!s.users.some(user=>user.id===id));if(missing.length)throw Error('Usuarios no encontrados: '+missing.join(', '));const assigned=s.users.filter(user=>unique.includes(user.id)).map(user=>({...user,role:selected.slug,capabilities:selected.capabilities}));s.setUsers(all=>all.map(user=>unique.includes(user.id)?{...user,role:selected.slug,capabilities:selected.capabilities}:user));return{status:'updated',role:selected.slug,users:assigned,count:assigned.length,ui_effect:'users_role_assigned'}}}),
- defineTool({stableKey:'media.bulk_attach',name:'bulk_attach_media',title:'Adjuntar medios en lote',description:'Adjunta varios medios a varias entradas validando previamente todos los recursos y entradas para evitar relaciones parciales.',inputSchema:{type:'object',properties:{attachments:{type:'array',items:{type:'object'}}},required:['attachments'],additionalProperties:false},async execute({attachments}:{attachments:Array<{mediaId:string;entryIds:string[]}>}){const prepared=attachments.map(input=>{const media=s.media.find(asset=>asset.id===input.mediaId||asset.name===input.mediaId);if(!media)throw Error('Medio no encontrado: '+input.mediaId);const entryIds=[...new Set(input.entryIds)];const missing=entryIds.filter(id=>!s.entries.some(entry=>entry.id===id));if(missing.length)throw Error('Entradas no encontradas para '+media.id+': '+missing.join(', '));return{media,entryIds}});s.setMedia(all=>all.map(asset=>{const item=prepared.find(input=>input.media.id===asset.id);return item?{...asset,attachedEntryIds:[...new Set([...asset.attachedEntryIds,...item.entryIds])]}:asset}));return{status:'attached',attachments:prepared.map(item=>({mediaId:item.media.id,entryIds:item.entryIds})),count:prepared.length,ui_effect:'media_bulk_attached'}}}),
- defineTool({stableKey:'site.get_settings',name:'get_site_settings',title:'Leer ajustes del sitio',description:'Devuelve la identidad y configuración pública del sitio, incluyendo opciones personalizadas persistidas para agentes.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const raw=window.localStorage.getItem('waypoint.settings');const settings=raw?JSON.parse(raw):{siteName:'Northstar Journal',description:'A publication about design and culture.',url:'http://localhost:3001',timezone:'America/Mexico_City',options:{}};return{settings,ui_effect:'site_settings_read'}}}),
- defineTool({stableKey:'site.update_settings',name:'update_site_settings',title:'Actualizar ajustes del sitio',description:'Actualiza parcialmente la identidad, URL, zona horaria y opciones personalizadas del sitio con validación antes de persistir.',inputSchema:{type:'object',properties:{siteName:{type:'string'},description:{type:'string'},url:{type:'string'},timezone:{type:'string'},options:{type:'object'}},additionalProperties:false},async execute({siteName,description,url,timezone,options}:{siteName?:string;description?:string;url?:string;timezone?:string;options?:Record<string,unknown>}){const raw=window.localStorage.getItem('waypoint.settings');const current=raw?JSON.parse(raw):{siteName:'Northstar Journal',description:'A publication about design and culture.',url:'http://localhost:3001',timezone:'America/Mexico_City',options:{}};if(url!==undefined){try{new URL(url)}catch{throw Error('URL del sitio inválida')}}if(siteName!==undefined&&!siteName.trim())throw Error('El nombre del sitio no puede estar vacío');const settings={...current,...(siteName===undefined?{}:{siteName:siteName.trim()}),...(description===undefined?{}:{description:description.trim()}),...(url===undefined?{}:{url:url.trim().replace(/\/$/,'')}),...(timezone===undefined?{}:{timezone:timezone.trim()}),...(options===undefined?{}:{options:{...(current.options||{}),...options}})};window.localStorage.setItem('waypoint.settings',JSON.stringify(settings));window.dispatchEvent(new Event('waypoint-settings-updated'));return{status:'updated',settings,ui_effect:'site_settings_updated'}}}),
- defineTool({stableKey:'site.reset_settings',name:'reset_site_settings',title:'Restablecer ajustes del sitio',description:'Prepara o restablece la configuración del sitio a sus valores iniciales; requiere confirm:true porque elimina opciones personalizadas.',inputSchema:{type:'object',properties:{confirm:{type:'boolean'}},additionalProperties:false},async execute({confirm}:{confirm?:boolean}){if(!confirm)return{status:'confirmation_required',note:'Repite con confirm:true para eliminar las opciones personalizadas'};const settings={siteName:'Northstar Journal',description:'A publication about design and culture.',url:'http://localhost:3001',timezone:'America/Mexico_City',options:{}};window.localStorage.setItem('waypoint.settings',JSON.stringify(settings));window.dispatchEvent(new Event('waypoint-settings-updated'));return{status:'reset',settings,ui_effect:'site_settings_reset'}}}),
- defineTool({stableKey:'content.bulk_set_metadata',name:'bulk_set_entry_metadata',title:'Actualizar metadatos en lote',description:'Fusiona metadatos en varias entradas de forma atómica: valida todos los IDs y claves antes de guardar cualquier cambio.',inputSchema:{type:'object',properties:{updates:{type:'array',items:{type:'object',properties:{entryId:{type:'string'},metadata:{type:'object'}},required:['entryId','metadata'],additionalProperties:false}}},required:['updates'],additionalProperties:false},async execute({updates}:{updates:Array<{entryId:string;metadata:Record<string,unknown>}>}){const prepared=updates.map(input=>{const entry=s.entries.find(item=>item.id===input.entryId);if(!entry)throw Error('Entrada no encontrada: '+input.entryId);if(!input.metadata||typeof input.metadata!=='object'||Array.isArray(input.metadata))throw Error('Metadatos inválidos para '+input.entryId);return{entry,metadata:input.metadata}});const revisions=prepared.map(item=>{const updated={...item.entry,metadata:{...(item.entry.metadata||{}),...item.metadata},updated:'Just now'};return{entry:item.entry,updated,revision:{id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId:item.entry.id,createdAt:new Date().toISOString(),action:'metadata_bulk_update',before:item.entry,after:updated}}});s.setEntries(all=>all.map(entry=>revisions.find(item=>item.entry.id===entry.id)?.updated||entry));s.setRevisions(all=>[...all,...revisions.map(item=>item.revision)]);return{status:'updated',entries:revisions.map(item=>item.updated),revisionIds:revisions.map(item=>item.revision.id),count:revisions.length,ui_effect:'entry_metadata_bulk_updated'}}}),
- defineTool({stableKey:'comment.bulk_moderate',name:'bulk_moderate_comments',title:'Moderar comentarios en lote',description:'Actualiza el estado de varios comentarios de forma atómica, validando que todos existan antes de cambiar la cola de moderación.',inputSchema:{type:'object',properties:{commentIds:{type:'array',items:{type:'string'}},status:{type:'string',enum:['Pending','Approved','Spam']}},required:['commentIds','status'],additionalProperties:false},async execute({commentIds,status}:{commentIds:string[];status:'Pending'|'Approved'|'Spam'}){const unique=[...new Set(commentIds)];const missing=unique.filter(id=>!s.comments.some(comment=>comment.id===id));if(missing.length)throw Error('Comentarios no encontrados: '+missing.join(', '));const now=new Date().toISOString();const updated=s.comments.filter(comment=>unique.includes(comment.id)).map(comment=>({...comment,status,updatedAt:now}));s.setComments(all=>all.map(comment=>unique.includes(comment.id)?{...comment,status,updatedAt:now}:comment));return{status:'updated',moderationStatus:status,comments:updated,count:updated.length,ui_effect:'comments_bulk_moderated'}}}),
- defineTool({stableKey:'taxonomy.bulk_create_terms',name:'bulk_create_terms',title:'Crear términos en lote',description:'Crea varios términos dentro de una taxonomía validando slugs, duplicados y padres antes de persistir el vocabulario.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},terms:{type:'array',items:{type:'object',properties:{name:{type:'string'},slug:{type:'string'},parent:{type:['string','null']},description:{type:'string'}},required:['name','slug'],additionalProperties:false}}},required:['taxonomy','terms'],additionalProperties:false},async execute({taxonomy,terms}:{taxonomy:string;terms:Array<{name:string;slug:string;parent?:string|null;description?:string}>}){const current=findTaxonomy(taxonomy);if(!current)throw Error('Taxonomía no encontrada');const existingSlugs=new Set(current.terms.map(term=>term.slug));const requestedSlugs=new Set<string>();const prepared=terms.map(input=>{const slug=input.slug.trim().toLowerCase();if(!input.name.trim()||!/^[a-z0-9-]+$/.test(slug))throw Error('Nombre o slug inválido: '+input.slug);if(existingSlugs.has(slug)||requestedSlugs.has(slug))throw Error('Slug de término duplicado: '+slug);requestedSlugs.add(slug);const parentId=input.parent?current.terms.find(term=>term.id===input.parent||term.slug===input.parent)?.id:null;if(input.parent&&!parentId)throw Error('Padre no encontrado: '+input.parent);return{id:'term_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:input.name.trim(),slug,parent:parentId,description:input.description?.trim()}});s.setTaxonomies(all=>all.map(item=>item.slug===current.slug?{...item,terms:[...item.terms,...prepared]}:item));return{status:'created',taxonomy:current.slug,terms:prepared,count:prepared.length,ui_effect:'terms_bulk_created'}}}),
- defineTool({stableKey:'relation.bulk_connect',name:'bulk_connect_entries',title:'Conectar entradas en lote',description:'Crea varias conexiones de relaciones validando tipos, entradas, duplicados y cardinalidad antes de persistir el grafo.',inputSchema:{type:'object',properties:{connections:{type:'array',items:{type:'object',properties:{relation:{type:'string'},fromEntryId:{type:'string'},toEntryId:{type:'string'}},required:['relation','fromEntryId','toEntryId'],additionalProperties:false}}},required:['connections'],additionalProperties:false},async execute({connections}:{connections:Array<{relation:string;fromEntryId:string;toEntryId:string}>}){const prepared=connections.map(input=>{const model=s.relations.find(relation=>relation.id===input.relation||relation.slug===input.relation||relation.name===input.relation);if(!model)throw Error('Relación no encontrada: '+input.relation);const from=s.entries.find(entry=>entry.id===input.fromEntryId);const to=s.entries.find(entry=>entry.id===input.toEntryId);if(!from||!to)throw Error('Entrada origen o destino no encontrada');if(from.type!==model.fromType||to.type!==model.toType)throw Error('Los tipos no coinciden con la relación '+model.slug);return{model,from,to}});for(const model of s.relations.filter(relation=>prepared.some(item=>item.model.id===relation.id&&relation.cardinality==='one'))){const grouped=new Map<string,number>();for(const item of prepared.filter(item=>item.model.id===model.id))grouped.set(item.from.id,(grouped.get(item.from.id)||0)+1);for(const [fromId,count] of grouped)if(count>1)throw Error('La relación '+model.slug+' admite un solo destino para '+fromId)}const next=prepared.filter(item=>!s.connections.some(connection=>connection.relation===item.model.id&&connection.fromEntryId===item.from.id&&connection.toEntryId===item.to.id)).map(item=>({id:'conn_'+Math.random().toString(16).slice(2,8).toUpperCase(),relation:item.model.id,fromEntryId:item.from.id,toEntryId:item.to.id,createdAt:new Date().toISOString()}));s.setConnections(all=>[...all,...next]);return{status:'connected',connections:next,count:next.length,ui_effect:'entries_bulk_connected'}}}),
- defineTool({stableKey:'user.bulk_set_metadata',name:'bulk_set_user_metadata',title:'Actualizar metadatos de usuarios en lote',description:'Fusiona metadatos en varios usuarios validando todos los perfiles antes de guardar cambios de segmentación.',inputSchema:{type:'object',properties:{updates:{type:'array',items:{type:'object',properties:{userId:{type:'string'},metadata:{type:'object'}},required:['userId','metadata'],additionalProperties:false}}},required:['updates'],additionalProperties:false},async execute({updates}:{updates:Array<{userId:string;metadata:Record<string,unknown>}>}){const prepared=updates.map(input=>{const user=s.users.find(item=>item.id===input.userId);if(!user)throw Error('Usuario no encontrado: '+input.userId);if(!input.metadata||typeof input.metadata!=='object'||Array.isArray(input.metadata))throw Error('Metadatos inválidos para '+input.userId);return{user,metadata:input.metadata}});const updated=prepared.map(item=>({...item.user,metadata:{...(item.user.metadata||{}),...item.metadata}}));s.setUsers(all=>all.map(user=>updated.find(item=>item.id===user.id)||user));return{status:'updated',users:updated,count:updated.length,ui_effect:'user_metadata_bulk_updated'}}}),
- defineTool({stableKey:'content.bulk_set_field',name:'bulk_set_entry_field',title:'Actualizar campos en lote',description:'Actualiza un campo tipado en varias entradas validando cada schema, valor y campo obligatorio antes de guardar revisiones.',inputSchema:{type:'object',properties:{updates:{type:'array',items:{type:'object',properties:{entryId:{type:'string'},field:{type:'string'},value:{},},required:['entryId','field','value'],additionalProperties:false}}},required:['updates'],additionalProperties:false},async execute({updates}:{updates:Array<{entryId:string;field:string;value:unknown}>}){const prepared=updates.map(input=>{const entry=s.entries.find(item=>item.id===input.entryId);if(!entry)throw Error('Entrada no encontrada: '+input.entryId);const model=s.contentTypes.find(type=>type.name===entry.type);if(!model)throw Error('Tipo de contenido inexistente: '+entry.type);if(!model.fields.includes(input.field))throw Error('Campo no definido en el schema: '+input.field);const updated={...entry,data:{...(entry.data||{}),[input.field]:input.value},updated:'Just now'};const errors=validateData(model,updated.data||{});if(errors.length)throw Error(errors.join('; '));return{entry,updated}});const revisions=prepared.map(item=>({id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId:item.entry.id,createdAt:new Date().toISOString(),action:'field_bulk_update',before:item.entry,after:item.updated}));s.setEntries(all=>all.map(entry=>prepared.find(item=>item.entry.id===entry.id)?.updated||entry));s.setRevisions(all=>[...all,...revisions]);return{status:'updated',entries:prepared.map(item=>item.updated),revisionIds:revisions.map(revision=>revision.id),count:prepared.length,ui_effect:'entry_fields_bulk_updated'}}}),
- defineTool({stableKey:'content.bulk_publish',name:'bulk_publish_entries',title:'Publicar entradas en lote',description:'Publica varias entradas solo después de validar cada tipo, campo definido, valor tipado y requisito obligatorio; registra una revisión por cada entrada.',inputSchema:{type:'object',properties:{entryIds:{type:'array',items:{type:'string'}}},required:['entryIds'],additionalProperties:false},async execute({entryIds}:{entryIds:string[]}){const unique=[...new Set(entryIds)];const prepared=unique.map(entryId=>{const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada: '+entryId);const model=s.contentTypes.find(type=>type.name===entry.type);if(!model)throw Error('Tipo de contenido inexistente: '+entry.type);const unknown=Object.keys(entry.data||{}).filter(key=>!model.fields.includes(key));if(unknown.length)throw Error('Campos no definidos en '+entryId+': '+unknown.join(', '));const errors=validateData(model,entry.data||{});if(errors.length)throw Error('No se puede publicar '+entryId+': '+errors.join('; '));return entry});const now='Just now';const updated=prepared.map(entry=>({...entry,status:'Published' as const,scheduledAt:undefined,updated:now}));const revisions=prepared.map((entry,index)=>({id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId:entry.id,createdAt:new Date().toISOString(),action:'bulk_publish',before:entry,after:updated[index]}));s.setEntries(all=>all.map(entry=>updated.find(item=>item.id===entry.id)||entry));s.setRevisions(all=>[...all,...revisions]);return{status:'published',entryIds:prepared.map(entry=>entry.id),entries:updated,revisionIds:revisions.map(revision=>revision.id),count:prepared.length,ui_effect:'entries_bulk_published'}}}),
- defineTool({stableKey:'content.bulk_trash',name:'bulk_trash_entries',title:'Enviar entradas a la papelera',description:'Prepara o mueve varias entradas a la papelera, conservando sus datos para restauración y limpiando conexiones y términos asociados; registra revisiones al confirmar.',inputSchema:{type:'object',properties:{entryIds:{type:'array',items:{type:'string'}},confirm:{type:'boolean'}},required:['entryIds'],additionalProperties:false},async execute({entryIds,confirm}:{entryIds:string[];confirm?:boolean}){const unique=[...new Set(entryIds)];const selected=unique.map(entryId=>{const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada: '+entryId);return entry});const connectionCount=s.connections.filter(connection=>unique.includes(connection.fromEntryId)||unique.includes(connection.toEntryId)).length;const assignmentCount=s.termAssignments.filter(assignment=>unique.includes(assignment.entryId)).length;if(!confirm)return{status:'confirmation_required',entryIds:unique,titles:selected.map(entry=>entry.title),connectionCount,assignmentCount,note:'Repite con confirm:true para mover estas entradas a la papelera'};const now=new Date().toISOString();const updated=selected.map(entry=>({...entry,deletedAt:now,updated:'Just now'}));const revisions=selected.map((entry,index)=>({id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId:entry.id,createdAt:new Date().toISOString(),action:'bulk_trash',before:entry,after:updated[index]}));s.setEntries(all=>all.map(entry=>updated.find(item=>item.id===entry.id)||entry));s.setRevisions(all=>[...all,...revisions]);s.setConnections(all=>all.filter(connection=>!unique.includes(connection.fromEntryId)&&!unique.includes(connection.toEntryId)));s.setTermAssignments(all=>all.filter(assignment=>!unique.includes(assignment.entryId)));return{status:'trashed',entryIds:unique,connectionCount,assignmentCount,revisionIds:revisions.map(revision=>revision.id),count:unique.length,ui_effect:'entries_bulk_trashed'}}}),
- defineTool({stableKey:'content.bulk_restore',name:'bulk_restore_entries',title:'Restaurar entradas en lote',description:'Restaura varias entradas que estén en la papelera y deja intactas las entradas activas o los IDs no seleccionados; registra una revisión por cada restauración.',inputSchema:{type:'object',properties:{entryIds:{type:'array',items:{type:'string'}}},required:['entryIds'],additionalProperties:false},async execute({entryIds}:{entryIds:string[]}){const unique=[...new Set(entryIds)];const missing=unique.filter(id=>!s.entries.some(entry=>entry.id===id));if(missing.length)throw Error('Entradas no encontradas: '+missing.join(', '));const restored=s.entries.filter(entry=>unique.includes(entry.id)&&entry.deletedAt);const alreadyActive=s.entries.filter(entry=>unique.includes(entry.id)&&!entry.deletedAt).map(entry=>entry.id);const updated=restored.map(entry=>({...entry,deletedAt:undefined,updated:'Just now'}));const revisions=restored.map((entry,index)=>({id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId:entry.id,createdAt:new Date().toISOString(),action:'bulk_restore',before:entry,after:updated[index]}));s.setEntries(all=>all.map(entry=>updated.find(item=>item.id===entry.id)||entry));s.setRevisions(all=>[...all,...revisions]);return{status:'restored',entryIds:restored.map(entry=>entry.id),alreadyActive,revisionIds:revisions.map(revision=>revision.id),count:restored.length,note:restored.length?'Entradas restauradas correctamente':'Ninguna entrada seleccionada estaba en la papelera',ui_effect:'entries_bulk_restored'}}}),
- defineTool({stableKey:'menu.reorder_items',name:'reorder_menu_items',title:'Reordenar elementos de menú',description:'Reordena todos o parte de los elementos de un menú usando un mapa explícito de posiciones y valida que cada elemento pertenezca al menú.',inputSchema:{type:'object',properties:{menu:{type:'string'},items:{type:'array',items:{type:'object'}}},required:['menu','items'],additionalProperties:false},async execute({menu,items}:{menu:string;items:Array<{itemId:string;order:number;parentId?:string|null}>}){const current=s.menus.find(item=>item.id===menu||item.slug===menu||item.name===menu);if(!current)throw Error('Menú no encontrado');const unique=[...new Set(items.map(item=>item.itemId))];if(unique.length!==items.length)throw Error('Hay elementos de menú duplicados en la solicitud');const missing=unique.filter(id=>!current.items.some(item=>item.id===id));if(missing.length)throw Error('Elementos de menú no encontrados: '+missing.join(', '));const itemIds=new Set(current.items.map(item=>item.id));for(const input of items){if(!Number.isInteger(input.order)||input.order<0)throw Error('El orden debe ser un entero no negativo');if(input.parentId&&(input.parentId===input.itemId||!itemIds.has(input.parentId)))throw Error('Padre de menú inválido: '+input.parentId)}const updated={...current,items:current.items.map(item=>{const input=items.find(candidate=>candidate.itemId===item.id);return input?{...item,order:input.order,parentId:input.parentId===null?undefined:input.parentId}:item}).sort((a,b)=>a.order-b.order)};s.setMenus(all=>all.map(item=>item.id===current.id?updated:item));return{status:'reordered',menu:updated,updatedItemIds:unique,count:unique.length,ui_effect:'menu_items_reordered'}}}),
- defineTool({stableKey:'content.list_public',name:'list_public_entries',title:'Listar contenido público',description:'Devuelve únicamente entradas publicadas y fuera de la papelera, con filtros opcionales por tipo y texto para alimentar experiencias públicas.',inputSchema:{type:'object',properties:{type:{type:'string'},query:{type:'string'},limit:{type:'number'},offset:{type:'number'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({type,query,limit,offset}:{type?:string;query?:string;limit?:number;offset?:number}){const model=type?s.contentTypes.find(item=>item.name===type||item.slug===type):undefined;if(type&&!model)throw Error('Tipo de contenido no encontrado');const needle=query?.trim().toLowerCase();const matching=s.entries.filter(entry=>!entry.deletedAt&&entry.status==='Published'&&(!model||entry.type===model.name)&&(!needle||JSON.stringify({title:entry.title,type:entry.type,relation:entry.relation,data:entry.data||{},metadata:entry.metadata||{}}).toLowerCase().includes(needle)));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{entries:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay contenido público que coincida'}}}),
-defineTool({stableKey:'schema.get_agent_manifest',name:'get_agent_manifest',title:'Descubrir capacidades del agente',description:'Devuelve un manifiesto compacto de capacidades, recursos y operaciones que requieren confirmación para que un agente planifique acciones seguras.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){return{version:'1.1',resources:['content_types','entries','fields','metadata','taxonomies','terms','relations','users','roles','plugins','media','comments','menus','site_settings','revisions','scheduling'],operations:{read:['schema.get_content_model','schema.get_workspace_model','schema.activity','content.list_revisions','schema.export_workspace_model','schema.preview_import_content_model','schema.validate_workspace','content.list_content_entries','content.list_public_entries','content.get_public_entry','content.get_public_entry_context','content.list_public_related','content.list_public_author','content.list_scheduled_entries','content.get_entry_context','content.compare_revisions','taxonomy.get_taxonomy_context','taxonomy.get_public_term_context','relation.get_graph','user.list_users','user.get_user','user.check_user_capability','user.list_user_content','user.search_users','role.list_roles','plugin.list_plugins','plugin.check_dependencies','media.list_media_assets','media.search_media','comment.list_comments','comment.search_comments','comment.get_comment_thread','menu.list_menus','menu.get_navigation_model','site.get_settings','site.public_settings'],write:['schema.import_workspace_model','schema.create_content_type','content.create_content_entry','content.update_content_entry','content.bulk_set_entry_field','content.bulk_set_entry_metadata','content.bulk_publish','content.schedule_entry','content.publish_due_entries','content.unschedule','content.bulk_schedule','content.bulk_unschedule','content.bulk_trash','content.bulk_restore','content.restore_revision','taxonomy.create_taxonomy','taxonomy.create_term','taxonomy.bulk_create_terms','taxonomy.bulk_set_entry_terms','relation.bulk_connect','user.create_user','user.update_user','user.bulk_set_user_metadata','role.create_role','media.register_media_asset','media.bulk_attach','media.update_metadata','media.bulk_update_metadata','comment.create_comment','comment.bulk_moderate','role.assign_users','plugin.install_plugin','plugin.set_dependencies','plugin.activate','menu.create_menu','menu.add_menu_item','menu.reorder_menu_items','site.update_settings'],confirmationRequired:['content.delete_content_entry','content.restore_revision','content.bulk_trash','user.delete_user','user.delete_user_metadata','content.delete_entry_metadata','comment.delete_comment','comment.delete_comment_thread','menu.delete_menu','menu.delete_menu_item','plugin.uninstall','role.delete_role','site.reset_settings'],discoverable:['schema.get_content_model','schema.get_workspace_model','user.list_users','user.check_capability','role.list_roles','role.create_role','role.update_role','user.get_user','user.create_user','user.update_user','user.delete_user','user.get_metadata','user.set_metadata','user.delete_metadata','content.assign_author','user.list_authored_content','content.set_slug','plugin.list_plugins','plugin.get_plugin','plugin.install_plugin','plugin.set_status','media.list_assets','media.register_asset','media.attach_to_entry','media.detach_from_entry','comment.list_comments','comment.get_stats','menu.list_menus','menu.get_navigation_model','menu.create_menu','menu.update_menu','menu.delete_menu','menu.add_item','menu.update_item','menu.delete_item','comment.create_comment','comment.moderate_comment','comment.delete_comment','schema.validate_content_model','schema.export_content_model','schema.import_content_model','taxonomy.create_taxonomy','taxonomy.list_taxonomies','taxonomy.update_taxonomy','taxonomy.delete_taxonomy','taxonomy.create_term','taxonomy.list_terms','taxonomy.update_term','taxonomy.delete_term','taxonomy.set_entry_terms','taxonomy.get_entry_terms','relation.create_relation','relation.update_relation','relation.delete_relation','relation.list_relations','relation.connect_entries','relation.disconnect_entries','relation.list_connections','schema.create_content_type','schema.update_content_type','schema.delete_content_type','content.list_entries','content.get_entry','content.get_entry_context','content.duplicate_entry','content.upsert_entries','content.create_entry','content.get_fields','content.set_field','content.update_entry','content.preview_update','content.apply_preview','content.list_revisions','content.restore_revision','content.set_parent','content.list_children','content.trash_entry','content.list_trash','content.restore_entry','content.delete_entry','content.get_metadata','content.set_metadata','content.delete_metadata','content.set_type_filter','content.set_status_filter','content.schedule_entry','content.publish_due_entries','content.publish_entry','content.resolve_relations','schema.get_content_stats','schema.list_content_types','content.validate_entry','taxonomy.get_context','schema.preview_import','relation.get_graph','taxonomy.find_entries_by_terms','taxonomy.bulk_set_entry_terms','schema.export_workspace_model','schema.import_workspace_model','schema.validate_workspace','plugin.set_dependencies','plugin.check_dependencies','plugin.activate','plugin.uninstall','role.delete_role','role.assign_users','media.bulk_attach','site.get_settings','site.update_settings','site.reset_settings','content.bulk_set_metadata','comment.bulk_moderate','taxonomy.bulk_create_terms','relation.bulk_connect','user.bulk_set_metadata','content.bulk_set_field','content.bulk_publish','content.bulk_trash','content.bulk_restore','menu.reorder_items','content.list_public','schema.get_agent_manifest','content.unschedule','content.compare_revisions','content.list_scheduled','user.search','media.search','comment.search','taxonomy.search_terms','menu.public_navigation','content.get_public_entry','content.get_public_context','taxonomy.public_term_context','relation.public_related','media.bulk_detach','content.bulk_duplicate','content.bulk_assign_author','comment.thread','menu.validate','taxonomy.validate','relation.validate','media.unattached','media.delete','schema.validate_types','plugin.validate','content.public_author','user.public_profile','site.public_settings','comment.delete_thread','media.validate','user.validate','schema.health','content.bulk_schedule','content.bulk_unschedule','media.update_metadata','schema.activity','media.bulk_update_metadata'],safetyNotes:['Las operaciones WebMCP actúan sobre el estado del workspace actual.','La autorización definitiva debe implementarse en el servidor.','Las operaciones masivas validan el lote antes de persistirlo.','Las importaciones, eliminaciones y cambios de publicación deben validarse o confirmarse según indique cada herramienta.']},counts:{entries:s.entries.length,contentTypes:s.contentTypes.length,taxonomies:s.taxonomies.length,relations:s.relations.length,users:s.users.length,roles:s.roles.length,plugins:s.plugins.length,media:s.media.length,comments:s.comments.length,menus:s.menus.length},ui_effect:'agent_manifest_read'}}}),
- defineTool({stableKey:'content.unschedule',name:'unschedule_content_entry',title:'Cancelar programación',description:'Cancela la fecha de publicación de una entrada programada y la conserva como borrador sin alterar sus campos; registra una revisión del cambio.',inputSchema:{type:'object',properties:{entryId:{type:'string'}},required:['entryId'],additionalProperties:false},async execute({entryId}:{entryId:string}){const entry=s.entries.find(item=>item.id===entryId);if(!entry)throw Error('Entrada no encontrada');if(!entry.scheduledAt)return{status:'unchanged',entryId,note:'La entrada no tiene una publicación programada'};const updated={...entry,status:'Draft' as const,scheduledAt:undefined,updated:'Just now'};const revision={id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId,createdAt:new Date().toISOString(),action:'unschedule',before:entry,after:updated};s.setEntries(all=>all.map(item=>item.id===entryId?updated:item));s.setRevisions(all=>[...all,revision]);return{status:'unscheduled',entry:updated,revisionId:revision.id,ui_effect:'entry_unscheduled'}}}),
- defineTool({stableKey:'content.compare_revisions',name:'compare_entry_revisions',title:'Comparar revisiones',description:'Compara dos revisiones de una entrada y devuelve los campos, metadatos y estado que cambiaron.',inputSchema:{type:'object',properties:{entryId:{type:'string'},fromRevisionId:{type:'string'},toRevisionId:{type:'string'}},required:['entryId','fromRevisionId','toRevisionId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({entryId,fromRevisionId,toRevisionId}:{entryId:string;fromRevisionId:string;toRevisionId:string}){const revisions=s.revisions.filter(revision=>revision.entryId===entryId);const from=revisions.find(revision=>revision.id===fromRevisionId);const to=revisions.find(revision=>revision.id===toRevisionId);if(!from||!to)throw Error('Una o ambas revisiones no existen para esta entrada');const before=from.after;const after=to.after;const fields=[...new Set([...Object.keys(before.data||{}),...Object.keys(after.data||{})])].filter(field=>JSON.stringify(before.data?.[field])!==JSON.stringify(after.data?.[field])).map(field=>({field,before:before.data?.[field],after:after.data?.[field]}));const metadata=[...new Set([...Object.keys(before.metadata||{}),...Object.keys(after.metadata||{})])].filter(key=>JSON.stringify(before.metadata?.[key])!==JSON.stringify(after.metadata?.[key])).map(key=>({key,before:before.metadata?.[key],after:after.metadata?.[key]}));return{entryId,fromRevisionId,toRevisionId,changes:{title:before.title===after.title?undefined:{before:before.title,after:after.title},status:before.status===after.status?undefined:{before:before.status,after:after.status},slug:before.slug===after.slug?undefined:{before:before.slug,after:after.slug},fields,metadata},changed:Boolean(before.title!==after.title||before.status!==after.status||before.slug!==after.slug||fields.length||metadata.length),ui_effect:'revisions_compared'}}}),
- defineTool({stableKey:'content.list_scheduled',name:'list_scheduled_entries',title:'Listar entradas programadas',description:'Devuelve entradas en borrador con fecha futura de publicación, ordenadas cronológicamente para apoyar el calendario editorial.',inputSchema:{type:'object',properties:{type:{type:'string'},limit:{type:'number'},offset:{type:'number'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({type,limit,offset}:{type?:string;limit?:number;offset?:number}){const model=type?s.contentTypes.find(item=>item.name===type||item.slug===type):undefined;if(type&&!model)throw Error('Tipo de contenido no encontrado');const matching=s.entries.filter(entry=>!entry.deletedAt&&entry.status==='Draft'&&entry.scheduledAt&&(!model||entry.type===model.name)).sort((a,b)=>Date.parse(a.scheduledAt!)-Date.parse(b.scheduledAt!));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{entries:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay entradas programadas'}}}),
- defineTool({stableKey:'user.search',name:'search_users',title:'Buscar usuarios',description:'Busca usuarios por texto libre en nombre, email, rol, capacidades y metadatos, con filtros de estado y paginación.',inputSchema:{type:'object',properties:{query:{type:'string'},role:{type:'string'},status:{type:'string',enum:['Active','Invited']},limit:{type:'number'},offset:{type:'number'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({query,role,status,limit,offset}:{query?:string;role?:string;status?:'Active'|'Invited';limit?:number;offset?:number}){const needle=query?.trim().toLowerCase();const matching=s.users.filter(user=>(!role||user.role===role)&&(!status||user.status===status)&&(!needle||JSON.stringify({name:user.name,email:user.email,role:user.role,capabilities:user.capabilities,metadata:user.metadata||{}}).toLowerCase().includes(needle)));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{users:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay usuarios que coincidan'}}}),
- defineTool({stableKey:'media.search',name:'search_media',title:'Buscar medios',description:'Busca recursos multimedia por nombre, MIME, texto alternativo, URL o metadatos, con paginación.',inputSchema:{type:'object',properties:{query:{type:'string'},mimeType:{type:'string'},limit:{type:'number'},offset:{type:'number'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({query,mimeType,limit,offset}:{query?:string;mimeType?:string;limit?:number;offset?:number}){const needle=query?.trim().toLowerCase();const matching=s.media.filter(asset=>(!mimeType||asset.mimeType===mimeType)&&(!needle||JSON.stringify({name:asset.name,url:asset.url,mimeType:asset.mimeType,alt:asset.alt||'',metadata:asset.metadata||{}}).toLowerCase().includes(needle)));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{media:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay medios que coincidan'}}}),
- defineTool({stableKey:'comment.search',name:'search_comments',title:'Buscar comentarios',description:'Busca comentarios por contenido, autor, email, entrada y estado de moderación, con paginación.',inputSchema:{type:'object',properties:{query:{type:'string'},entryId:{type:'string'},status:{type:'string',enum:['Pending','Approved','Spam']},limit:{type:'number'},offset:{type:'number'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({query,entryId,status,limit,offset}:{query?:string;entryId?:string;status?:'Pending'|'Approved'|'Spam';limit?:number;offset?:number}){const needle=query?.trim().toLowerCase();const matching=s.comments.filter(comment=>(!entryId||comment.entryId===entryId)&&(!status||comment.status===status)&&(!needle||JSON.stringify({content:comment.content,authorName:comment.authorName,authorEmail:comment.authorEmail||'',metadata:comment.metadata||{}}).toLowerCase().includes(needle)));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{comments:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay comentarios que coincidan'}}}),
- defineTool({stableKey:'taxonomy.search_terms',name:'search_taxonomy_terms',title:'Buscar términos',description:'Busca términos dentro de una taxonomía por nombre, slug o descripción e informa su uso actual en entradas.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},query:{type:'string'},limit:{type:'number'},offset:{type:'number'}},required:['taxonomy'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({taxonomy,query,limit,offset}:{taxonomy:string;query?:string;limit?:number;offset?:number}){const current=findTaxonomy(taxonomy);if(!current)throw Error('Taxonomía no encontrada');const needle=query?.trim().toLowerCase();const matching=current.terms.filter(term=>!needle||JSON.stringify({name:term.name,slug:term.slug,description:term.description||''}).toLowerCase().includes(needle)).map(term=>({...term,entryCount:s.termAssignments.filter(assignment=>assignment.taxonomy===current.slug&&assignment.termIds.includes(term.id)).length}));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{taxonomy:current.slug,terms:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay términos que coincidan'}}}),
- defineTool({stableKey:'menu.public_navigation',name:'get_public_navigation',title:'Resolver navegación pública',description:'Devuelve menús listos para frontend, resolviendo entradas a sus slugs y excluyendo destinos eliminados o inexistentes.',inputSchema:{type:'object',properties:{menu:{type:'string'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({menu}:{menu?:string}){const selected=s.menus.filter(item=>!menu||item.id===menu||item.slug===menu||item.name===menu);if(menu&&!selected.length)throw Error('Menú no encontrado');const result=selected.map(current=>({...current,items:current.items.filter(item=>{const entry=item.entryId?s.entries.find(candidate=>candidate.id===item.entryId):undefined;return !item.entryId||Boolean(entry&&!entry.deletedAt)}).map(item=>{const entry=item.entryId?s.entries.find(candidate=>candidate.id===item.entryId):undefined;return{...item,destination:item.url||((entry?.slug&&'/'+entry.slug)||('/entry/'+item.entryId))}}).sort((a,b)=>a.order-b.order)}));return{menus:result,count:result.length,itemCount:result.reduce((total,item)=>total+item.items.length,0),ui_effect:'public_navigation_resolved'}}}),
- defineTool({stableKey:'content.get_public_entry',name:'get_public_entry',title:'Leer entrada pública',description:'Resuelve una entrada publicada por tipo y slug, excluyendo contenido en borrador o papelera.',inputSchema:{type:'object',properties:{type:{type:'string'},slug:{type:'string'}},required:['type','slug'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({type,slug}:{type:string;slug:string}){const model=s.contentTypes.find(item=>item.name===type||item.slug===type);if(!model)throw Error('Tipo de contenido no encontrado');const entry=s.entries.find(item=>item.type===model.name&&item.slug===slug&&!item.deletedAt&&item.status==='Published');if(!entry)throw Error('Entrada pública no encontrada');return{entry,canonicalUrl:'/'+model.slug+'/'+entry.slug,ui_effect:'public_entry_read'}}}),
- defineTool({stableKey:'content.get_public_context',name:'get_public_entry_context',title:'Leer contexto público',description:'Devuelve una entrada publicada junto con autor, términos, relaciones, medios adjuntos y comentarios aprobados, excluyendo datos privados.',inputSchema:{type:'object',properties:{type:{type:'string'},slug:{type:'string'}},required:['type','slug'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({type,slug}:{type:string;slug:string}){const model=s.contentTypes.find(item=>item.name===type||item.slug===type);if(!model)throw Error('Tipo de contenido no encontrado');const entry=s.entries.find(item=>item.type===model.name&&item.slug===slug&&!item.deletedAt&&item.status==='Published');if(!entry)throw Error('Entrada pública no encontrada');const author=entry.authorUserId?s.users.find(user=>user.id===entry.authorUserId):undefined;const assignments=s.termAssignments.filter(item=>item.entryId===entry.id);const terms=assignments.flatMap(assignment=>{const taxonomy=findTaxonomy(assignment.taxonomy);return assignment.termIds.map(termId=>({taxonomy:assignment.taxonomy,term:taxonomy?.terms.find(term=>term.id===termId)})).filter(item=>item.term).map(item=>item)});const connections=s.connections.filter(connection=>connection.fromEntryId===entry.id||connection.toEntryId===entry.id).map(connection=>({relation:s.relations.find(relation=>relation.id===connection.relation)?.slug||connection.relation,from:s.entries.find(item=>item.id===connection.fromEntryId&&!item.deletedAt&&item.status==='Published'),to:s.entries.find(item=>item.id===connection.toEntryId&&!item.deletedAt&&item.status==='Published')})).filter(connection=>connection.from&&connection.to);const media=s.media.filter(asset=>asset.attachedEntryIds.includes(entry.id)).map(asset=>({id:asset.id,name:asset.name,url:asset.url,mimeType:asset.mimeType,alt:asset.alt,metadata:asset.metadata}));const comments=s.comments.filter(comment=>comment.entryId===entry.id&&comment.status==='Approved').map(comment=>({id:comment.id,parentCommentId:comment.parentCommentId,authorName:comment.authorName,content:comment.content,createdAt:comment.createdAt}));return{entry,author:author?{id:author.id,name:author.name}:undefined,terms,connections,media,comments,canonicalUrl:'/'+model.slug+'/'+entry.slug,ui_effect:'public_entry_context_read'}}}),
- defineTool({stableKey:'taxonomy.public_term_context',name:'get_public_term_context',title:'Leer contexto público del término',description:'Devuelve un término, su taxonomía, padre, hijos y entradas publicadas asociadas para construir páginas semánticas públicas.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'},term:{type:'string'},limit:{type:'number'},offset:{type:'number'}},required:['taxonomy','term'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({taxonomy,term,limit,offset}:{taxonomy:string;term:string;limit?:number;offset?:number}){const current=findTaxonomy(taxonomy);if(!current)throw Error('Taxonomía no encontrada');const selected=current.terms.find(item=>item.id===term||item.slug===term||item.name===term);if(!selected)throw Error('Término no encontrado');const parent=selected.parent?current.terms.find(item=>item.id===selected.parent):undefined;const children=current.terms.filter(item=>item.parent===selected.id);const matching=s.entries.filter(entry=>!entry.deletedAt&&entry.status==='Published'&&s.termAssignments.some(assignment=>assignment.entryId===entry.id&&assignment.taxonomy===current.slug&&assignment.termIds.includes(selected.id)));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{taxonomy:{name:current.name,slug:current.slug,hierarchical:current.hierarchical},term:selected,parent,children,entries:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay entradas públicas asociadas',ui_effect:'public_term_context_read'}}}),
- defineTool({stableKey:'relation.public_related',name:'list_public_related_entries',title:'Listar contenido relacionado público',description:'Devuelve entradas publicadas relacionadas con otra entrada pública, resolviendo la relación y excluyendo destinos no visibles.',inputSchema:{type:'object',properties:{entryId:{type:'string'},relation:{type:'string'},limit:{type:'number'},offset:{type:'number'}},required:['entryId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({entryId,relation,limit,offset}:{entryId:string;relation?:string;limit?:number;offset?:number}){const source=s.entries.find(entry=>entry.id===entryId&&!entry.deletedAt&&entry.status==='Published');if(!source)throw Error('Entrada pública no encontrada');const model=relation?s.relations.find(item=>item.id===relation||item.slug===relation||item.name===relation):undefined;if(relation&&!model)throw Error('Relación no encontrada');const connections=s.connections.filter(connection=>(!model||connection.relation===model.id)&&(connection.fromEntryId===source.id||connection.toEntryId===source.id));const related=connections.map(connection=>{const targetId=connection.fromEntryId===source.id?connection.toEntryId:connection.fromEntryId;const target=s.entries.find(entry=>entry.id===targetId&&!entry.deletedAt&&entry.status==='Published');return target?{relation:s.relations.find(item=>item.id===connection.relation)?.slug||connection.relation,entry:target}:undefined}).filter(Boolean) as Array<{relation:string;entry:Entry}>;const unique=related.filter((item,index)=>related.findIndex(candidate=>candidate.entry.id===item.entry.id&&candidate.relation===item.relation)===index);const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=unique.slice(start,start+pageSize);return{entryId,related:page,count:page.length,total:unique.length,offset:start,limit:pageSize,hasMore:start+page.length<unique.length,note:unique.length?'':'No hay contenido relacionado público',ui_effect:'public_related_entries_read'}}}),
- defineTool({stableKey:'media.bulk_detach',name:'bulk_detach_media',title:'Desvincular medios en lote',description:'Elimina vínculos entre varios medios y entradas validando previamente todos los recursos y destinos.',inputSchema:{type:'object',properties:{attachments:{type:'array',items:{type:'object'}}},required:['attachments'],additionalProperties:false},async execute({attachments}:{attachments:Array<{mediaId:string;entryIds:string[]}>}){const prepared=attachments.map(input=>{const media=s.media.find(asset=>asset.id===input.mediaId||asset.name===input.mediaId);if(!media)throw Error('Medio no encontrado: '+input.mediaId);const entryIds=[...new Set(input.entryIds)];const missing=entryIds.filter(id=>!s.entries.some(entry=>entry.id===id));if(missing.length)throw Error('Entradas no encontradas para '+media.id+': '+missing.join(', '));return{media,entryIds}});s.setMedia(all=>all.map(asset=>{const item=prepared.find(input=>input.media.id===asset.id);return item?{...asset,attachedEntryIds:asset.attachedEntryIds.filter(entryId=>!item.entryIds.includes(entryId))}:asset}));return{status:'detached',attachments:prepared.map(item=>({mediaId:item.media.id,entryIds:item.entryIds})),count:prepared.length,ui_effect:'media_bulk_detached'}}}),
- defineTool({stableKey:'content.bulk_duplicate',name:'bulk_duplicate_entries',title:'Duplicar entradas en lote',description:'Crea borradores a partir de varias entradas existentes, copiando campos y metadatos con IDs y slugs nuevos.',inputSchema:{type:'object',properties:{entryIds:{type:'array',items:{type:'string'}}},required:['entryIds'],additionalProperties:false},async execute({entryIds}:{entryIds:string[]}){const unique=[...new Set(entryIds)];const source=unique.map(entryId=>{const entry=s.entries.find(item=>item.id===entryId&&!item.deletedAt);if(!entry)throw Error('Entrada no encontrada o en papelera: '+entryId);return entry});const existingSlugs=new Set(s.entries.map(entry=>entry.slug).filter(Boolean));const copies=source.map(entry=>{const base=(entry.slug||entry.title).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'entry';let slug=base+'-copy';let suffix=2;while(existingSlugs.has(slug)){slug=base+'-copy-'+suffix++;}existingSlugs.add(slug);return{...entry,id:'ent_'+Math.random().toString(16).slice(2,8).toUpperCase(),title:entry.title+' (Copy)',slug,status:'Draft' as const,updated:'Just now',deletedAt:undefined,scheduledAt:undefined,data:entry.data?{...entry.data}:undefined,metadata:entry.metadata?{...entry.metadata}:undefined}});s.setEntries(all=>[...copies,...all]);return{status:'duplicated',sourceEntryIds:unique,entries:copies,count:copies.length,ui_effect:'entries_bulk_duplicated'}}}),
- defineTool({stableKey:'content.bulk_assign_author',name:'bulk_assign_entry_author',title:'Asignar autor en lote',description:'Asigna un usuario existente como autor de varias entradas, validando todo el lote antes de persistirlo.',inputSchema:{type:'object',properties:{entryIds:{type:'array',items:{type:'string'}},userId:{type:'string'}},required:['entryIds','userId'],additionalProperties:false},async execute({entryIds,userId}:{entryIds:string[];userId:string}){const author=s.users.find(user=>user.id===userId);if(!author)throw Error('Usuario no encontrado');const unique=[...new Set(entryIds)];const missing=unique.filter(entryId=>!s.entries.some(entry=>entry.id===entryId));if(missing.length)throw Error('Entradas no encontradas: '+missing.join(', '));const updated=s.entries.filter(entry=>unique.includes(entry.id)).map(entry=>({...entry,authorUserId:userId,updated:'Just now'}));s.setEntries(all=>all.map(entry=>unique.includes(entry.id)?{...entry,authorUserId:userId,updated:'Just now'}:entry));return{status:'assigned',author:{id:author.id,name:author.name},entries:updated,count:updated.length,ui_effect:'entries_bulk_author_assigned'}}}),
- defineTool({stableKey:'comment.thread',name:'get_comment_thread',title:'Leer hilo de comentarios',description:'Devuelve un comentario y sus respuestas descendientes en orden, con opción de limitar la lectura al contenido aprobado.',inputSchema:{type:'object',properties:{commentId:{type:'string'},publicOnly:{type:'boolean'}},required:['commentId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({commentId,publicOnly}:{commentId:string;publicOnly?:boolean}){const root=s.comments.find(comment=>comment.id===commentId);if(!root)throw Error('Comentario no encontrado');const allowed=(comment:Comment)=>!publicOnly||comment.status==='Approved';if(!allowed(root))throw Error('El comentario no está publicado');const thread:Comment[]=[];const visit=(parentId:string)=>{for(const comment of s.comments.filter(item=>item.parentCommentId===parentId).sort((a,b)=>a.createdAt.localeCompare(b.createdAt))){if(allowed(comment)){thread.push(comment);visit(comment.id)}}};thread.push(root);visit(root.id);return{root,comments:thread,count:thread.length,publicOnly:Boolean(publicOnly),ui_effect:'comment_thread_read'}}}),
- defineTool({stableKey:'menu.validate',name:'validate_menus',title:'Validar menús',description:'Revisa la integridad de todos los menús: IDs duplicados, órdenes repetidos, padres inválidos y ciclos jerárquicos.',inputSchema:{type:'object',properties:{menu:{type:'string'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({menu}:{menu?:string}){const selected=s.menus.filter(item=>!menu||item.id===menu||item.slug===menu||item.name===menu);if(menu&&!selected.length)throw Error('Menú no encontrado');const errors:string[]=[];for(const current of selected){const ids=new Set<string>();const orders=new Set<number>();for(const item of current.items){if(ids.has(item.id))errors.push('Menú '+current.slug+': ID duplicado '+item.id);ids.add(item.id);if(orders.has(item.order))errors.push('Menú '+current.slug+': orden duplicado '+item.order);orders.add(item.order);if(item.parentId&&!ids.has(item.parentId)&&!current.items.some(parent=>parent.id===item.parentId))errors.push('Menú '+current.slug+': padre inexistente '+item.parentId);let cursor=item.parentId;const visited=new Set<string>();while(cursor){if(visited.has(cursor)||cursor===item.id){errors.push('Menú '+current.slug+': ciclo en '+item.id);break}visited.add(cursor);cursor=current.items.find(parent=>parent.id===cursor)?.parentId}}}return{valid:errors.length===0,errors,errorCount:errors.length,checked:selected.map(item=>({menu:item.slug,items:item.items.length})),note:errors.length?'Corrige la estructura antes de publicarla':'Todos los menús son válidos',ui_effect:'menus_validated'}}}),
- defineTool({stableKey:'taxonomy.validate',name:'validate_taxonomies',title:'Validar taxonomías',description:'Revisa taxonomías y términos para detectar slugs duplicados, padres inválidos, ciclos jerárquicos y asignaciones rotas.',inputSchema:{type:'object',properties:{taxonomy:{type:'string'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({taxonomy}:{taxonomy?:string}){const selected=s.taxonomies.filter(item=>!taxonomy||item.slug===taxonomy||item.name===taxonomy);if(taxonomy&&!selected.length)throw Error('Taxonomía no encontrada');const errors:string[]=[];for(const current of selected){const slugs=new Set<string>();const ids=new Set<string>();for(const term of current.terms){if(slugs.has(term.slug))errors.push('Taxonomía '+current.slug+': slug duplicado '+term.slug);slugs.add(term.slug);if(ids.has(term.id))errors.push('Taxonomía '+current.slug+': ID duplicado '+term.id);ids.add(term.id);if(term.parent&&!current.terms.some(parent=>parent.id===term.parent))errors.push('Término '+term.slug+': padre inexistente '+term.parent);let cursor=term.parent;const visited=new Set<string>();while(cursor){if(visited.has(cursor)||cursor===term.id){errors.push('Taxonomía '+current.slug+': ciclo en '+term.id);break}visited.add(cursor);cursor=current.terms.find(parent=>parent.id===cursor)?.parent||null}}for(const assignment of s.termAssignments.filter(item=>item.taxonomy===current.slug))for(const termId of assignment.termIds)if(!ids.has(termId))errors.push('Asignación '+assignment.entryId+': término inexistente '+termId)}return{valid:errors.length===0,errors,errorCount:errors.length,checked:selected.map(item=>({taxonomy:item.slug,terms:item.terms.length})),note:errors.length?'Corrige el vocabulario antes de publicarlo':'Todas las taxonomías son válidas',ui_effect:'taxonomies_validated'}}}),
- defineTool({stableKey:'relation.validate',name:'validate_relations',title:'Validar relaciones',description:'Revisa relaciones y conexiones para detectar tipos incompatibles, entradas inexistentes, duplicados y cardinalidad inválida.',inputSchema:{type:'object',properties:{relation:{type:'string'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({relation}:{relation?:string}){const selected=s.relations.filter(item=>!relation||item.id===relation||item.slug===relation||item.name===relation);if(relation&&!selected.length)throw Error('Relación no encontrada');const errors:string[]=[];const entriesById=new Map(s.entries.map(entry=>[entry.id,entry]));for(const model of selected){const seen=new Set<string>();const grouped=new Map<string,number>();for(const connection of s.connections.filter(item=>item.relation===model.id)){const key=connection.fromEntryId+'>'+connection.toEntryId;if(seen.has(key))errors.push('Relación '+model.slug+': conexión duplicada '+key);seen.add(key);const from=entriesById.get(connection.fromEntryId);const to=entriesById.get(connection.toEntryId);if(!from||!to)errors.push('Relación '+model.slug+': entrada inexistente en '+key);else{if(from.type!==model.fromType)errors.push('Relación '+model.slug+': origen '+from.id+' no coincide con '+model.fromType);if(to.type!==model.toType)errors.push('Relación '+model.slug+': destino '+to.id+' no coincide con '+model.toType)}grouped.set(connection.fromEntryId,(grouped.get(connection.fromEntryId)||0)+1)}if(model.cardinality==='one')for(const [fromId,count] of grouped)if(count>1)errors.push('Relación '+model.slug+': '+fromId+' tiene '+count+' destinos y admite uno')}return{valid:errors.length===0,errors,errorCount:errors.length,checked:selected.map(item=>({relation:item.slug,connections:s.connections.filter(connection=>connection.relation===item.id).length})),note:errors.length?'Corrige las conexiones antes de publicar':'Todas las relaciones son válidas',ui_effect:'relations_validated'}}}),
- defineTool({stableKey:'media.unattached',name:'list_unattached_media',title:'Listar medios no utilizados',description:'Devuelve recursos multimedia sin entradas asociadas, con filtros opcionales por tipo MIME y paginación.',inputSchema:{type:'object',properties:{mimeType:{type:'string'},limit:{type:'number'},offset:{type:'number'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({mimeType,limit,offset}:{mimeType?:string;limit?:number;offset?:number}){const matching=s.media.filter(asset=>asset.attachedEntryIds.length===0&&(!mimeType||asset.mimeType===mimeType));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{media:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'Hay medios sin usar':'No hay medios sin entradas asociadas'}}}),
- defineTool({stableKey:'media.delete',name:'delete_media_asset',title:'Eliminar medio',description:'Prepara o elimina un recurso multimedia; requiere confirmación y bloquea el borrado si todavía está adjunto a entradas.',inputSchema:{type:'object',properties:{mediaId:{type:'string'},confirm:{type:'boolean'}},required:['mediaId'],additionalProperties:false},async execute({mediaId,confirm}:{mediaId:string;confirm?:boolean}){const asset=s.media.find(item=>item.id===mediaId||item.name===mediaId);if(!asset)throw Error('Medio no encontrado');if(asset.attachedEntryIds.length)throw Error('No se puede eliminar: el medio está adjunto a '+asset.attachedEntryIds.length+' entrada(s)');if(!confirm)return{status:'confirmation_required',mediaId:asset.id,name:asset.name,note:'Repite con confirm:true para eliminar este medio'};s.setMedia(all=>all.filter(item=>item.id!==asset.id));return{status:'deleted',mediaId:asset.id,name:asset.name,ui_effect:'media_deleted'}}}),
- defineTool({stableKey:'schema.validate_types',name:'validate_content_types',title:'Validar tipos de contenido',description:'Revisa slugs, campos, tipos y requisitos de los content types junto con sus entradas antes de publicar cambios de schema.',inputSchema:{type:'object',properties:{type:{type:'string'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({type}:{type?:string}){const selected=s.contentTypes.filter(item=>!type||item.slug===type||item.name===type);if(type&&!selected.length)throw Error('Tipo de contenido no encontrado');const errors:string[]=[];const selectedNames=new Set(selected.map(item=>item.name));const slugs=new Set<string>();for(const model of selected){if(slugs.has(model.slug))errors.push('Slug de tipo duplicado '+model.slug);slugs.add(model.slug);const fields=new Set<string>();for(const field of model.fields){if(fields.has(field))errors.push('Tipo '+model.slug+': campo duplicado '+field);fields.add(field)}for(const field of model.requiredFields||[])if(!fields.has(field))errors.push('Tipo '+model.slug+': requisito no definido '+field);for(const field of Object.keys(model.fieldTypes||{}))if(!fields.has(field))errors.push('Tipo '+model.slug+': tipo de campo no definido '+field);for(const entry of s.entries.filter(item=>item.type===model.name&&!item.deletedAt)){const unknown=Object.keys(entry.data||{}).filter(field=>!fields.has(field));if(unknown.length)errors.push('Entrada '+entry.id+': campos no definidos '+unknown.join(', '));for(const required of model.requiredFields||[])if(entry.status==='Published'&&(entry.data?.[required]===undefined||entry.data?.[required]===null||entry.data?.[required]===''))errors.push('Entrada '+entry.id+': campo obligatorio ausente '+required)}}for(const entry of s.entries.filter(item=>!item.deletedAt&&!selectedNames.has(item.type)&&(!type||item.type===type)))errors.push('Entrada '+entry.id+': tipo inexistente '+entry.type);return{valid:errors.length===0,errors,errorCount:errors.length,checked:selected.map(item=>({type:item.slug,fields:item.fields.length,entries:s.entries.filter(entry=>entry.type===item.name&&!entry.deletedAt).length})),note:errors.length?'Corrige el schema antes de publicar':'Todos los tipos de contenido son válidos',ui_effect:'content_types_validated'}}}),
- defineTool({stableKey:'plugin.validate',name:'validate_plugins',title:'Validar plugins',description:'Revisa dependencias de plugins para detectar referencias faltantes, ciclos y extensiones activas que no están listas.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const errors:string[]=[];const bySlug=new Map(s.plugins.map(plugin=>[plugin.slug,plugin]));const visiting=new Set<string>();const visited=new Set<string>();const walk=(slug:string)=>{if(visiting.has(slug)){errors.push('Ciclo de dependencias en '+slug);return}if(visited.has(slug))return;visiting.add(slug);const plugin=bySlug.get(slug);const dependencies=(plugin as (Plugin & {dependencies?:string[]})|undefined)?.dependencies||[];for(const dependency of dependencies){if(!bySlug.has(dependency))errors.push('Plugin '+slug+': dependencia inexistente '+dependency);else walk(dependency)}visiting.delete(slug);visited.add(slug)};for(const plugin of s.plugins){walk(plugin.slug);const dependencies=(plugin as Plugin & {dependencies?:string[]}).dependencies||[];if(plugin.status==='Active')for(const dependency of dependencies)if(bySlug.get(dependency)?.status!=='Active')errors.push('Plugin activo '+plugin.slug+': dependencia no activa '+dependency)}return{valid:errors.length===0,errors,errorCount:errors.length,plugins:s.plugins.map(plugin=>({slug:plugin.slug,status:plugin.status,dependencies:(plugin as Plugin & {dependencies?:string[]}).dependencies||[]})),note:errors.length?'Corrige el registro antes de activar extensiones':'Todos los plugins son compatibles',ui_effect:'plugins_validated'}}}),
- defineTool({stableKey:'content.public_author',name:'list_public_author_content',title:'Listar contenido público por autor',description:'Devuelve entradas publicadas y visibles de un autor, con filtro opcional por tipo y paginación para páginas públicas de perfil.',inputSchema:{type:'object',properties:{userId:{type:'string'},type:{type:'string'},limit:{type:'number'},offset:{type:'number'}},required:['userId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({userId,type,limit,offset}:{userId:string;type?:string;limit?:number;offset?:number}){const author=s.users.find(user=>user.id===userId);if(!author)throw Error('Usuario no encontrado');const model=type?s.contentTypes.find(item=>item.name===type||item.slug===type):undefined;if(type&&!model)throw Error('Tipo de contenido no encontrado');const matching=s.entries.filter(entry=>entry.authorUserId===userId&&!entry.deletedAt&&entry.status==='Published'&&(!model||entry.type===model.name));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize);return{author:{id:author.id,name:author.name},entries:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'El autor no tiene contenido público'}}}),
- defineTool({stableKey:'user.public_profile',name:'get_public_user_profile',title:'Leer perfil público',description:'Devuelve un perfil de usuario seguro para frontend, omitiendo email, capacidades y metadatos privados.',inputSchema:{type:'object',properties:{userId:{type:'string'}},required:['userId'],additionalProperties:false},annotations:{readOnlyHint:true},async execute({userId}:{userId:string}){const user=s.users.find(item=>item.id===userId);if(!user)throw Error('Usuario no encontrado');const published=s.entries.filter(entry=>entry.authorUserId===userId&&!entry.deletedAt&&entry.status==='Published');return{profile:{id:user.id,name:user.name,role:user.role,status:user.status},publishedEntryCount:published.length,ui_effect:'public_user_profile_read'}}}),
- defineTool({stableKey:'site.public_settings',name:'get_public_site_settings',title:'Leer ajustes públicos',description:'Devuelve únicamente la identidad pública del sitio, omitiendo opciones internas y datos de configuración privada.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const raw=window.localStorage.getItem('waypoint.settings');const settings=raw?JSON.parse(raw):{siteName:'Northstar Journal',description:'A publication about design and culture.',url:'http://localhost:3001',timezone:'America/Mexico_City'};return{settings:{siteName:settings.siteName,description:settings.description,url:settings.url,timezone:settings.timezone},ui_effect:'public_site_settings_read'}}}),
- defineTool({stableKey:'comment.delete_thread',name:'delete_comment_thread',title:'Eliminar hilo de comentarios',description:'Prepara o elimina un comentario y todas sus respuestas descendientes; requiere confirmación porque borra una conversación completa.',inputSchema:{type:'object',properties:{commentId:{type:'string'},confirm:{type:'boolean'}},required:['commentId'],additionalProperties:false},async execute({commentId,confirm}:{commentId:string;confirm?:boolean}){const root=s.comments.find(comment=>comment.id===commentId);if(!root)throw Error('Comentario no encontrado');const ids=new Set([commentId]);let changed=true;while(changed){changed=false;for(const comment of s.comments)if(comment.parentCommentId&&ids.has(comment.parentCommentId)&&!ids.has(comment.id)){ids.add(comment.id);changed=true}}const removed=s.comments.filter(comment=>ids.has(comment.id));if(!confirm)return{status:'confirmation_required',commentId,rootContent:root.content,count:removed.length,commentIds:[...ids],note:'Repite con confirm:true para eliminar el hilo completo'};s.setComments(all=>all.filter(comment=>!ids.has(comment.id)));return{status:'deleted',commentId,commentIds:[...ids],count:removed.length,ui_effect:'comment_thread_deleted'}}}),
- defineTool({stableKey:'media.validate',name:'validate_media_assets',title:'Validar biblioteca multimedia',description:'Revisa URLs, MIME, tamaños y referencias de medios adjuntos para detectar recursos inconsistentes.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const errors:string[]=[];const entryIds=new Set(s.entries.map(entry=>entry.id));for(const asset of s.media){try{new URL(asset.url)}catch{errors.push('Medio '+asset.id+': URL inválida')}if(!asset.mimeType.includes('/'))errors.push('Medio '+asset.id+': MIME inválido');if(!Number.isFinite(asset.size)||asset.size<0)errors.push('Medio '+asset.id+': tamaño inválido');for(const entryId of asset.attachedEntryIds)if(!entryIds.has(entryId))errors.push('Medio '+asset.id+': entrada adjunta inexistente '+entryId)}return{valid:errors.length===0,errors,errorCount:errors.length,checked:s.media.map(asset=>({id:asset.id,name:asset.name,attached:asset.attachedEntryIds.length})),note:errors.length?'Corrige la biblioteca antes de publicar':'Todos los medios son válidos',ui_effect:'media_validated'}}}),
- defineTool({stableKey:'user.validate',name:'validate_users',title:'Validar usuarios',description:'Revisa la integridad del directorio para detectar emails duplicados o inválidos, roles inexistentes y capacidades inconsistentes.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const errors:string[]=[];const emails=new Set<string>();const roles=new Map(s.roles.map(role=>[role.slug,role]));for(const user of s.users){const email=user.email.trim().toLowerCase();if(!email.includes('@'))errors.push('Usuario '+user.id+': email inválido');if(emails.has(email))errors.push('Email duplicado: '+email);emails.add(email);const role=roles.get(user.role);if(!role)errors.push('Usuario '+user.id+': rol inexistente '+user.role);else for(const capability of role.capabilities)if(!user.capabilities.includes(capability))errors.push('Usuario '+user.id+': falta capacidad heredada '+capability)}return{valid:errors.length===0,errors,errorCount:errors.length,checked:s.users.map(user=>({id:user.id,email:user.email,role:user.role,status:user.status})),note:errors.length?'Corrige el directorio antes de asignar contenido':'Todos los usuarios son válidos',ui_effect:'users_validated'}}}),
- defineTool({stableKey:'schema.health',name:'get_workspace_health',title:'Resumir salud del workspace',description:'Calcula un preflight compacto del workspace con conteos y señales de problemas en contenido, usuarios, taxonomías, relaciones, medios, comentarios y menús.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const entryIds=new Set(s.entries.map(entry=>entry.id));const userIds=new Set(s.users.map(user=>user.id));const typeNames=new Set(s.contentTypes.map(type=>type.name));const checks={entriesWithoutType:s.entries.filter(entry=>!typeNames.has(entry.type)).length,entriesWithoutAuthor:s.entries.filter(entry=>entry.authorUserId&&!userIds.has(entry.authorUserId)).length,brokenConnections:s.connections.filter(connection=>!entryIds.has(connection.fromEntryId)||!entryIds.has(connection.toEntryId)||!s.relations.some(relation=>relation.id===connection.relation)).length,brokenAssignments:s.termAssignments.filter(assignment=>{const taxonomy=findTaxonomy(assignment.taxonomy);return !taxonomy||assignment.termIds.some(termId=>!taxonomy.terms.some(term=>term.id===termId))}).length,brokenMediaReferences:s.media.reduce((total,asset)=>total+asset.attachedEntryIds.filter(entryId=>!entryIds.has(entryId)).length,0),brokenComments:s.comments.filter(comment=>!entryIds.has(comment.entryId)).length,brokenMenuItems:s.menus.reduce((total,menu)=>total+menu.items.filter(item=>item.entryId&&!entryIds.has(item.entryId)).length,0),pendingComments:s.comments.filter(comment=>comment.status==='Pending').length,scheduledEntries:s.entries.filter(entry=>!entry.deletedAt&&Boolean(entry.scheduledAt)).length};const issueCount=Object.entries(checks).filter(([key])=>key.startsWith('broken')||key.startsWith('entriesWithout')).reduce((total,[,value])=>total+(value as number),0);return{status:issueCount?'needs_attention':'healthy',issueCount,checks,counts:{entries:s.entries.length,contentTypes:s.contentTypes.length,taxonomies:s.taxonomies.length,relations:s.relations.length,users:s.users.length,roles:s.roles.length,plugins:s.plugins.length,media:s.media.length,comments:s.comments.length,menus:s.menus.length},note:issueCount?'Ejecuta las validaciones específicas antes de publicar':'El workspace no presenta referencias rotas',ui_effect:'workspace_health_read'}}}),
-defineTool({stableKey:'content.bulk_schedule',name:'bulk_schedule_entries',title:'Programar entradas en lote',description:'Programa varias entradas con fechas futuras, validando el lote completo antes de devolverlas a estado borrador.',inputSchema:{type:'object',properties:{schedules:{type:'array',items:{type:'object',properties:{entryId:{type:'string'},publishAt:{type:'string',format:'date-time'}},required:['entryId','publishAt'],additionalProperties:false}}},required:['schedules'],additionalProperties:false},async execute({schedules}:{schedules:Array<{entryId:string;publishAt:string}>}){const uniqueIds=[...new Set(schedules.map(item=>item.entryId))];if(uniqueIds.length!==schedules.length)throw Error('Hay entradas duplicadas en la solicitud');const prepared=schedules.map(input=>{const entry=s.entries.find(item=>item.id===input.entryId&&!item.deletedAt);if(!entry)throw Error('Entrada no encontrada o en papelera: '+input.entryId);const timestamp=Date.parse(input.publishAt);if(!Number.isFinite(timestamp)||timestamp<=Date.now())throw Error('publishAt debe ser una fecha futura válida para '+input.entryId);return{entry,publishAt:new Date(timestamp).toISOString()}});const updated=prepared.map(item=>({...item.entry,status:'Draft' as const,scheduledAt:item.publishAt,updated:'Just now'}));const revisions=updated.map(item=>({id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId:item.id,createdAt:new Date().toISOString(),action:'bulk_schedule',before:prepared.find(candidate=>candidate.entry.id===item.id)!.entry,after:item}));s.setEntries(all=>all.map(entry=>updated.find(item=>item.entry.id===entry.id)||entry));s.setRevisions(all=>[...all,...revisions]);return{status:'scheduled',entries:updated,count:updated.length,ui_effect:'entries_bulk_scheduled'}}}),
- defineTool({stableKey:'content.bulk_unschedule',name:'bulk_unschedule_entries',title:'Cancelar programación en lote',description:'Cancela la programación de varias entradas y las conserva como borradores sin modificar sus campos; registra una revisión por cada cambio.',inputSchema:{type:'object',properties:{entryIds:{type:'array',items:{type:'string'}}},required:['entryIds'],additionalProperties:false},async execute({entryIds}:{entryIds:string[]}){const unique=[...new Set(entryIds)];const missing=unique.filter(id=>!s.entries.some(entry=>entry.id===id));if(missing.length)throw Error('Entradas no encontradas: '+missing.join(', '));const prepared=s.entries.filter(entry=>unique.includes(entry.id)&&entry.scheduledAt);const unscheduled=prepared.map(entry=>entry.id);const unchanged=s.entries.filter(entry=>unique.includes(entry.id)&&!entry.scheduledAt).map(entry=>entry.id);const updated=prepared.map(entry=>({...entry,status:'Draft' as const,scheduledAt:undefined,updated:'Just now'}));const revisions=prepared.map((entry,index)=>({id:'rev_'+Math.random().toString(16).slice(2,8).toUpperCase(),entryId:entry.id,createdAt:new Date().toISOString(),action:'bulk_unschedule',before:entry,after:updated[index]}));s.setEntries(all=>all.map(entry=>updated.find(item=>item.id===entry.id)||entry));s.setRevisions(all=>[...all,...revisions]);return{status:'unscheduled',entryIds:unscheduled,unchanged,count:unscheduled.length,revisionIds:revisions.map(revision=>revision.id),note:unscheduled.length?'Programaciones canceladas':'Ninguna entrada seleccionada estaba programada',ui_effect:'entries_bulk_unscheduled'}}}),
- defineTool({stableKey:'media.update_metadata',name:'update_media_metadata',title:'Actualizar metadatos multimedia',description:'Actualiza el texto alternativo y los metadatos editoriales de un medio sin modificar sus vínculos con entradas.',inputSchema:{type:'object',properties:{mediaId:{type:'string'},alt:{type:'string'},metadata:{type:'object'}},required:['mediaId'],additionalProperties:false},async execute({mediaId,alt,metadata}:{mediaId:string;alt?:string;metadata?:Record<string,unknown>}){const current=s.media.find(asset=>asset.id===mediaId||asset.name===mediaId);if(!current)throw Error('Medio no encontrado');if(alt===undefined&&metadata===undefined)throw Error('Indica alt o metadata para actualizar');if(metadata!==undefined&&(!metadata||typeof metadata!=='object'||Array.isArray(metadata)))throw Error('Metadatos inválidos');const updated={...current,...(alt===undefined?{}:{alt:alt.trim()}),...(metadata===undefined?{}:{metadata:{...(current.metadata||{}),...metadata}})};s.setMedia(all=>all.map(asset=>asset.id===current.id?updated:asset));return{status:'updated',media:updated,linkedEntryIds:updated.attachedEntryIds,ui_effect:'media_metadata_updated'}}}),
- defineTool({stableKey:'schema.activity',name:'get_activity_log',title:'Leer actividad editorial',description:'Devuelve las revisiones persistidas como registro de actividad, filtradas opcionalmente por entrada o acción y con paginación.',inputSchema:{type:'object',properties:{entryId:{type:'string'},action:{type:'string'},limit:{type:'number'},offset:{type:'number'}},additionalProperties:false},annotations:{readOnlyHint:true},async execute({entryId,action,limit,offset}:{entryId?:string;action?:string;limit?:number;offset?:number}){const matching=s.revisions.filter(revision=>(!entryId||revision.entryId===entryId)&&(!action||revision.action===action)).slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));const start=Math.max(0,offset||0);const pageSize=Math.min(Math.max(limit||25,1),100);const page=matching.slice(start,start+pageSize).map(revision=>({id:revision.id,entryId:revision.entryId,entryTitle:revision.after.title,action:revision.action,createdAt:revision.createdAt,before:revision.before,after:revision.after}));return{activity:page,count:page.length,total:matching.length,offset:start,limit:pageSize,hasMore:start+page.length<matching.length,note:matching.length?'':'No hay actividad editorial registrada',ui_effect:'activity_log_read'}}}),
- defineTool({stableKey:'media.bulk_update_metadata',name:'bulk_update_media_metadata',title:'Actualizar metadatos multimedia en lote',description:'Actualiza alt y metadatos de varios medios validando todo el lote antes de persistirlo; conserva intactos sus vínculos con entradas.',inputSchema:{type:'object',properties:{updates:{type:'array',items:{type:'object',properties:{mediaId:{type:'string'},alt:{type:'string'},metadata:{type:'object'}},required:['mediaId'],additionalProperties:false}}},required:['updates'],additionalProperties:false},async execute({updates}:{updates:Array<{mediaId:string;alt?:string;metadata?:Record<string,unknown>}>}){const prepared=updates.map(input=>{const current=s.media.find(asset=>asset.id===input.mediaId||asset.name===input.mediaId);if(!current)throw Error('Medio no encontrado: '+input.mediaId);if(input.alt===undefined&&input.metadata===undefined)throw Error('Indica alt o metadata para '+input.mediaId);if(input.metadata!==undefined&&(!input.metadata||typeof input.metadata!=='object'||Array.isArray(input.metadata)))throw Error('Metadatos inválidos para '+input.mediaId);return{current,input}});const updated=prepared.map(({current,input})=>({...current,...(input.alt===undefined?{}:{alt:input.alt.trim()}),...(input.metadata===undefined?{}:{metadata:{...(current.metadata||{}),...input.metadata}})}));s.setMedia(all=>all.map(asset=>updated.find(item=>item.id===asset.id)||asset));return{status:'updated',media:updated.map(asset=>({id:asset.id,name:asset.name,alt:asset.alt,metadata:asset.metadata,linkedEntryIds:asset.attachedEntryIds})),count:updated.length,ui_effect:'media_metadata_bulk_updated'}}}),
- defineTool({stableKey:'automation.remove_action',name:'remove_action',title:'Eliminar acción',description:'Prepara o elimina una acción declarativa registrada; requiere confirm:true para borrar la capacidad automatizable.',inputSchema:{type:'object',properties:{action:{type:'string'},confirm:{type:'boolean'}},required:['action'],additionalProperties:false},async execute({action,confirm}:{action:string;confirm?:boolean}){const actions=readRegistry('waypoint.actions') as Action[];const current=actions.find(item=>item.id===action||item.name===action);if(!current)throw Error('Acción no encontrada');if(!confirm)return{status:'confirmation_required',action:current,note:'Repite con confirm:true para eliminar esta acción'};writeRegistry('waypoint.actions',actions.filter(item=>item.id!==current.id));return{status:'removed',actionId:current.id,ui_effect:'action_removed'}}}),
- defineTool({stableKey:'automation.list_hook_events',name:'list_hook_events',title:'Listar eventos de hooks',description:'Devuelve el catálogo de eventos que el runtime emite para que el agente pueda registrar hooks con nombres válidos.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},async execute(){const events=['content.changed','entry.created','content_type.created','user.created','user.deleted','role.created','role.deleted','plugin.installed','plugin.uninstalled','user.updated','plugin.status_changed','settings.updated'];return{events,count:events.length,note:'Los eventos se notifican en el runtime del navegador; los hooks no ejecutan código externo',ui_effect:'hook_events_listed'}}}),
- ]};
+import { defineTool } from "@nekuda/webmcp-sdk";
+export type Entry = {
+  id: string;
+  title: string;
+  slug?: string;
+  type: string;
+  status: "Published" | "Draft";
+  updated: string;
+  relation: string;
+  authorUserId?: string;
+  parentEntryId?: string;
+  scheduledAt?: string;
+  deletedAt?: string;
+  metadata?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+};
+export type ContentType = {
+  icon: string;
+  name: string;
+  count: number;
+  tone: string;
+  desc: string;
+  slug: string;
+  fields: string[];
+  fieldTypes?: Record<
+    string,
+    "text" | "number" | "boolean" | "url" | "date" | "json"
+  >;
+  requiredFields?: string[];
+};
+export type Term = {
+  id: string;
+  name: string;
+  slug: string;
+  parent: string | null;
+  description?: string;
+};
+export type Taxonomy = {
+  name: string;
+  slug: string;
+  hierarchical: boolean;
+  terms: Term[];
+};
+export type Relation = {
+  id: string;
+  name: string;
+  slug: string;
+  fromType: string;
+  toType: string;
+  cardinality: "one" | "many";
+};
+export type Connection = {
+  id: string;
+  relation: string;
+  fromEntryId: string;
+  toEntryId: string;
+  createdAt: string;
+};
+export type TermAssignment = {
+  entryId: string;
+  taxonomy: string;
+  termIds: string[];
+  updatedAt: string;
+};
+export type Revision = {
+  id: string;
+  entryId: string;
+  createdAt: string;
+  action: string;
+  before: Entry;
+  after: Entry;
+};
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: "Active" | "Invited";
+  metadata?: Record<string, unknown>;
+  capabilities: string[];
+};
+export type Role = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  capabilities: string[];
+  system?: boolean;
+};
+export type MediaAsset = {
+  id: string;
+  name: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  width?: number;
+  height?: number;
+  alt?: string;
+  metadata?: Record<string, unknown>;
+  attachedEntryIds: string[];
+  createdAt: string;
+};
+export type Comment = {
+  id: string;
+  entryId: string;
+  parentCommentId?: string;
+  authorUserId?: string;
+  authorName: string;
+  authorEmail?: string;
+  content: string;
+  status: "Pending" | "Approved" | "Spam";
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+export type MenuItem = {
+  id: string;
+  label: string;
+  url?: string;
+  entryId?: string;
+  parentId?: string;
+  order: number;
+  openInNewTab?: boolean;
+};
+export type Menu = {
+  id: string;
+  name: string;
+  slug: string;
+  location?: string;
+  items: MenuItem[];
+};
+export type Plugin = {
+  id: string;
+  name: string;
+  slug: string;
+  version: string;
+  author: string;
+  description: string;
+  status: "Active" | "Inactive";
+  capabilities: string[];
+};
+export type Hook = {
+  id: string;
+  name: string;
+  event: string;
+  priority: number;
+  enabled: boolean;
+  pluginSlug?: string;
+  description?: string;
+};
+export type Action = {
+  id: string;
+  name: string;
+  label: string;
+  description: string;
+  pluginSlug?: string;
+  capabilities?: string[];
+};
+export type State = {
+  entries: Entry[];
+  setEntries: (v: Entry[] | ((x: Entry[]) => Entry[])) => void;
+  contentTypes: ContentType[];
+  setContentTypes: (
+    v: ContentType[] | ((x: ContentType[]) => ContentType[]),
+  ) => void;
+  taxonomies: Taxonomy[];
+  setTaxonomies: (v: Taxonomy[] | ((x: Taxonomy[]) => Taxonomy[])) => void;
+  relations: Relation[];
+  setRelations: (v: Relation[] | ((x: Relation[]) => Relation[])) => void;
+  connections: Connection[];
+  setConnections: (
+    v: Connection[] | ((x: Connection[]) => Connection[]),
+  ) => void;
+  termAssignments: TermAssignment[];
+  setTermAssignments: (
+    v: TermAssignment[] | ((x: TermAssignment[]) => TermAssignment[]),
+  ) => void;
+  revisions: Revision[];
+  setRevisions: (v: Revision[] | ((x: Revision[]) => Revision[])) => void;
+  users: User[];
+  setUsers: (v: User[] | ((x: User[]) => User[])) => void;
+  roles: Role[];
+  setRoles: (v: Role[] | ((x: Role[]) => Role[])) => void;
+  plugins: Plugin[];
+  setPlugins: (v: Plugin[] | ((x: Plugin[]) => Plugin[])) => void;
+  media: MediaAsset[];
+  setMedia: (v: MediaAsset[] | ((x: MediaAsset[]) => MediaAsset[])) => void;
+  comments: Comment[];
+  setComments: (v: Comment[] | ((x: Comment[]) => Comment[])) => void;
+  menus: Menu[];
+  setMenus: (v: Menu[] | ((x: Menu[]) => Menu[])) => void;
+  activeType: string;
+  setActiveType: (v: string) => void;
+  activeStatus: string;
+  setActiveStatus: (v: string) => void;
+  createEntry: (
+    title: string,
+    type: string,
+    data?: Record<string, unknown>,
+  ) => Entry;
+  createContentType: (
+    name: string,
+    slug: string,
+    fields: string[],
+    fieldTypes?: ContentType["fieldTypes"],
+    requiredFields?: string[],
+  ) => ContentType;
+  notify: (v: string) => void;
+};
+export function createTools(s: State) {
+  const findTaxonomy = (slug: string) =>
+    s.taxonomies.find((t) => t.slug === slug || t.name === slug);
+  const validateData = (model: ContentType, data: Record<string, unknown>) => {
+    const errors: string[] = [];
+    for (const field of model.requiredFields || [])
+      if (
+        data[field] === undefined ||
+        data[field] === null ||
+        data[field] === ""
+      )
+        errors.push("Campo obligatorio ausente: " + field);
+    for (const [field, kind] of Object.entries(model.fieldTypes || {})) {
+      const value = data[field];
+      if (value === undefined || value === null) continue;
+      const valid =
+        kind === "text"
+          ? typeof value === "string"
+          : kind === "number"
+            ? typeof value === "number" && Number.isFinite(value)
+            : kind === "boolean"
+              ? typeof value === "boolean"
+              : kind === "url"
+                ? typeof value === "string" &&
+                  (value.startsWith("http://") || value.startsWith("https://"))
+                : kind === "date"
+                  ? typeof value === "string" &&
+                    !Number.isNaN(Date.parse(value))
+                  : true;
+      if (!valid)
+        errors.push("Valor inválido para " + field + " (" + kind + ")");
+    }
+    return errors;
+  };
+  const fingerprint = (value: unknown) => {
+    const text = JSON.stringify(value);
+    let hash = 0;
+    for (let index = 0; index < text.length; index++)
+      hash = (hash * 31 + text.charCodeAt(index)) | 0;
+    return "prev_" + Math.abs(hash).toString(16);
+  };
+  const readRegistry = (key: string) => {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    try {
+      const value = JSON.parse(raw);
+      return Array.isArray(value) ? value : [];
+    } catch {
+      return [];
+    }
+  };
+  const writeRegistry = (key: string, value: unknown[]) => {
+    window.localStorage.setItem(key, JSON.stringify(value));
+    window.dispatchEvent(new Event("waypoint-model-updated"));
+  };
+  return [
+    defineTool({
+      stableKey: "automation.list_hooks",
+      name: "list_hooks",
+      title: "Listar hooks",
+      description:
+        "Lista los hooks declarativos registrados para que un agente conozca los eventos disponibles y sus prioridades.",
+      inputSchema: {
+        type: "object",
+        properties: { event: { type: "string" }, enabled: { type: "boolean" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ event, enabled }: { event?: string; enabled?: boolean }) {
+        const hooks = readRegistry("waypoint.hooks").filter(
+          (hook: Hook) =>
+            (!event || hook.event === event) &&
+            (enabled === undefined || hook.enabled === enabled),
+        );
+        return {
+          hooks,
+          count: hooks.length,
+          events: [...new Set(hooks.map((hook: Hook) => hook.event))],
+          ui_effect: "hooks_listed",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "automation.register_hook",
+      name: "register_hook",
+      title: "Registrar hook",
+      description:
+        "Registra una suscripción declarativa a un evento del CMS; no ejecuta código arbitrario y solo publica payloads controlados.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          event: { type: "string" },
+          priority: { type: "number" },
+          enabled: { type: "boolean" },
+          pluginSlug: { type: "string" },
+          description: { type: "string" },
+        },
+        required: ["name", "event"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        event,
+        priority,
+        enabled,
+        pluginSlug,
+        description,
+      }: {
+        name: string;
+        event: string;
+        priority?: number;
+        enabled?: boolean;
+        pluginSlug?: string;
+        description?: string;
+      }) {
+        if (!name.trim() || !event.trim())
+          throw Error("name y event son obligatorios");
+        const hooks = readRegistry("waypoint.hooks") as Hook[];
+        if (hooks.some((hook) => hook.name === name.trim()))
+          throw Error("El hook ya existe");
+        const hook = {
+          id: "hook_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          name: name.trim(),
+          event: event.trim(),
+          priority: Number.isFinite(priority) ? priority! : 10,
+          enabled: enabled !== false,
+          pluginSlug: pluginSlug?.trim() || undefined,
+          description: description?.trim() || undefined,
+        };
+        writeRegistry("waypoint.hooks", [...hooks, hook]);
+        return { status: "registered", hook, ui_effect: "hook_registered" };
+      },
+    }),
+    defineTool({
+      stableKey: "automation.remove_hook",
+      name: "remove_hook",
+      title: "Eliminar hook",
+      description:
+        "Prepara o elimina una suscripción declarativa; requiere confirm:true para borrar el registro.",
+      inputSchema: {
+        type: "object",
+        properties: { hook: { type: "string" }, confirm: { type: "boolean" } },
+        required: ["hook"],
+        additionalProperties: false,
+      },
+      async execute({ hook, confirm }: { hook: string; confirm?: boolean }) {
+        const hooks = readRegistry("waypoint.hooks") as Hook[];
+        const current = hooks.find(
+          (item) => item.id === hook || item.name === hook,
+        );
+        if (!current) throw Error("Hook no encontrado");
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            hook: current,
+            note: "Repite con confirm:true para eliminar este hook",
+          };
+        writeRegistry(
+          "waypoint.hooks",
+          hooks.filter((item) => item.id !== current.id),
+        );
+        return {
+          status: "removed",
+          hookId: current.id,
+          ui_effect: "hook_removed",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "automation.list_actions",
+      name: "list_actions",
+      title: "Listar acciones",
+      description:
+        "Lista las acciones declarativas disponibles para que el agente descubra capacidades automatizables sin ejecutar código externo.",
+      inputSchema: {
+        type: "object",
+        properties: { pluginSlug: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ pluginSlug }: { pluginSlug?: string }) {
+        const actions = readRegistry("waypoint.actions").filter(
+          (action: Action) => !pluginSlug || action.pluginSlug === pluginSlug,
+        );
+        return { actions, count: actions.length, ui_effect: "actions_listed" };
+      },
+    }),
+    defineTool({
+      stableKey: "automation.register_action",
+      name: "register_action",
+      title: "Registrar acción",
+      description:
+        "Registra una acción declarativa con capacidades explícitas; su ejecución se limita a emitir un evento seguro al runtime.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          label: { type: "string" },
+          description: { type: "string" },
+          pluginSlug: { type: "string" },
+          capabilities: { type: "array", items: { type: "string" } },
+        },
+        required: ["name", "label", "description"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        label,
+        description,
+        pluginSlug,
+        capabilities,
+      }: {
+        name: string;
+        label: string;
+        description: string;
+        pluginSlug?: string;
+        capabilities?: string[];
+      }) {
+        const actions = readRegistry("waypoint.actions") as Action[];
+        if (!name.trim() || !label.trim() || !description.trim())
+          throw Error("name, label y description son obligatorios");
+        if (actions.some((action) => action.name === name.trim()))
+          throw Error("La acción ya existe");
+        const action = {
+          id: "act_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          name: name.trim(),
+          label: label.trim(),
+          description: description.trim(),
+          pluginSlug: pluginSlug?.trim() || undefined,
+          capabilities: [...new Set(capabilities || [])],
+        };
+        writeRegistry("waypoint.actions", [...actions, action]);
+        return { status: "registered", action, ui_effect: "action_registered" };
+      },
+    }),
+    defineTool({
+      stableKey: "automation.dispatch_action",
+      name: "dispatch_action",
+      title: "Despachar acción",
+      description:
+        "Despacha una acción registrada con un payload JSON para que la aplicación y sus hooks reaccionen; no evalúa ni ejecuta funciones recibidas.",
+      inputSchema: {
+        type: "object",
+        properties: { action: { type: "string" }, payload: { type: "object" } },
+        required: ["action"],
+        additionalProperties: false,
+      },
+      async execute({
+        action,
+        payload,
+      }: {
+        action: string;
+        payload?: Record<string, unknown>;
+      }) {
+        const actions = readRegistry("waypoint.actions") as Action[];
+        const current = actions.find(
+          (item) => item.id === action || item.name === action,
+        );
+        if (!current) throw Error("Acción no encontrada");
+        const detail = {
+          action: current.name,
+          payload: payload || {},
+          dispatchedAt: new Date().toISOString(),
+        };
+        window.dispatchEvent(new CustomEvent("waypoint-action", { detail }));
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "action:" + current.name, ...detail },
+          }),
+        );
+        return {
+          status: "dispatched",
+          action: current,
+          detail,
+          ui_effect: "action_dispatched",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.get_content_model",
+      name: "get_content_model",
+      title: "Inspeccionar modelo",
+      description:
+        "Devuelve una descripción completa y legible del modelo actual para que el agente descubra tipos, usuarios, roles, plugins, medios, campos, taxonomías, relaciones, comentarios y menús antes de actuar.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      async execute() {
+        return {
+          version: 6,
+          contentTypes: s.contentTypes.map((t) => ({
+            name: t.name,
+            slug: t.slug,
+            fields: t.fields,
+            fieldTypes: t.fieldTypes || {},
+            requiredFields: t.requiredFields || [],
+          })),
+          users: s.users.map((user) => ({
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            status: user.status,
+            capabilities: user.capabilities,
+          })),
+          roles: s.roles,
+          plugins: s.plugins,
+          media: s.media,
+          taxonomies: s.taxonomies.map((t) => ({
+            name: t.name,
+            slug: t.slug,
+            hierarchical: t.hierarchical,
+            terms: t.terms,
+          })),
+          relations: s.relations,
+          comments: s.comments,
+          menus: s.menus,
+          connectionCount: s.connections.length,
+          termAssignmentCount: s.termAssignments.length,
+          userCount: s.users.length,
+          pluginCount: s.plugins.length,
+          mediaCount: s.media.length,
+          counts: {
+            contentTypes: s.contentTypes.length,
+            users: s.users.length,
+            roles: s.roles.length,
+            plugins: s.plugins.length,
+            media: s.media.length,
+            taxonomies: s.taxonomies.length,
+            relations: s.relations.length,
+            comments: s.comments.length,
+            menus: s.menus.length,
+            connections: s.connections.length,
+            termAssignments: s.termAssignments.length,
+          },
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.get_workspace_model",
+      name: "get_workspace_model",
+      title: "Inspeccionar workspace",
+      description:
+        "Devuelve usuarios, roles, plugins, medios, comentarios y menús en una sola respuesta para que el agente descubra las capacidades operativas del CMS.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        return {
+          users: s.users,
+          roles: s.roles,
+          plugins: s.plugins,
+          media: s.media,
+          comments: s.comments,
+          menus: s.menus,
+          counts: {
+            users: s.users.length,
+            roles: s.roles.length,
+            plugins: s.plugins.length,
+            media: s.media.length,
+            comments: s.comments.length,
+            menus: s.menus.length,
+          },
+          note: "Modelo operativo del workspace",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.list_users",
+      name: "list_users",
+      title: "Listar usuarios",
+      description:
+        "Lista los usuarios del workspace con sus roles, estado, capacidades y metadatos básicos para identificar responsables antes de asignar contenido.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          role: { type: "string" },
+          status: { type: "string", enum: ["Active", "Invited"] },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        role,
+        status,
+      }: {
+        role?: string;
+        status?: "Active" | "Invited";
+      }) {
+        const users = s.users.filter(
+          (user) =>
+            (!role || user.role === role) &&
+            (!status || user.status === status),
+        );
+        return {
+          users,
+          count: users.length,
+          note: users.length ? "" : "No hay usuarios que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.check_capability",
+      name: "check_user_capability",
+      title: "Comprobar capacidad",
+      description:
+        "Comprueba si un usuario tiene una capacidad declarada directa o heredada de su rol; informa, pero no sustituye la autorización del servidor.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          userId: { type: "string" },
+          capability: { type: "string" },
+        },
+        required: ["userId", "capability"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        userId,
+        capability,
+      }: {
+        userId: string;
+        capability: string;
+      }) {
+        const user = s.users.find((item) => item.id === userId);
+        if (!user) throw Error("Usuario no encontrado");
+        const role = s.roles.find(
+          (item) => item.slug === user.role || item.name === user.role,
+        );
+        const direct = user.capabilities.includes(capability);
+        const inherited = role?.capabilities.includes(capability) ?? false;
+        return {
+          userId,
+          capability,
+          allowed: direct || inherited,
+          role: user.role,
+          source: direct ? "user" : inherited ? "role" : null,
+          note: "La autorización definitiva debe verificarse en el servidor",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "role.list_roles",
+      name: "list_roles",
+      title: "Listar roles",
+      description:
+        "Lista los roles disponibles con sus capacidades para que el agente pueda elegir permisos coherentes al administrar usuarios.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        return {
+          roles: s.roles,
+          count: s.roles.length,
+          note: s.roles.length ? "" : "No hay roles definidos",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "role.create_role",
+      name: "create_role",
+      title: "Crear rol",
+      description:
+        "Crea un rol reutilizable con una lista explícita de capacidades para administrar acceso editorial.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          slug: { type: "string" },
+          description: { type: "string" },
+          capabilities: { type: "array", items: { type: "string" } },
+        },
+        required: ["name", "slug"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        slug,
+        description,
+        capabilities,
+      }: {
+        name: string;
+        slug: string;
+        description?: string;
+        capabilities?: string[];
+      }) {
+        const normalized = slug.trim().toLowerCase();
+        if (!name.trim() || !/^[a-z0-9-]+$/.test(normalized))
+          throw Error("Nombre o slug inválido");
+        if (s.roles.some((role) => role.slug === normalized))
+          throw Error("El rol ya existe");
+        const role = {
+          id: "role_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          name: name.trim(),
+          slug: normalized,
+          description: description?.trim() || "",
+          capabilities: [...new Set(capabilities || [])],
+        };
+        s.setRoles((all) => [role, ...all]);
+        return { status: "created", role, ui_effect: "role_created" };
+      },
+    }),
+    defineTool({
+      stableKey: "role.update_role",
+      name: "update_role",
+      title: "Actualizar rol",
+      description:
+        "Actualiza la descripción o capacidades de un rol; los usuarios conservarán la referencia al rol por su slug.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          role: { type: "string" },
+          name: { type: "string" },
+          description: { type: "string" },
+          capabilities: { type: "array", items: { type: "string" } },
+        },
+        required: ["role"],
+        additionalProperties: false,
+      },
+      async execute({
+        role,
+        name,
+        description,
+        capabilities,
+      }: {
+        role: string;
+        name?: string;
+        description?: string;
+        capabilities?: string[];
+      }) {
+        const current = s.roles.find(
+          (item) =>
+            item.id === role || item.slug === role || item.name === role,
+        );
+        if (!current) throw Error("Rol no encontrado");
+        const updated = {
+          ...current,
+          ...(name === undefined ? {} : { name: name.trim() }),
+          ...(description === undefined
+            ? {}
+            : { description: description.trim() }),
+          ...(capabilities === undefined
+            ? {}
+            : { capabilities: [...new Set(capabilities)] }),
+        };
+        s.setRoles((all) =>
+          all.map((item) => (item.id === current.id ? updated : item)),
+        );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "role.updated", role: updated },
+          }),
+        );
+        return { status: "updated", role: updated, ui_effect: "role_updated" };
+      },
+    }),
+    defineTool({
+      stableKey: "user.get_user",
+      name: "get_user",
+      title: "Leer usuario",
+      description:
+        "Devuelve el perfil completo de un usuario, incluyendo rol, capacidades y metadatos, para preparar una operación editorial contextualizada.",
+      inputSchema: {
+        type: "object",
+        properties: { userId: { type: "string" } },
+        required: ["userId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ userId }: { userId: string }) {
+        const user = s.users.find((item) => item.id === userId);
+        if (!user) throw Error("Usuario no encontrado");
+        return { user, ui_effect: "user_opened" };
+      },
+    }),
+    defineTool({
+      stableKey: "user.create_user",
+      name: "create_user",
+      title: "Crear usuario",
+      description:
+        "Crea un usuario invitado o activo con un rol existente; no autentica ni envía correos desde el navegador.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          email: { type: "string" },
+          role: { type: "string" },
+          status: { type: "string", enum: ["Active", "Invited"] },
+          metadata: { type: "object" },
+        },
+        required: ["name", "email", "role"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        email,
+        role,
+        status,
+        metadata,
+      }: {
+        name: string;
+        email: string;
+        role: string;
+        status?: "Active" | "Invited";
+        metadata?: Record<string, unknown>;
+      }) {
+        if (!name.trim() || !email.trim() || !email.includes("@"))
+          throw Error("Nombre o email inválido");
+        const selected = s.roles.find(
+          (item) => item.slug === role || item.name === role,
+        );
+        if (!selected) throw Error("Rol no encontrado");
+        if (
+          s.users.some(
+            (user) => user.email.toLowerCase() === email.trim().toLowerCase(),
+          )
+        )
+          throw Error("El email ya está registrado");
+        const user = {
+          id: "usr_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          role: selected.slug,
+          status: status || "Invited",
+          capabilities: selected.capabilities,
+          metadata: metadata || {},
+        };
+        s.setUsers((all) => [user, ...all]);
+        return { status: "created", user, ui_effect: "user_created" };
+      },
+    }),
+    defineTool({
+      stableKey: "user.update_user",
+      name: "update_user",
+      title: "Actualizar usuario",
+      description:
+        "Actualiza el perfil, rol, estado, capacidades o metadatos de un usuario existente y devuelve el perfil resultante.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          userId: { type: "string" },
+          name: { type: "string" },
+          email: { type: "string" },
+          role: { type: "string" },
+          status: { type: "string", enum: ["Active", "Invited"] },
+          capabilities: { type: "array", items: { type: "string" } },
+          metadata: { type: "object" },
+        },
+        required: ["userId"],
+        additionalProperties: false,
+      },
+      async execute({
+        userId,
+        name,
+        email,
+        role,
+        status,
+        capabilities,
+        metadata,
+      }: {
+        userId: string;
+        name?: string;
+        email?: string;
+        role?: string;
+        status?: "Active" | "Invited";
+        capabilities?: string[];
+        metadata?: Record<string, unknown>;
+      }) {
+        const current = s.users.find((user) => user.id === userId);
+        if (!current) throw Error("Usuario no encontrado");
+        if (email && !email.includes("@")) throw Error("Email inválido");
+        if (
+          email &&
+          s.users.some(
+            (user) =>
+              user.id !== userId &&
+              user.email.toLowerCase() === email.trim().toLowerCase(),
+          )
+        )
+          throw Error("El email ya está registrado");
+        const selected = role
+          ? s.roles.find((item) => item.slug === role || item.name === role)
+          : undefined;
+        if (role && !selected) throw Error("Rol no encontrado");
+        const user = {
+          ...current,
+          ...(name === undefined ? {} : { name: name.trim() }),
+          ...(email === undefined ? {} : { email: email.trim().toLowerCase() }),
+          ...(role === undefined
+            ? {}
+            : { role: selected!.slug, capabilities: selected!.capabilities }),
+          ...(status === undefined ? {} : { status }),
+          ...(capabilities === undefined || role !== undefined
+            ? {}
+            : { capabilities: [...new Set(capabilities)] }),
+          ...(metadata === undefined
+            ? {}
+            : { metadata: { ...(current.metadata || {}), ...metadata } }),
+        };
+        s.setUsers((all) =>
+          all.map((item) => (item.id === userId ? user : item)),
+        );
+        return { status: "updated", user, ui_effect: "user_updated" };
+      },
+    }),
+    defineTool({
+      stableKey: "user.delete_user",
+      name: "delete_user",
+      title: "Eliminar usuario",
+      description:
+        "Prepara o elimina un usuario y quita su autoría de las entradas relacionadas; requiere confirm:true porque borra el perfil persistido.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          userId: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["userId"],
+        additionalProperties: false,
+      },
+      async execute({
+        userId,
+        confirm,
+      }: {
+        userId: string;
+        confirm?: boolean;
+      }) {
+        const user = s.users.find((item) => item.id === userId);
+        if (!user) throw Error("Usuario no encontrado");
+        const authored = s.entries.filter(
+          (entry) => entry.authorUserId === userId,
+        ).length;
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            userId,
+            name: user.name,
+            authoredEntries: authored,
+            note: "Repite con confirm:true para eliminar este usuario",
+          };
+        s.setUsers((all) => all.filter((item) => item.id !== userId));
+        s.setEntries((all) =>
+          all.map((entry) =>
+            entry.authorUserId === userId
+              ? { ...entry, authorUserId: undefined }
+              : entry,
+          ),
+        );
+        return {
+          status: "deleted",
+          userId,
+          name: user.name,
+          authoredEntries: authored,
+          ui_effect: "user_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.get_metadata",
+      name: "get_user_metadata",
+      title: "Leer metadatos de usuario",
+      description:
+        "Devuelve todos los metadatos personalizados de un usuario o una clave concreta para segmentación y automatizaciones editoriales.",
+      inputSchema: {
+        type: "object",
+        properties: { userId: { type: "string" }, key: { type: "string" } },
+        required: ["userId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ userId, key }: { userId: string; key?: string }) {
+        const user = s.users.find((item) => item.id === userId);
+        if (!user) throw Error("Usuario no encontrado");
+        return {
+          userId,
+          key: key || null,
+          value: key ? user.metadata?.[key] : user.metadata || {},
+          ui_effect: "user_metadata_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.set_metadata",
+      name: "set_user_metadata",
+      title: "Escribir metadatos de usuario",
+      description:
+        "Crea o reemplaza un metadato personalizado de usuario y devuelve el perfil actualizado para que el agente pueda continuar su flujo.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          userId: { type: "string" },
+          key: { type: "string" },
+          value: {},
+        },
+        required: ["userId", "key", "value"],
+        additionalProperties: false,
+      },
+      async execute({
+        userId,
+        key,
+        value,
+      }: {
+        userId: string;
+        key: string;
+        value: unknown;
+      }) {
+        const current = s.users.find((user) => user.id === userId);
+        if (!current) throw Error("Usuario no encontrado");
+        if (!key.trim()) throw Error("La clave es obligatoria");
+        const user = {
+          ...current,
+          metadata: { ...(current.metadata || {}), [key.trim()]: value },
+        };
+        s.setUsers((all) =>
+          all.map((item) => (item.id === userId ? user : item)),
+        );
+        return {
+          status: "updated",
+          userId,
+          key: key.trim(),
+          value,
+          ui_effect: "user_metadata_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.delete_metadata",
+      name: "delete_user_metadata",
+      title: "Eliminar metadato de usuario",
+      description:
+        "Prepara o elimina un metadato personalizado de usuario; requiere confirm:true porque borra información persistida.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          userId: { type: "string" },
+          key: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["userId", "key"],
+        additionalProperties: false,
+      },
+      async execute({
+        userId,
+        key,
+        confirm,
+      }: {
+        userId: string;
+        key: string;
+        confirm?: boolean;
+      }) {
+        const current = s.users.find((user) => user.id === userId);
+        if (!current) throw Error("Usuario no encontrado");
+        const metadata = { ...(current.metadata || {}) };
+        if (!(key in metadata)) return { userId, key, status: "not_found" };
+        if (!confirm)
+          return {
+            userId,
+            key,
+            status: "confirmation_required",
+            value: metadata[key],
+            note: "Repite con confirm:true para eliminar este metadato",
+          };
+        delete metadata[key];
+        s.setUsers((all) =>
+          all.map((item) =>
+            item.id === userId ? { ...item, metadata } : item,
+          ),
+        );
+        return {
+          userId,
+          key,
+          status: "deleted",
+          ui_effect: "user_metadata_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.assign_author",
+      name: "assign_entry_author",
+      title: "Asignar autor",
+      description:
+        "Asigna un usuario existente como autor de una entrada y devuelve la relación editorial actualizada.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" }, userId: { type: "string" } },
+        required: ["entryId", "userId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId, userId }: { entryId: string; userId: string }) {
+        const entry = s.entries.find((item) => item.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const user = s.users.find((item) => item.id === userId);
+        if (!user) throw Error("Usuario no encontrado");
+        const updated = { ...entry, authorUserId: userId, updated: "Just now" };
+        s.setEntries((all) =>
+          all.map((item) => (item.id === entryId ? updated : item)),
+        );
+        return {
+          status: "assigned",
+          entry: updated,
+          author: user,
+          ui_effect: "entry_author_assigned",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.list_authored_content",
+      name: "list_user_content",
+      title: "Listar contenido del usuario",
+      description:
+        "Devuelve las entradas cuyo autor es un usuario concreto, filtradas opcionalmente por estado editorial.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          userId: { type: "string" },
+          status: { type: "string", enum: ["Published", "Draft"] },
+        },
+        required: ["userId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        userId,
+        status,
+      }: {
+        userId: string;
+        status?: "Published" | "Draft";
+      }) {
+        const user = s.users.find((item) => item.id === userId);
+        if (!user) throw Error("Usuario no encontrado");
+        const entries = s.entries.filter(
+          (entry) =>
+            entry.authorUserId === userId &&
+            !entry.deletedAt &&
+            (!status || entry.status === status),
+        );
+        return {
+          userId,
+          author: user.name,
+          entries,
+          count: entries.length,
+          note: entries.length ? "" : "El usuario no tiene contenido asignado",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.set_slug",
+      name: "set_entry_slug",
+      title: "Definir permalink",
+      description:
+        "Crea o actualiza el slug público de una entrada validando formato y unicidad dentro de su tipo de contenido.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" }, slug: { type: "string" } },
+        required: ["entryId", "slug"],
+        additionalProperties: false,
+      },
+      async execute({ entryId, slug }: { entryId: string; slug: string }) {
+        const entry = s.entries.find((item) => item.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const normalized = slug.trim().toLowerCase();
+        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalized))
+          throw Error("Slug inválido");
+        if (
+          s.entries.some(
+            (item) =>
+              item.id !== entryId &&
+              item.type === entry.type &&
+              item.slug === normalized,
+          )
+        )
+          throw Error("El slug ya existe para este tipo");
+        const updated = { ...entry, slug: normalized, updated: "Just now" };
+        s.setEntries((all) =>
+          all.map((item) => (item.id === entryId ? updated : item)),
+        );
+        return {
+          status: "updated",
+          entryId,
+          slug: normalized,
+          permalink: "/" + entry.type.toLowerCase() + "/" + normalized,
+          ui_effect: "entry_slug_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "plugin.list_plugins",
+      name: "list_plugins",
+      title: "Listar plugins",
+      description:
+        "Lista los plugins registrados con su versión, estado y capacidades declaradas para que el agente sepa qué extensiones están disponibles.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["Active", "Inactive"] },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ status }: { status?: "Active" | "Inactive" }) {
+        const plugins = s.plugins.filter(
+          (plugin) => !status || plugin.status === status,
+        );
+        return {
+          plugins,
+          count: plugins.length,
+          note: plugins.length ? "" : "No hay plugins que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "plugin.get_plugin",
+      name: "get_plugin",
+      title: "Leer plugin",
+      description:
+        "Devuelve el manifiesto de un plugin registrado, sin cargar ni ejecutar código externo.",
+      inputSchema: {
+        type: "object",
+        properties: { plugin: { type: "string" } },
+        required: ["plugin"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ plugin }: { plugin: string }) {
+        const item = s.plugins.find(
+          (candidate) =>
+            candidate.id === plugin ||
+            candidate.slug === plugin ||
+            candidate.name === plugin,
+        );
+        if (!item) throw Error("Plugin no encontrado");
+        return { plugin: item, ui_effect: "plugin_opened" };
+      },
+    }),
+    defineTool({
+      stableKey: "plugin.install_plugin",
+      name: "install_plugin",
+      title: "Registrar plugin",
+      description:
+        "Registra un manifiesto declarativo de plugin, sus capacidades y dependencias; no ejecuta código ni concede permisos de servidor.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          slug: { type: "string" },
+          version: { type: "string" },
+          author: { type: "string" },
+          description: { type: "string" },
+          capabilities: { type: "array", items: { type: "string" } },
+          dependencies: { type: "array", items: { type: "string" } },
+          status: { type: "string", enum: ["Active", "Inactive"] },
+        },
+        required: ["name", "slug", "version", "author"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        slug,
+        version,
+        author,
+        description,
+        capabilities,
+        dependencies,
+        status,
+      }: {
+        name: string;
+        slug: string;
+        version: string;
+        author: string;
+        description?: string;
+        capabilities?: string[];
+        dependencies?: string[];
+        status?: "Active" | "Inactive";
+      }) {
+        const normalized = slug.trim().toLowerCase();
+        if (!/^[a-z0-9-]+$/.test(normalized))
+          throw Error("Slug de plugin inválido");
+        if (s.plugins.some((plugin) => plugin.slug === normalized))
+          throw Error("El plugin ya está registrado");
+        const normalizedDependencies = [
+          ...new Set(
+            (dependencies || [])
+              .map((value) => value.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        ];
+        if (normalizedDependencies.includes(normalized))
+          throw Error("Un plugin no puede depender de sí mismo");
+        const missing = normalizedDependencies.filter(
+          (value) => !s.plugins.some((plugin) => plugin.slug === value),
+        );
+        if (missing.length)
+          throw Error("Dependencias no registradas: " + missing.join(", "));
+        const item = {
+          id: "plg_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          name: name.trim(),
+          slug: normalized,
+          version: version.trim(),
+          author: author.trim(),
+          description: description?.trim() || "",
+          status: status || "Inactive",
+          capabilities: [...new Set(capabilities || [])],
+          dependencies: normalizedDependencies,
+        };
+        s.setPlugins((all) => [item, ...all]);
+        return {
+          status: "registered",
+          plugin: item,
+          note: "Manifiesto registrado; el runtime no ejecuta código externo",
+          ui_effect: "plugin_registered",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "plugin.set_status",
+      name: "set_plugin_status",
+      title: "Activar plugin",
+      description:
+        "Cambia el estado declarativo de un plugin registrado entre Active e Inactive; la activación no sustituye la autorización del servidor.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          plugin: { type: "string" },
+          status: { type: "string", enum: ["Active", "Inactive"] },
+        },
+        required: ["plugin", "status"],
+        additionalProperties: false,
+      },
+      async execute({
+        plugin,
+        status,
+      }: {
+        plugin: string;
+        status: "Active" | "Inactive";
+      }) {
+        const current = s.plugins.find(
+          (item) =>
+            item.id === plugin || item.slug === plugin || item.name === plugin,
+        );
+        if (!current) throw Error("Plugin no encontrado");
+        const updated = { ...current, status };
+        s.setPlugins((all) =>
+          all.map((item) => (item.id === current.id ? updated : item)),
+        );
+        return {
+          status: "updated",
+          plugin: updated,
+          ui_effect: "plugin_status_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.list_assets",
+      name: "list_media_assets",
+      title: "Listar medios",
+      description:
+        "Lista assets multimedia registrados y sus vínculos con entradas para que el agente pueda reutilizar imágenes, videos o documentos.",
+      inputSchema: {
+        type: "object",
+        properties: { mimeType: { type: "string" }, query: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        mimeType,
+        query,
+      }: {
+        mimeType?: string;
+        query?: string;
+      }) {
+        const needle = query?.toLowerCase();
+        const media = s.media.filter(
+          (asset) =>
+            (!mimeType || asset.mimeType.startsWith(mimeType)) &&
+            (!needle ||
+              asset.name.toLowerCase().includes(needle) ||
+              asset.alt?.toLowerCase().includes(needle)),
+        );
+        return {
+          media,
+          count: media.length,
+          note: media.length ? "" : "No hay medios que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.register_asset",
+      name: "register_media_asset",
+      title: "Registrar medio",
+      description:
+        "Registra los metadatos de un asset multimedia ya disponible en una URL; no sube archivos ni descarga contenido externo desde el navegador.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          url: { type: "string" },
+          mimeType: { type: "string" },
+          size: { type: "number" },
+          width: { type: "number" },
+          height: { type: "number" },
+          alt: { type: "string" },
+          metadata: { type: "object" },
+        },
+        required: ["name", "url", "mimeType"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        url,
+        mimeType,
+        size,
+        width,
+        height,
+        alt,
+        metadata,
+      }: {
+        name: string;
+        url: string;
+        mimeType: string;
+        size?: number;
+        width?: number;
+        height?: number;
+        alt?: string;
+        metadata?: Record<string, unknown>;
+      }) {
+        if (!name.trim() || !/^https?:\/\//.test(url))
+          throw Error("Nombre o URL inválida");
+        const asset = {
+          id: "med_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          name: name.trim(),
+          url,
+          mimeType,
+          size: size || 0,
+          width,
+          height,
+          alt: alt?.trim() || "",
+          metadata: metadata || {},
+          attachedEntryIds: [],
+          createdAt: new Date().toISOString(),
+        };
+        s.setMedia((all) => [asset, ...all]);
+        return {
+          status: "registered",
+          media: asset,
+          ui_effect: "media_registered",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.attach_to_entry",
+      name: "attach_media_to_entry",
+      title: "Adjuntar medio",
+      description:
+        "Vincula un asset multimedia existente a una entrada para que su contenido pueda reutilizarlo en el flujo editorial.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          mediaId: { type: "string" },
+          entryId: { type: "string" },
+        },
+        required: ["mediaId", "entryId"],
+        additionalProperties: false,
+      },
+      async execute({
+        mediaId,
+        entryId,
+      }: {
+        mediaId: string;
+        entryId: string;
+      }) {
+        const asset = s.media.find((item) => item.id === mediaId);
+        if (!asset) throw Error("Medio no encontrado");
+        if (!s.entries.some((item) => item.id === entryId))
+          throw Error("Entrada no encontrada");
+        if (asset.attachedEntryIds.includes(entryId))
+          return { status: "unchanged", mediaId, entryId };
+        const updated = {
+          ...asset,
+          attachedEntryIds: [...asset.attachedEntryIds, entryId],
+        };
+        s.setMedia((all) =>
+          all.map((item) => (item.id === mediaId ? updated : item)),
+        );
+        return {
+          status: "attached",
+          mediaId,
+          entryId,
+          ui_effect: "media_attached",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.detach_from_entry",
+      name: "detach_media_from_entry",
+      title: "Desvincular medio",
+      description:
+        "Prepara o desvincula un asset multimedia de una entrada; requiere confirm:true para eliminar el vínculo persistido.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          mediaId: { type: "string" },
+          entryId: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["mediaId", "entryId"],
+        additionalProperties: false,
+      },
+      async execute({
+        mediaId,
+        entryId,
+        confirm,
+      }: {
+        mediaId: string;
+        entryId: string;
+        confirm?: boolean;
+      }) {
+        const asset = s.media.find((item) => item.id === mediaId);
+        if (!asset) throw Error("Medio no encontrado");
+        if (!asset.attachedEntryIds.includes(entryId))
+          return { status: "not_found", mediaId, entryId };
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            mediaId,
+            entryId,
+            note: "Repite con confirm:true para desvincular este medio",
+          };
+        s.setMedia((all) =>
+          all.map((item) =>
+            item.id === mediaId
+              ? {
+                  ...item,
+                  attachedEntryIds: item.attachedEntryIds.filter(
+                    (id) => id !== entryId,
+                  ),
+                }
+              : item,
+          ),
+        );
+        return {
+          status: "detached",
+          mediaId,
+          entryId,
+          ui_effect: "media_detached",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "comment.list_comments",
+      name: "list_comments",
+      title: "Listar comentarios",
+      description:
+        "Lista comentarios por entrada y estado de moderación para que el agente pueda priorizar la revisión editorial.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          status: { type: "string", enum: ["Pending", "Approved", "Spam"] },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        entryId,
+        status,
+      }: {
+        entryId?: string;
+        status?: "Pending" | "Approved" | "Spam";
+      }) {
+        const comments = s.comments.filter(
+          (comment) =>
+            (!entryId || comment.entryId === entryId) &&
+            (!status || comment.status === status),
+        );
+        return {
+          comments,
+          count: comments.length,
+          note: comments.length ? "" : "No hay comentarios que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "comment.get_stats",
+      name: "get_comment_stats",
+      title: "Resumir comentarios",
+      description:
+        "Devuelve estadísticas de moderación y distribución por entrada para que el agente pueda priorizar la cola editorial.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const byStatus = {
+          Pending: s.comments.filter((comment) => comment.status === "Pending")
+            .length,
+          Approved: s.comments.filter(
+            (comment) => comment.status === "Approved",
+          ).length,
+          Spam: s.comments.filter((comment) => comment.status === "Spam")
+            .length,
+        };
+        const byEntry = Object.fromEntries(
+          s.entries.map((entry) => [
+            entry.id,
+            s.comments.filter((comment) => comment.entryId === entry.id).length,
+          ]),
+        );
+        return {
+          total: s.comments.length,
+          byStatus,
+          byEntry,
+          note: s.comments.length ? "" : "No hay comentarios registrados",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.list_menus",
+      name: "list_menus",
+      title: "Listar menús",
+      description:
+        "Lista los menús de navegación y sus elementos ordenados para que el agente pueda inspeccionar la estructura pública del sitio.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        return {
+          menus: s.menus,
+          count: s.menus.length,
+          note: s.menus.length ? "" : "No hay menús definidos",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.get_navigation_model",
+      name: "get_navigation_model",
+      title: "Resumir navegación",
+      description:
+        "Devuelve la navegación completa agrupada por menú, con elementos, destinos y jerarquía para que el agente pueda planificar cambios de sitio.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const menus = s.menus.map((menu) => ({
+          ...menu,
+          items: [...menu.items].sort((a, b) => a.order - b.order),
+        }));
+        return {
+          menus,
+          count: menus.length,
+          itemCount: menus.reduce(
+            (total, menu) => total + menu.items.length,
+            0,
+          ),
+          note: menus.length ? "" : "No hay navegación configurada",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.create_menu",
+      name: "create_menu",
+      title: "Crear menú",
+      description:
+        "Crea un menú de navegación vacío con slug y ubicación opcional para que el agente pueda construir la navegación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          slug: { type: "string" },
+          location: { type: "string" },
+        },
+        required: ["name", "slug"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        slug,
+        location,
+      }: {
+        name: string;
+        slug: string;
+        location?: string;
+      }) {
+        const normalized = slug.trim().toLowerCase();
+        if (!name.trim() || !/^[a-z0-9-]+$/.test(normalized))
+          throw Error("Nombre o slug inválido");
+        if (s.menus.some((menu) => menu.slug === normalized))
+          throw Error("El menú ya existe");
+        const menu = {
+          id: "menu_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          name: name.trim(),
+          slug: normalized,
+          location: location?.trim(),
+          items: [],
+        };
+        s.setMenus((all) => [menu, ...all]);
+        return { status: "created", menu, ui_effect: "menu_created" };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.update_menu",
+      name: "update_menu",
+      title: "Actualizar menú",
+      description:
+        "Actualiza el nombre, slug o ubicación de un menú sin perder sus elementos.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          menu: { type: "string" },
+          name: { type: "string" },
+          slug: { type: "string" },
+          location: { type: "string" },
+        },
+        required: ["menu"],
+        additionalProperties: false,
+      },
+      async execute({
+        menu,
+        name,
+        slug,
+        location,
+      }: {
+        menu: string;
+        name?: string;
+        slug?: string;
+        location?: string;
+      }) {
+        const current = s.menus.find(
+          (item) =>
+            item.id === menu || item.slug === menu || item.name === menu,
+        );
+        if (!current) throw Error("Menú no encontrado");
+        const nextSlug = slug?.trim().toLowerCase() || current.slug;
+        if (!/^[a-z0-9-]+$/.test(nextSlug)) throw Error("Slug inválido");
+        if (
+          nextSlug !== current.slug &&
+          s.menus.some((item) => item.slug === nextSlug)
+        )
+          throw Error("El menú ya existe");
+        const updated = {
+          ...current,
+          ...(name === undefined ? {} : { name: name.trim() }),
+          slug: nextSlug,
+          ...(location === undefined ? {} : { location: location.trim() }),
+        };
+        s.setMenus((all) =>
+          all.map((item) => (item.id === current.id ? updated : item)),
+        );
+        return { status: "updated", menu: updated, ui_effect: "menu_updated" };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.delete_menu",
+      name: "delete_menu",
+      title: "Eliminar menú",
+      description:
+        "Prepara o elimina un menú y todos sus elementos; requiere confirm:true porque borra configuración de navegación persistida.",
+      inputSchema: {
+        type: "object",
+        properties: { menu: { type: "string" }, confirm: { type: "boolean" } },
+        required: ["menu"],
+        additionalProperties: false,
+      },
+      async execute({ menu, confirm }: { menu: string; confirm?: boolean }) {
+        const current = s.menus.find(
+          (item) =>
+            item.id === menu || item.slug === menu || item.name === menu,
+        );
+        if (!current) throw Error("Menú no encontrado");
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            menuId: current.id,
+            name: current.name,
+            itemCount: current.items.length,
+            note: "Repite con confirm:true para eliminar este menú",
+          };
+        s.setMenus((all) => all.filter((item) => item.id !== current.id));
+        return {
+          status: "deleted",
+          menuId: current.id,
+          itemCount: current.items.length,
+          ui_effect: "menu_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.add_item",
+      name: "add_menu_item",
+      title: "Añadir elemento de menú",
+      description:
+        "Añade un enlace externo o una referencia a una entrada existente dentro de un menú, con orden y padre opcionales.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          menu: { type: "string" },
+          label: { type: "string" },
+          url: { type: "string" },
+          entryId: { type: "string" },
+          parentId: { type: "string" },
+          order: { type: "number" },
+          openInNewTab: { type: "boolean" },
+        },
+        required: ["menu", "label"],
+        additionalProperties: false,
+      },
+      async execute({
+        menu,
+        label,
+        url,
+        entryId,
+        parentId,
+        order,
+        openInNewTab,
+      }: {
+        menu: string;
+        label: string;
+        url?: string;
+        entryId?: string;
+        parentId?: string;
+        order?: number;
+        openInNewTab?: boolean;
+      }) {
+        const current = s.menus.find(
+          (item) =>
+            item.id === menu || item.slug === menu || item.name === menu,
+        );
+        if (!current) throw Error("Menú no encontrado");
+        if (!url && !entryId) throw Error("El elemento requiere url o entryId");
+        if (url && !(url.startsWith("http://") || url.startsWith("https://")))
+          throw Error("URL inválida");
+        if (entryId && !s.entries.some((entry) => entry.id === entryId))
+          throw Error("Entrada no encontrada");
+        if (parentId && !current.items.some((item) => item.id === parentId))
+          throw Error("Elemento padre no encontrado");
+        const item = {
+          id: "mi_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          label: label.trim(),
+          url,
+          entryId,
+          parentId,
+          order: order ?? current.items.length,
+          openInNewTab,
+        };
+        const updated = {
+          ...current,
+          items: [...current.items, item].sort((a, b) => a.order - b.order),
+        };
+        s.setMenus((all) =>
+          all.map((candidate) =>
+            candidate.id === current.id ? updated : candidate,
+          ),
+        );
+        return {
+          status: "created",
+          menuId: current.id,
+          item,
+          ui_effect: "menu_item_added",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.update_item",
+      name: "update_menu_item",
+      title: "Actualizar elemento de menú",
+      description:
+        "Actualiza etiqueta, destino, padre, orden o apertura de un elemento de menú y mantiene la estructura ordenada.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          menu: { type: "string" },
+          itemId: { type: "string" },
+          label: { type: "string" },
+          url: { type: "string" },
+          entryId: { type: "string" },
+          parentId: { type: "string" },
+          order: { type: "number" },
+          openInNewTab: { type: "boolean" },
+        },
+        required: ["menu", "itemId"],
+        additionalProperties: false,
+      },
+      async execute({
+        menu,
+        itemId,
+        label,
+        url,
+        entryId,
+        parentId,
+        order,
+        openInNewTab,
+      }: {
+        menu: string;
+        itemId: string;
+        label?: string;
+        url?: string;
+        entryId?: string;
+        parentId?: string;
+        order?: number;
+        openInNewTab?: boolean;
+      }) {
+        const current = s.menus.find(
+          (item) =>
+            item.id === menu || item.slug === menu || item.name === menu,
+        );
+        if (!current) throw Error("Menú no encontrado");
+        const existing = current.items.find((item) => item.id === itemId);
+        if (!existing) throw Error("Elemento de menú no encontrado");
+        if (url && !(url.startsWith("http://") || url.startsWith("https://")))
+          throw Error("URL inválida");
+        if (entryId && !s.entries.some((entry) => entry.id === entryId))
+          throw Error("Entrada no encontrada");
+        if (
+          parentId &&
+          (parentId === itemId ||
+            !current.items.some((item) => item.id === parentId))
+        )
+          throw Error("Elemento padre no encontrado");
+        if (
+          url === undefined &&
+          entryId === undefined &&
+          !existing.url &&
+          !existing.entryId
+        )
+          throw Error("El elemento requiere url o entryId");
+        const updatedItem = {
+          ...existing,
+          ...(label === undefined ? {} : { label: label.trim() }),
+          ...(url === undefined ? {} : { url, entryId: undefined }),
+          ...(entryId === undefined ? {} : { entryId, url: undefined }),
+          ...(parentId === undefined ? {} : { parentId }),
+          ...(order === undefined ? {} : { order }),
+          ...(openInNewTab === undefined ? {} : { openInNewTab }),
+        };
+        const updated = {
+          ...current,
+          items: current.items
+            .map((item) => (item.id === itemId ? updatedItem : item))
+            .sort((a, b) => a.order - b.order),
+        };
+        s.setMenus((all) =>
+          all.map((candidate) =>
+            candidate.id === current.id ? updated : candidate,
+          ),
+        );
+        return {
+          status: "updated",
+          menuId: current.id,
+          item: updatedItem,
+          ui_effect: "menu_item_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.delete_item",
+      name: "delete_menu_item",
+      title: "Eliminar elemento de menú",
+      description:
+        "Prepara o elimina un elemento de menú y sus referencias; requiere confirm:true para borrar la configuración persistida.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          menu: { type: "string" },
+          itemId: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["menu", "itemId"],
+        additionalProperties: false,
+      },
+      async execute({
+        menu,
+        itemId,
+        confirm,
+      }: {
+        menu: string;
+        itemId: string;
+        confirm?: boolean;
+      }) {
+        const current = s.menus.find(
+          (item) =>
+            item.id === menu || item.slug === menu || item.name === menu,
+        );
+        if (!current) throw Error("Menú no encontrado");
+        const item = current.items.find((candidate) => candidate.id === itemId);
+        if (!item) throw Error("Elemento de menú no encontrado");
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            menuId: current.id,
+            item,
+            note: "Repite con confirm:true para eliminar este elemento",
+          };
+        const updated = {
+          ...current,
+          items: current.items
+            .filter((candidate) => candidate.id !== itemId)
+            .map((candidate) =>
+              candidate.parentId === itemId
+                ? { ...candidate, parentId: undefined }
+                : candidate,
+            ),
+        };
+        s.setMenus((all) =>
+          all.map((candidate) =>
+            candidate.id === current.id ? updated : candidate,
+          ),
+        );
+        return {
+          status: "deleted",
+          menuId: current.id,
+          itemId,
+          ui_effect: "menu_item_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "comment.create_comment",
+      name: "create_comment",
+      title: "Crear comentario",
+      description:
+        "Crea un comentario asociado a una entrada, opcionalmente como respuesta a otro comentario, y lo deja Pending para moderación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          parentCommentId: { type: "string" },
+          authorUserId: { type: "string" },
+          authorName: { type: "string" },
+          authorEmail: { type: "string" },
+          content: { type: "string" },
+          status: { type: "string", enum: ["Pending", "Approved", "Spam"] },
+          metadata: { type: "object" },
+        },
+        required: ["entryId", "authorName", "content"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        parentCommentId,
+        authorUserId,
+        authorName,
+        authorEmail,
+        content,
+        status,
+        metadata,
+      }: {
+        entryId: string;
+        parentCommentId?: string;
+        authorUserId?: string;
+        authorName: string;
+        authorEmail?: string;
+        content: string;
+        status?: "Pending" | "Approved" | "Spam";
+        metadata?: Record<string, unknown>;
+      }) {
+        if (!s.entries.some((entry) => entry.id === entryId))
+          throw Error("Entrada no encontrada");
+        if (authorUserId && !s.users.some((user) => user.id === authorUserId))
+          throw Error("Usuario autor no encontrado");
+        const parent = parentCommentId
+          ? s.comments.find((comment) => comment.id === parentCommentId)
+          : undefined;
+        if (parentCommentId && !parent)
+          throw Error("Comentario padre no encontrado");
+        if (parent && parent.entryId !== entryId)
+          throw Error("El comentario padre pertenece a otra entrada");
+        if (!content.trim()) throw Error("El comentario no puede estar vacío");
+        const now = new Date().toISOString();
+        const comment = {
+          id: "cmt_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          parentCommentId,
+          authorUserId,
+          authorName: authorName.trim(),
+          authorEmail: authorEmail?.trim(),
+          content: content.trim(),
+          status: status || "Pending",
+          metadata: metadata || {},
+          createdAt: now,
+          updatedAt: now,
+        };
+        s.setComments((all) => [comment, ...all]);
+        return { status: "created", comment, ui_effect: "comment_created" };
+      },
+    }),
+    defineTool({
+      stableKey: "comment.moderate_comment",
+      name: "moderate_comment",
+      title: "Moderar comentario",
+      description:
+        "Cambia el estado de moderación de un comentario entre Pending, Approved y Spam, dejando visible el resultado para el agente.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          commentId: { type: "string" },
+          status: { type: "string", enum: ["Pending", "Approved", "Spam"] },
+        },
+        required: ["commentId", "status"],
+        additionalProperties: false,
+      },
+      async execute({
+        commentId,
+        status,
+      }: {
+        commentId: string;
+        status: "Pending" | "Approved" | "Spam";
+      }) {
+        const current = s.comments.find((comment) => comment.id === commentId);
+        if (!current) throw Error("Comentario no encontrado");
+        const comment = {
+          ...current,
+          status,
+          updatedAt: new Date().toISOString(),
+        };
+        s.setComments((all) =>
+          all.map((item) => (item.id === commentId ? comment : item)),
+        );
+        return { status: "updated", comment, ui_effect: "comment_moderated" };
+      },
+    }),
+    defineTool({
+      stableKey: "comment.delete_comment",
+      name: "delete_comment",
+      title: "Eliminar comentario",
+      description:
+        "Prepara o elimina un comentario moderado; requiere confirm:true porque borra contenido persistido.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          commentId: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["commentId"],
+        additionalProperties: false,
+      },
+      async execute({
+        commentId,
+        confirm,
+      }: {
+        commentId: string;
+        confirm?: boolean;
+      }) {
+        const comment = s.comments.find((item) => item.id === commentId);
+        if (!comment) throw Error("Comentario no encontrado");
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            commentId,
+            content: comment.content,
+            note: "Repite con confirm:true para eliminar este comentario",
+          };
+        s.setComments((all) => all.filter((item) => item.id !== commentId));
+        return { status: "deleted", commentId, ui_effect: "comment_deleted" };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.validate_content_model",
+      name: "validate_content_model",
+      title: "Validar modelo",
+      description:
+        "Ejecuta un preflight de integridad sobre tipos, taxonomías, términos jerárquicos, relaciones, conexiones y asignaciones de términos.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      async execute() {
+        const errors: string[] = [];
+        const slugs = new Set<string>();
+        for (const type of s.contentTypes) {
+          if (!type.name || !type.slug) errors.push("Tipo sin nombre o slug");
+          if (slugs.has(type.slug))
+            errors.push("Slug de tipo duplicado: " + type.slug);
+          slugs.add(type.slug);
+          if (new Set(type.fields).size !== type.fields.length)
+            errors.push("Campos duplicados en " + type.slug);
+        }
+        for (const taxonomy of s.taxonomies) {
+          if (slugs.has(taxonomy.slug))
+            errors.push(
+              "Slug duplicado entre tipo y taxonomía: " + taxonomy.slug,
+            );
+          slugs.add(taxonomy.slug);
+          const termSlugs = new Set<string>();
+          for (const term of taxonomy.terms) {
+            if (termSlugs.has(term.slug))
+              errors.push(
+                "Término duplicado en " + taxonomy.slug + ": " + term.slug,
+              );
+            termSlugs.add(term.slug);
+            if (
+              term.parent &&
+              !taxonomy.terms.some((parent) => parent.id === term.parent)
+            )
+              errors.push("Padre inexistente para " + term.slug);
+          }
+        }
+        for (const relation of s.relations) {
+          if (
+            !s.contentTypes.some(
+              (type) =>
+                type.name === relation.fromType ||
+                type.slug === relation.fromType,
+            )
+          )
+            errors.push("Origen inexistente en relación " + relation.slug);
+          if (
+            !s.contentTypes.some(
+              (type) =>
+                type.name === relation.toType || type.slug === relation.toType,
+            )
+          )
+            errors.push("Destino inexistente en relación " + relation.slug);
+        }
+        for (const connection of s.connections) {
+          const relation = s.relations.find(
+            (item) => item.id === connection.relation,
+          );
+          const from = s.entries.find(
+            (entry) => entry.id === connection.fromEntryId,
+          );
+          const to = s.entries.find(
+            (entry) => entry.id === connection.toEntryId,
+          );
+          if (!relation)
+            errors.push("Relación inexistente en conexión " + connection.id);
+          if (!from || !to)
+            errors.push("Entrada inexistente en conexión " + connection.id);
+          if (relation && from && to) {
+            const fromType = s.contentTypes.find(
+              (type) =>
+                type.name === relation.fromType ||
+                type.slug === relation.fromType,
+            );
+            const toType = s.contentTypes.find(
+              (type) =>
+                type.name === relation.toType || type.slug === relation.toType,
+            );
+            if (
+              (from.type !== relation.fromType &&
+                from.type !== fromType?.name) ||
+              (to.type !== relation.toType && to.type !== toType?.name)
+            )
+              errors.push("Tipos incompatibles en conexión " + connection.id);
+          }
+        }
+        for (const relation of s.relations.filter(
+          (item) => item.cardinality === "one",
+        )) {
+          const origins = new Set(
+            s.connections
+              .filter((connection) => connection.relation === relation.id)
+              .map((connection) => connection.fromEntryId),
+          );
+          for (const origin of origins)
+            if (
+              s.connections.filter(
+                (connection) =>
+                  connection.relation === relation.id &&
+                  connection.fromEntryId === origin,
+              ).length > 1
+            )
+              errors.push(
+                "Cardinalidad one excedida en " +
+                  relation.slug +
+                  " para " +
+                  origin,
+              );
+        }
+        for (const assignment of s.termAssignments) {
+          const taxonomy = s.taxonomies.find(
+            (item) => item.slug === assignment.taxonomy,
+          );
+          if (!taxonomy)
+            errors.push(
+              "Taxonomía inexistente en asignación de " + assignment.entryId,
+            );
+          if (!s.entries.some((entry) => entry.id === assignment.entryId))
+            errors.push(
+              "Entrada inexistente en asignación de " + assignment.entryId,
+            );
+          if (taxonomy)
+            for (const termId of assignment.termIds)
+              if (!taxonomy.terms.some((term) => term.id === termId))
+                errors.push(
+                  "Término inexistente en asignación de " +
+                    assignment.entryId +
+                    ": " +
+                    termId,
+                );
+        }
+        return {
+          valid: errors.length === 0,
+          errors,
+          checked: {
+            contentTypes: s.contentTypes.length,
+            taxonomies: s.taxonomies.length,
+            relations: s.relations.length,
+            connections: s.connections.length,
+            termAssignments: s.termAssignments.length,
+          },
+          ui_effect: "model_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.export_content_model",
+      name: "export_content_model",
+      title: "Exportar modelo",
+      description:
+        "Exporta tipos, usuarios, roles, plugins, medios, entradas, taxonomías, términos, relaciones, conexiones, asignaciones, revisiones, comentarios y menús en un paquete portable versionado.",
+      inputSchema: {
+        type: "object",
+        properties: { includeEntries: { type: "boolean" } },
+        additionalProperties: false,
+      },
+      async execute({ includeEntries }: { includeEntries?: boolean }) {
+        const withEntries = includeEntries !== false;
+        return {
+          version: 6,
+          exportedAt: new Date().toISOString(),
+          contentTypes: s.contentTypes,
+          users: s.users,
+          roles: s.roles,
+          plugins: s.plugins,
+          media: s.media,
+          comments: s.comments,
+          menus: s.menus,
+          taxonomies: s.taxonomies,
+          relations: s.relations,
+          connections: withEntries ? s.connections : [],
+          termAssignments: withEntries ? s.termAssignments : [],
+          revisions: withEntries ? s.revisions : [],
+          entries: withEntries ? s.entries : [],
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.import_content_model",
+      name: "import_content_model",
+      title: "Importar modelo",
+      description:
+        "Prepara o restaura un paquete de modelo previamente exportado, incluidos usuarios, roles, plugins, medios, comentarios y menús si están presentes. Requiere confirm:true para reemplazar el estado actual.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          model: { type: "object" },
+          includeEntries: { type: "boolean" },
+          confirm: { type: "boolean" },
+        },
+        required: ["model"],
+        additionalProperties: false,
+      },
+      async execute({
+        model,
+        includeEntries,
+        confirm,
+      }: {
+        model: {
+          contentTypes?: ContentType[];
+          users?: User[];
+          roles?: Role[];
+          plugins?: Plugin[];
+          media?: MediaAsset[];
+          comments?: Comment[];
+          menus?: Menu[];
+          taxonomies?: Taxonomy[];
+          relations?: Relation[];
+          connections?: Connection[];
+          termAssignments?: TermAssignment[];
+          revisions?: Revision[];
+          entries?: Entry[];
+        };
+        includeEntries?: boolean;
+        confirm?: boolean;
+      }) {
+        if (
+          !Array.isArray(model.contentTypes) ||
+          !Array.isArray(model.taxonomies) ||
+          !Array.isArray(model.relations)
+        )
+          throw Error("Paquete de modelo incompleto");
+        const impact = {
+          contentTypes: model.contentTypes.length,
+          users: model.users?.length || 0,
+          roles: model.roles?.length || 0,
+          plugins: model.plugins?.length || 0,
+          media: model.media?.length || 0,
+          comments: model.comments?.length || 0,
+          menus: model.menus?.length || 0,
+          taxonomies: model.taxonomies.length,
+          relations: model.relations.length,
+          connections: model.connections?.length || 0,
+          termAssignments: model.termAssignments?.length || 0,
+          revisions: model.revisions?.length || 0,
+          entries: model.entries?.length || 0,
+        };
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            impact,
+            note: "Repite con confirm:true para reemplazar el modelo",
+          };
+        s.setContentTypes(model.contentTypes);
+        if (Array.isArray(model.users)) s.setUsers(model.users);
+        if (Array.isArray(model.roles)) s.setRoles(model.roles);
+        if (Array.isArray(model.plugins)) s.setPlugins(model.plugins);
+        if (Array.isArray(model.media)) s.setMedia(model.media);
+        if (Array.isArray(model.comments)) s.setComments(model.comments);
+        if (Array.isArray(model.menus)) s.setMenus(model.menus);
+        s.setTaxonomies(model.taxonomies);
+        s.setRelations(model.relations);
+        if (includeEntries !== false && Array.isArray(model.entries))
+          s.setEntries(model.entries);
+        if (includeEntries !== false && Array.isArray(model.connections))
+          s.setConnections(model.connections);
+        if (includeEntries !== false && Array.isArray(model.termAssignments))
+          s.setTermAssignments(model.termAssignments);
+        if (includeEntries !== false && Array.isArray(model.revisions))
+          s.setRevisions(model.revisions);
+        return { status: "imported", ...impact, ui_effect: "model_imported" };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.create_taxonomy",
+      name: "create_taxonomy",
+      title: "Crear taxonomía",
+      description:
+        "Crea una taxonomía para clasificar entradas. Puede ser jerárquica para soportar términos padre e hijo.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          slug: { type: "string" },
+          hierarchical: { type: "boolean" },
+        },
+        required: ["name", "slug"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        slug,
+        hierarchical,
+      }: {
+        name: string;
+        slug: string;
+        hierarchical?: boolean;
+      }) {
+        const normalizedSlug = slug.trim().toLowerCase();
+        if (!normalizedSlug || !/^[a-z0-9-]+$/.test(normalizedSlug))
+          throw Error("El slug debe usar letras minúsculas, números o guiones");
+        if (
+          findTaxonomy(normalizedSlug) ||
+          s.contentTypes.some((type) => type.slug === normalizedSlug)
+        )
+          throw Error("El slug ya existe en el modelo");
+        if (!name.trim()) throw Error("El nombre es obligatorio");
+        const next = {
+          name: name.trim(),
+          slug: normalizedSlug,
+          hierarchical: Boolean(hierarchical),
+          terms: [],
+        };
+        s.setTaxonomies((current) => [...current, next]);
+        return {
+          status: "created",
+          name: next.name,
+          slug: normalizedSlug,
+          hierarchical: next.hierarchical,
+          ui_effect: "taxonomy_created",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.list_taxonomies",
+      name: "list_taxonomies",
+      title: "Listar taxonomías",
+      description:
+        "Devuelve el registro completo de taxonomías y términos disponible para el agente.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      async execute() {
+        return { taxonomies: s.taxonomies, count: s.taxonomies.length };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.update_taxonomy",
+      name: "update_taxonomy",
+      title: "Actualizar taxonomía",
+      description:
+        "Actualiza el nombre, slug o modo jerárquico de una taxonomía sin perder sus términos.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          name: { type: "string" },
+          slug: { type: "string" },
+          hierarchical: { type: "boolean" },
+        },
+        required: ["taxonomy"],
+        additionalProperties: false,
+      },
+      async execute({
+        taxonomy,
+        name,
+        slug,
+        hierarchical,
+      }: {
+        taxonomy: string;
+        name?: string;
+        slug?: string;
+        hierarchical?: boolean;
+      }) {
+        const current = findTaxonomy(taxonomy);
+        if (!current) throw Error("Taxonomía no encontrada");
+        const nextSlug = slug?.trim().toLowerCase() || current.slug;
+        if (!/^[a-z0-9-]+$/.test(nextSlug))
+          throw Error("El slug debe usar letras minúsculas, números o guiones");
+        if (
+          nextSlug !== current.slug &&
+          (s.taxonomies.some((item) => item.slug === nextSlug) ||
+            s.contentTypes.some((item) => item.slug === nextSlug))
+        )
+          throw Error("El slug ya existe en el modelo");
+        const updated = {
+          ...current,
+          name: name?.trim() || current.name,
+          slug: nextSlug,
+          hierarchical:
+            hierarchical === undefined ? current.hierarchical : hierarchical,
+        };
+        s.setTaxonomies((all) =>
+          all.map((item) => (item.slug === current.slug ? updated : item)),
+        );
+        if (nextSlug !== current.slug)
+          s.setTermAssignments((all) =>
+            all.map((item) =>
+              item.taxonomy === current.slug
+                ? { ...item, taxonomy: nextSlug }
+                : item,
+            ),
+          );
+        return {
+          status: "updated",
+          taxonomy: updated,
+          ui_effect: "taxonomy_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.delete_taxonomy",
+      name: "delete_taxonomy",
+      title: "Eliminar taxonomía",
+      description:
+        "Prepara o elimina una taxonomía únicamente cuando no tiene términos ni asignaciones en entradas. Requiere confirm:true para ejecutar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["taxonomy"],
+        additionalProperties: false,
+      },
+      async execute({
+        taxonomy,
+        confirm,
+      }: {
+        taxonomy: string;
+        confirm?: boolean;
+      }) {
+        const current = findTaxonomy(taxonomy);
+        if (!current) throw Error("Taxonomía no encontrada");
+        if (current.terms.length)
+          throw Error("No puedes eliminar una taxonomía con términos");
+        const assignments = s.termAssignments.filter(
+          (item) => item.taxonomy === current.slug,
+        ).length;
+        if (assignments)
+          throw Error("No puedes eliminar una taxonomía con asignaciones");
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            taxonomy: current.slug,
+            note: "Repite con confirm:true para eliminar esta taxonomía",
+          };
+        s.setTaxonomies((all) =>
+          all.filter((item) => item.slug !== current.slug),
+        );
+        return {
+          status: "deleted",
+          taxonomy: current.slug,
+          ui_effect: "taxonomy_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.create_term",
+      name: "create_term",
+      title: "Crear término",
+      description:
+        "Crea un término dentro de una taxonomía existente, con soporte para jerarquías.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          name: { type: "string" },
+          slug: { type: "string" },
+          parent: { type: ["string", "null"] },
+          description: { type: "string" },
+        },
+        required: ["taxonomy", "name", "slug"],
+        additionalProperties: false,
+      },
+      async execute({
+        taxonomy,
+        name,
+        slug,
+        parent,
+        description,
+      }: {
+        taxonomy: string;
+        name: string;
+        slug: string;
+        parent?: string | null;
+        description?: string;
+      }) {
+        const model = findTaxonomy(taxonomy);
+        if (!model) throw Error("Taxonomía no encontrada");
+        const normalizedSlug = slug.trim().toLowerCase();
+        if (!name.trim() || !/^[a-z0-9-]+$/.test(normalizedSlug))
+          throw Error("Nombre o slug inválido");
+        if (model.terms.some((t) => t.slug === normalizedSlug))
+          throw Error("El término ya existe");
+        if (parent && !model.hierarchical)
+          throw Error("La taxonomía no admite términos padre");
+        if (
+          parent &&
+          !model.terms.some((t) => t.id === parent || t.slug === parent)
+        )
+          throw Error("Término padre no encontrado");
+        const term = {
+          id: "term_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          name: name.trim(),
+          slug: normalizedSlug,
+          parent: parent || null,
+          description,
+        };
+        s.setTaxonomies((current) =>
+          current.map((t) =>
+            t.slug === model.slug ? { ...t, terms: [...t.terms, term] } : t,
+          ),
+        );
+        return {
+          status: "created",
+          taxonomy: model.slug,
+          term,
+          ui_effect: "term_created",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.list_terms",
+      name: "list_taxonomy_terms",
+      title: "Listar términos",
+      description:
+        "Lista términos de una taxonomía para que el agente pueda navegar categorías, etiquetas y jerarquías. Permite buscar por nombre o limitar la rama a un padre.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          query: { type: "string" },
+          parent: { type: ["string", "null"] },
+        },
+        required: ["taxonomy"],
+        additionalProperties: false,
+      },
+      async execute({
+        taxonomy,
+        query,
+        parent,
+      }: {
+        taxonomy: string;
+        query?: string;
+        parent?: string | null;
+      }) {
+        const model = findTaxonomy(taxonomy);
+        if (!model) throw Error("Taxonomía no encontrada");
+        const parentId =
+          parent === undefined
+            ? undefined
+            : parent === null
+              ? null
+              : model.terms.find(
+                  (term) => term.id === parent || term.slug === parent,
+                )?.id;
+        if (parent !== undefined && parentId === undefined)
+          throw Error("Término padre no encontrado");
+        const needle = query?.toLowerCase();
+        const terms = model.terms.filter(
+          (term) =>
+            (parentId === undefined || term.parent === parentId) &&
+            (!needle || JSON.stringify(term).toLowerCase().includes(needle)),
+        );
+        return {
+          taxonomy: model.name,
+          slug: model.slug,
+          hierarchical: model.hierarchical,
+          terms,
+          count: terms.length,
+          note: terms.length ? "" : "No hay términos que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.update_term",
+      name: "update_term",
+      title: "Actualizar término",
+      description:
+        "Actualiza nombre, slug, descripción o término padre sin romper la jerarquía.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          term: { type: "string" },
+          name: { type: "string" },
+          slug: { type: "string" },
+          parent: { type: ["string", "null"] },
+          description: { type: "string" },
+        },
+        required: ["taxonomy", "term"],
+        additionalProperties: false,
+      },
+      async execute({
+        taxonomy,
+        term,
+        name,
+        slug,
+        parent,
+        description,
+      }: {
+        taxonomy: string;
+        term: string;
+        name?: string;
+        slug?: string;
+        parent?: string | null;
+        description?: string;
+      }) {
+        const model = findTaxonomy(taxonomy);
+        if (!model) throw Error("Taxonomía no encontrada");
+        const current = model.terms.find(
+          (t) => t.id === term || t.slug === term,
+        );
+        if (!current) throw Error("Término no encontrado");
+        if (parent === current.id)
+          throw Error("Un término no puede ser su propio padre");
+        if (parent && !model.hierarchical)
+          throw Error("La taxonomía no admite términos padre");
+        if (
+          parent &&
+          parent !== current.id &&
+          !model.terms.some((t) => t.id === parent || t.slug === parent)
+        )
+          throw Error("Término padre no encontrado");
+        const parentId = parent === undefined ? current.parent : parent;
+        let cursor = parentId;
+        while (cursor) {
+          if (cursor === current.id)
+            throw Error("La actualización crearía un ciclo");
+          cursor =
+            model.terms.find(
+              (item) => item.id === cursor || item.slug === cursor,
+            )?.parent || null;
+        }
+        const nextSlug = slug?.trim().toLowerCase() || current.slug;
+        if (!/^[a-z0-9-]+$/.test(nextSlug)) throw Error("Slug inválido");
+        if (model.terms.some((t) => t.id !== current.id && t.slug === nextSlug))
+          throw Error("El slug ya existe");
+        const updated = {
+          ...current,
+          name: name?.trim() || current.name,
+          slug: nextSlug,
+          parent: parentId,
+          description:
+            description === undefined ? current.description : description,
+        };
+        s.setTaxonomies((all) =>
+          all.map((t) =>
+            t.slug === model.slug
+              ? {
+                  ...t,
+                  terms: t.terms.map((item) =>
+                    item.id === current.id ? updated : item,
+                  ),
+                }
+              : t,
+          ),
+        );
+        return {
+          status: "updated",
+          taxonomy: model.slug,
+          term: updated,
+          ui_effect: "term_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.delete_term",
+      name: "delete_term",
+      title: "Eliminar término",
+      description:
+        "Prepara o elimina un término solo si no tiene términos hijos ni está asignado a entradas. Requiere confirm:true para ejecutar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          term: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["taxonomy", "term"],
+        additionalProperties: false,
+      },
+      async execute({
+        taxonomy,
+        term,
+        confirm,
+      }: {
+        taxonomy: string;
+        term: string;
+        confirm?: boolean;
+      }) {
+        const model = findTaxonomy(taxonomy);
+        if (!model) throw Error("Taxonomía no encontrada");
+        const current = model.terms.find(
+          (t) => t.id === term || t.slug === term,
+        );
+        if (!current) throw Error("Término no encontrado");
+        if (model.terms.some((t) => t.parent === current.id))
+          throw Error("No puedes eliminar un término con hijos");
+        if (
+          s.termAssignments.some(
+            (item) =>
+              item.taxonomy === model.slug && item.termIds.includes(current.id),
+          )
+        )
+          throw Error("No puedes eliminar un término asignado a entradas");
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            taxonomy: model.slug,
+            term: current.slug,
+            note: "Repite con confirm:true para eliminar este término",
+          };
+        s.setTaxonomies((all) =>
+          all.map((t) =>
+            t.slug === model.slug
+              ? {
+                  ...t,
+                  terms: t.terms.filter((item) => item.id !== current.id),
+                }
+              : t,
+          ),
+        );
+        return {
+          status: "deleted",
+          taxonomy: model.slug,
+          term: current.slug,
+          ui_effect: "term_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.set_entry_terms",
+      name: "set_entry_terms",
+      title: "Asignar términos",
+      description:
+        "Reemplaza la asignación estructurada de términos de una entrada dentro de una taxonomía, crea una revisión y actualiza su etiqueta visible. Una lista vacía elimina la asignación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          taxonomy: { type: "string" },
+          terms: { type: "array", items: { type: "string" } },
+        },
+        required: ["entryId", "taxonomy", "terms"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        taxonomy,
+        terms,
+      }: {
+        entryId: string;
+        taxonomy: string;
+        terms: string[];
+      }) {
+        const model = findTaxonomy(taxonomy);
+        if (!model) throw Error("Taxonomía no encontrada");
+        const resolved = terms.map((value) =>
+          model.terms.find(
+            (t) => t.id === value || t.slug === value || t.name === value,
+          ),
+        );
+        if (resolved.some((t) => !t))
+          throw Error("Uno o más términos no existen");
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const assignment = resolved.length
+          ? {
+              entryId,
+              taxonomy: model.slug,
+              termIds: resolved.map((t) => t!.id),
+              updatedAt: new Date().toISOString(),
+            }
+          : null;
+        s.setTermAssignments((all) => [
+          ...all.filter(
+            (item) =>
+              !(item.entryId === entryId && item.taxonomy === model.slug),
+          ),
+          ...(assignment ? [assignment] : []),
+        ]);
+        const label =
+          model.name + ": " + resolved.map((t) => t!.name).join(", ");
+        const visibleRelations = entry.relation
+          .split(" · ")
+          .filter(
+            (part) =>
+              part !== "No relations yet" && !part.startsWith(model.name + ":"),
+          );
+        const updatedLabel = resolved.length
+          ? [...visibleRelations, label].join(" · ")
+          : visibleRelations.join(" · ") || "No relations yet";
+        const updated = {
+          ...entry,
+          relation: updatedLabel,
+          updated: "Just now",
+        };
+        s.setEntries((all) => all.map((e) => (e.id === entryId ? updated : e)));
+        const revision = {
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          createdAt: new Date().toISOString(),
+          action: "terms_update",
+          before: entry,
+          after: updated,
+        };
+        s.setRevisions((all) => [...all, revision]);
+        return {
+          entryId,
+          taxonomy: model.slug,
+          terms: resolved.map((t) => t!.slug),
+          assignment,
+          revisionId: revision.id,
+          ui_effect: "terms_assigned",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.get_entry_terms",
+      name: "get_entry_terms",
+      title: "Leer términos de entrada",
+      description:
+        "Devuelve las asignaciones estructuradas de términos de una entrada, con sus nombres y slugs.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          taxonomy: { type: "string" },
+        },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        taxonomy,
+      }: {
+        entryId: string;
+        taxonomy?: string;
+      }) {
+        if (!s.entries.some((e) => e.id === entryId))
+          throw Error("Entrada no encontrada");
+        const assignments = s.termAssignments
+          .filter(
+            (item) =>
+              item.entryId === entryId &&
+              (!taxonomy || item.taxonomy === taxonomy),
+          )
+          .map((item) => ({
+            ...item,
+            taxonomyData: findTaxonomy(item.taxonomy),
+            terms: item.termIds
+              .map((id) =>
+                findTaxonomy(item.taxonomy)?.terms.find(
+                  (term) => term.id === id,
+                ),
+              )
+              .filter(Boolean),
+          }));
+        return {
+          entryId,
+          assignments,
+          count: assignments.length,
+          note: assignments.length
+            ? ""
+            : "La entrada no tiene términos asignados",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.create_relation",
+      name: "create_relation",
+      title: "Crear relación",
+      description:
+        "Define una relación entre dos tipos de contenido con cardinalidad uno o muchos.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          slug: { type: "string" },
+          fromType: { type: "string" },
+          toType: { type: "string" },
+          cardinality: { type: "string", enum: ["one", "many"] },
+        },
+        required: ["name", "slug", "fromType", "toType"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        slug,
+        fromType,
+        toType,
+        cardinality,
+      }: {
+        name: string;
+        slug: string;
+        fromType: string;
+        toType: string;
+        cardinality?: "one" | "many";
+      }) {
+        const normalized = slug.trim().toLowerCase();
+        if (!name.trim() || !/^[a-z0-9-]+$/.test(normalized))
+          throw Error("Nombre o slug inválido");
+        if (
+          s.relations.some((r) => r.slug === normalized) ||
+          s.contentTypes.some((t) => t.slug === normalized) ||
+          s.taxonomies.some((t) => t.slug === normalized)
+        )
+          throw Error("El slug ya existe en el modelo");
+        if (
+          !s.contentTypes.some(
+            (t) => t.name === fromType || t.slug === fromType,
+          ) ||
+          !s.contentTypes.some((t) => t.name === toType || t.slug === toType)
+        )
+          throw Error("Tipo de contenido no encontrado");
+        const next = {
+          id: "rel_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          name: name.trim(),
+          slug: normalized,
+          fromType,
+          toType,
+          cardinality: cardinality || "many",
+        };
+        s.setRelations((all) => [...all, next]);
+        return {
+          status: "created",
+          relation: next,
+          ui_effect: "relation_created",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.update_relation",
+      name: "update_relation",
+      title: "Actualizar relación",
+      description:
+        "Actualiza una relación existente y conserva sus conexiones. La cardinalidad one solo se permite si no hay múltiples destinos por origen.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          relation: { type: "string" },
+          name: { type: "string" },
+          slug: { type: "string" },
+          cardinality: { type: "string", enum: ["one", "many"] },
+        },
+        required: ["relation"],
+        additionalProperties: false,
+      },
+      async execute({
+        relation,
+        name,
+        slug,
+        cardinality,
+      }: {
+        relation: string;
+        name?: string;
+        slug?: string;
+        cardinality?: "one" | "many";
+      }) {
+        const current = s.relations.find(
+          (item) =>
+            item.id === relation ||
+            item.slug === relation ||
+            item.name === relation,
+        );
+        if (!current) throw Error("Relación no encontrada");
+        const nextSlug = slug?.trim().toLowerCase() || current.slug;
+        if (!/^[a-z0-9-]+$/.test(nextSlug))
+          throw Error("El slug debe usar letras minúsculas, números o guiones");
+        if (
+          nextSlug !== current.slug &&
+          s.relations.some(
+            (item) => item.id !== current.id && item.slug === nextSlug,
+          )
+        )
+          throw Error("El slug ya existe");
+        if (
+          cardinality === "one" &&
+          s.connections.some(
+            (connection) =>
+              connection.relation === current.id &&
+              s.connections.filter(
+                (item) =>
+                  item.relation === current.id &&
+                  item.fromEntryId === connection.fromEntryId,
+              ).length > 1,
+          )
+        )
+          throw Error(
+            "No puedes cambiar a cardinalidad one con conexiones múltiples",
+          );
+        const updated = {
+          ...current,
+          name: name?.trim() || current.name,
+          slug: nextSlug,
+          cardinality: cardinality || current.cardinality,
+        };
+        s.setRelations((all) =>
+          all.map((item) => (item.id === current.id ? updated : item)),
+        );
+        return {
+          status: "updated",
+          relation: updated,
+          ui_effect: "relation_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.delete_relation",
+      name: "delete_relation",
+      title: "Eliminar relación",
+      description:
+        "Prepara o elimina una relación únicamente cuando no tiene conexiones activas. Requiere confirm:true para ejecutar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          relation: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["relation"],
+        additionalProperties: false,
+      },
+      async execute({
+        relation,
+        confirm,
+      }: {
+        relation: string;
+        confirm?: boolean;
+      }) {
+        const current = s.relations.find(
+          (item) =>
+            item.id === relation ||
+            item.slug === relation ||
+            item.name === relation,
+        );
+        if (!current) throw Error("Relación no encontrada");
+        const connections = s.connections.filter(
+          (item) => item.relation === current.id,
+        ).length;
+        if (connections)
+          throw Error(
+            "No puedes eliminar " +
+              current.name +
+              " porque tiene " +
+              connections +
+              " conexiones",
+          );
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            relation: current.slug,
+            note: "Repite con confirm:true para eliminar esta relación",
+          };
+        s.setRelations((all) => all.filter((item) => item.id !== current.id));
+        return {
+          status: "deleted",
+          relation: current.slug,
+          ui_effect: "relation_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.list_relations",
+      name: "list_relations",
+      title: "Listar relaciones",
+      description:
+        "Devuelve todas las relaciones definidas en el modelo de contenido con su uso actual.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      async execute() {
+        const relations = s.relations.map((relation) => ({
+          ...relation,
+          connectionCount: s.connections.filter(
+            (connection) => connection.relation === relation.id,
+          ).length,
+        }));
+        return {
+          relations,
+          count: relations.length,
+          totalConnections: s.connections.length,
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.connect_entries",
+      name: "connect_entries",
+      title: "Conectar entradas",
+      description:
+        "Conecta entradas con una relación definida, persiste cada arista y respeta la cardinalidad configurada.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          relation: { type: "string" },
+          fromEntryId: { type: "string" },
+          toEntryIds: { type: "array", items: { type: "string" } },
+        },
+        required: ["relation", "fromEntryId", "toEntryIds"],
+        additionalProperties: false,
+      },
+      async execute({
+        relation,
+        fromEntryId,
+        toEntryIds,
+      }: {
+        relation: string;
+        fromEntryId: string;
+        toEntryIds: string[];
+      }) {
+        const model = s.relations.find(
+          (r) =>
+            r.id === relation || r.slug === relation || r.name === relation,
+        );
+        if (!model) throw Error("Relación no encontrada");
+        const from = s.entries.find((e) => e.id === fromEntryId);
+        const targets = toEntryIds.map((id) =>
+          s.entries.find((e) => e.id === id),
+        );
+        if (!from || targets.some((e) => !e))
+          throw Error("Entrada origen o destino no encontrada");
+        if (!targets.length) throw Error("Debes indicar al menos un destino");
+        if (
+          !targets.every((e) => e!.type === model.toType) &&
+          !targets.every(
+            (e) =>
+              e!.type ===
+              s.contentTypes.find((t) => t.slug === model.toType)?.name,
+          )
+        )
+          throw Error("El destino no coincide con el tipo de la relación");
+        if (
+          from.type !== model.fromType &&
+          from.type !==
+            s.contentTypes.find((t) => t.slug === model.fromType)?.name
+        )
+          throw Error("El origen no coincide con el tipo de la relación");
+        if (model.cardinality === "one" && toEntryIds.length > 1)
+          throw Error("La relación admite un solo destino");
+        const next = toEntryIds
+          .filter(
+            (toEntryId) =>
+              !s.connections.some(
+                (c) =>
+                  c.relation === model.id &&
+                  c.fromEntryId === fromEntryId &&
+                  c.toEntryId === toEntryId,
+              ),
+          )
+          .map((toEntryId) => ({
+            id: "conn_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+            relation: model.id,
+            fromEntryId,
+            toEntryId,
+            createdAt: new Date().toISOString(),
+          }));
+        s.setConnections((all) =>
+          model.cardinality === "one"
+            ? all
+                .filter(
+                  (c) =>
+                    !(c.relation === model.id && c.fromEntryId === fromEntryId),
+                )
+                .concat(next)
+            : all.concat(next),
+        );
+        const targetLabel =
+          model.name + ": " + targets.map((e) => e!.title).join(", ");
+        s.setEntries((all) =>
+          all.map((e) =>
+            e.id === fromEntryId
+              ? {
+                  ...e,
+                  relation:
+                    e.relation === "No relations yet"
+                      ? targetLabel
+                      : e.relation + " · " + targetLabel,
+                  updated: "Just now",
+                }
+              : e,
+          ),
+        );
+        return {
+          status: "connected",
+          relation: model.slug,
+          fromEntryId,
+          toEntryIds: next.map((c) => c.toEntryId),
+          connections: next,
+          ui_effect: "entries_connected",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.disconnect_entries",
+      name: "disconnect_entries",
+      title: "Desconectar entradas",
+      description:
+        "Prepara o elimina conexiones específicas. Requiere confirm:true para modificar el grafo y devuelve la lista afectada antes de ejecutar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          relation: { type: "string" },
+          fromEntryId: { type: "string" },
+          toEntryIds: { type: "array", items: { type: "string" } },
+          confirm: { type: "boolean" },
+        },
+        required: ["relation", "fromEntryId", "toEntryIds"],
+        additionalProperties: false,
+      },
+      async execute({
+        relation,
+        fromEntryId,
+        toEntryIds,
+        confirm,
+      }: {
+        relation: string;
+        fromEntryId: string;
+        toEntryIds: string[];
+        confirm?: boolean;
+      }) {
+        const model = s.relations.find(
+          (r) =>
+            r.id === relation || r.slug === relation || r.name === relation,
+        );
+        if (!model) throw Error("Relación no encontrada");
+        const selected = s.connections.filter(
+          (connection) =>
+            connection.relation === model.id &&
+            connection.fromEntryId === fromEntryId &&
+            toEntryIds.includes(connection.toEntryId),
+        );
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            relation: model.slug,
+            fromEntryId,
+            toEntryIds: selected.map((connection) => connection.toEntryId),
+            count: selected.length,
+            note: "Repite con confirm:true para eliminar estas conexiones",
+          };
+        const remaining = s.connections.filter(
+          (connection) =>
+            !(
+              connection.relation === model.id &&
+              connection.fromEntryId === fromEntryId &&
+              toEntryIds.includes(connection.toEntryId)
+            ),
+        );
+        s.setConnections(remaining);
+        const remainingTargets = remaining
+          .filter(
+            (connection) =>
+              connection.relation === model.id &&
+              connection.fromEntryId === fromEntryId,
+          )
+          .map(
+            (connection) =>
+              s.entries.find((entry) => entry.id === connection.toEntryId)
+                ?.title,
+          )
+          .filter(Boolean);
+        const source = s.entries.find((entry) => entry.id === fromEntryId);
+        if (source) {
+          const visibleRelations = source.relation
+            .split(" · ")
+            .filter(
+              (part) =>
+                part !== "No relations yet" &&
+                !part.startsWith(model.name + ":"),
+            );
+          const updatedLabel = remainingTargets.length
+            ? [
+                ...visibleRelations,
+                model.name + ": " + remainingTargets.join(", "),
+              ].join(" · ")
+            : visibleRelations.join(" · ") || "No relations yet";
+          s.setEntries((all) =>
+            all.map((entry) =>
+              entry.id === fromEntryId
+                ? { ...entry, relation: updatedLabel, updated: "Just now" }
+                : entry,
+            ),
+          );
+        }
+        return {
+          status: "disconnected",
+          relation: model.slug,
+          fromEntryId,
+          toEntryIds: selected.map((connection) => connection.toEntryId),
+          count: selected.length,
+          ui_effect: "entries_disconnected",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.list_connections",
+      name: "list_relation_connections",
+      title: "Listar conexiones",
+      description:
+        "Devuelve las conexiones estructuradas de una relación o entrada, incluyendo títulos y tipos para navegar el grafo.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          relation: { type: "string" },
+          entryId: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+      async execute({
+        relation,
+        entryId,
+      }: {
+        relation?: string;
+        entryId?: string;
+      }) {
+        const model = relation
+          ? s.relations.find(
+              (r) =>
+                r.id === relation || r.slug === relation || r.name === relation,
+            )
+          : undefined;
+        if (relation && !model) throw Error("Relación no encontrada");
+        const rows = s.connections
+          .filter(
+            (c) =>
+              (!model || c.relation === model.id) &&
+              (!entryId ||
+                c.fromEntryId === entryId ||
+                c.toEntryId === entryId),
+          )
+          .map((c) => ({
+            ...c,
+            relation:
+              model?.slug ||
+              s.relations.find((r) => r.id === c.relation)?.slug ||
+              c.relation,
+            from: s.entries.find((e) => e.id === c.fromEntryId),
+            to: s.entries.find((e) => e.id === c.toEntryId),
+          }));
+        return {
+          connections: rows,
+          count: rows.length,
+          note: rows.length ? "" : "No hay conexiones que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.create_content_type",
+      name: "create_content_type",
+      title: "Crear tipo de contenido",
+      description:
+        "Crea un nuevo tipo de entrada con campos tipados y campos obligatorios; queda disponible para futuras entradas y se refleja en el schema.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          slug: { type: "string" },
+          fields: { type: "array", items: { type: "string" } },
+          fieldTypes: { type: "object" },
+          requiredFields: { type: "array", items: { type: "string" } },
+        },
+        required: ["name", "slug"],
+        additionalProperties: false,
+      },
+      async execute({
+        name,
+        slug,
+        fields,
+        fieldTypes,
+        requiredFields,
+      }: {
+        name: string;
+        slug: string;
+        fields?: string[];
+        fieldTypes?: ContentType["fieldTypes"];
+        requiredFields?: string[];
+      }) {
+        const normalizedSlug = slug.trim().toLowerCase();
+        const nextFields = fields?.length ? fields : ["title"];
+        if (
+          !name.trim() ||
+          !normalizedSlug ||
+          !/^[a-z0-9-]+$/.test(normalizedSlug)
+        )
+          throw Error("Nombre o slug inválido");
+        if (
+          s.contentTypes.some((type) => type.slug === normalizedSlug) ||
+          s.taxonomies.some((taxonomy) => taxonomy.slug === normalizedSlug)
+        )
+          throw Error("El slug ya existe en el modelo");
+        if (new Set(nextFields).size !== nextFields.length)
+          throw Error("No puede haber campos duplicados");
+        if (requiredFields?.some((field) => !nextFields.includes(field)))
+          throw Error("Un campo obligatorio no existe en fields");
+        if (
+          fieldTypes &&
+          Object.keys(fieldTypes).some((field) => !nextFields.includes(field))
+        )
+          throw Error("Un campo tipado no existe en fields");
+        const type = s.createContentType(
+          name,
+          normalizedSlug,
+          nextFields,
+          fieldTypes,
+          requiredFields,
+        );
+        return {
+          status: "created",
+          contentType: type,
+          name: type.name,
+          slug: type.slug,
+          fields: type.fields,
+          fieldTypes: type.fieldTypes || {},
+          requiredFields: type.requiredFields || [],
+          ui_effect: "schema_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.update_content_type",
+      name: "update_content_type",
+      title: "Actualizar tipo de contenido",
+      description:
+        "Actualiza el nombre, slug o campos de un tipo existente y conserva sus entradas. No permite eliminar campos que todavía contienen datos.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          name: { type: "string" },
+          slug: { type: "string" },
+          fields: { type: "array", items: { type: "string" } },
+        },
+        required: ["type"],
+        additionalProperties: false,
+      },
+      async execute({
+        type,
+        name,
+        slug,
+        fields,
+      }: {
+        type: string;
+        name?: string;
+        slug?: string;
+        fields?: string[];
+      }) {
+        const current = s.contentTypes.find(
+          (t) => t.name === type || t.slug === type,
+        );
+        if (!current) throw Error("Tipo de contenido no encontrado");
+        const nextSlug = slug?.trim().toLowerCase() || current.slug;
+        if (!/^[a-z0-9-]+$/.test(nextSlug)) throw Error("Slug inválido");
+        if (
+          nextSlug !== current.slug &&
+          (s.contentTypes.some((item) => item.slug === nextSlug) ||
+            s.taxonomies.some((item) => item.slug === nextSlug))
+        )
+          throw Error("El slug ya existe en el modelo");
+        const nextFields = fields || current.fields;
+        if (new Set(nextFields).size !== nextFields.length)
+          throw Error("No puede haber campos duplicados");
+        const removed = current.fields.filter(
+          (field) => !nextFields.includes(field),
+        );
+        const populated = s.entries.filter(
+          (entry) =>
+            entry.type === current.name &&
+            removed.some(
+              (field) => entry.data && entry.data[field] !== undefined,
+            ),
+        );
+        if (populated.length)
+          throw Error(
+            "No puedes eliminar campos con datos existentes: " +
+              removed
+                .filter((field) =>
+                  populated.some(
+                    (entry) => entry.data && entry.data[field] !== undefined,
+                  ),
+                )
+                .join(", "),
+          );
+        const updated = {
+          ...current,
+          name: name?.trim() || current.name,
+          slug: nextSlug,
+          fields: nextFields,
+        };
+        s.setContentTypes((all) =>
+          all.map((item) => (item.slug === current.slug ? updated : item)),
+        );
+        return {
+          status: "updated",
+          contentType: updated,
+          ui_effect: "schema_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.delete_content_type",
+      name: "delete_content_type",
+      title: "Eliminar tipo de contenido",
+      description:
+        "Prepara o elimina un tipo solo cuando no tiene entradas ni relaciones asociadas. Requiere confirm:true para ejecutar.",
+      inputSchema: {
+        type: "object",
+        properties: { type: { type: "string" }, confirm: { type: "boolean" } },
+        required: ["type"],
+        additionalProperties: false,
+      },
+      async execute({ type, confirm }: { type: string; confirm?: boolean }) {
+        const current = s.contentTypes.find(
+          (t) => t.name === type || t.slug === type,
+        );
+        if (!current) throw Error("Tipo de contenido no encontrado");
+        const count = s.entries.filter((e) => e.type === current.name).length;
+        if (count)
+          throw Error(
+            "No puedes eliminar " +
+              current.name +
+              " porque tiene " +
+              count +
+              " entradas",
+          );
+        const related = s.relations.filter(
+          (relation) =>
+            relation.fromType === current.name ||
+            relation.fromType === current.slug ||
+            relation.toType === current.name ||
+            relation.toType === current.slug,
+        ).length;
+        if (related)
+          throw Error(
+            "No puedes eliminar " +
+              current.name +
+              " porque participa en " +
+              related +
+              " relaciones",
+          );
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            type: current.slug,
+            note: "Repite con confirm:true para eliminar este tipo",
+          };
+        s.setContentTypes((all) =>
+          all.filter((item) => item.slug !== current.slug),
+        );
+        return {
+          status: "deleted",
+          type: current.slug,
+          ui_effect: "schema_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.list_entries",
+      name: "list_content_entries",
+      title: "Listar entradas",
+      description:
+        "Devuelve entradas paginadas, filtradas opcionalmente por tipo, estado, texto, campos estructurados, metadatos o términos de taxonomía.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          status: { type: "string", enum: ["Published", "Draft"] },
+          query: { type: "string" },
+          taxonomy: { type: "string" },
+          terms: { type: "array", items: { type: "string" } },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+      async execute({
+        type,
+        status,
+        query,
+        taxonomy,
+        terms,
+        limit,
+        offset,
+      }: {
+        type?: string;
+        status?: "Published" | "Draft";
+        query?: string;
+        taxonomy?: string;
+        terms?: string[];
+        limit?: number;
+        offset?: number;
+      }) {
+        const requestedType = type
+          ? s.contentTypes.find(
+              (item) => item.name === type || item.slug === type,
+            )
+          : undefined;
+        const typeName = requestedType?.name || type;
+        const taxonomyModel = taxonomy ? findTaxonomy(taxonomy) : undefined;
+        if (taxonomy && !taxonomyModel) throw Error("Taxonomía no encontrada");
+        const requestedTerms = (terms || []).map(
+          (value) =>
+            taxonomyModel?.terms.find(
+              (item) =>
+                item.id === value || item.slug === value || item.name === value,
+            )?.id,
+        );
+        if (requestedTerms.some((value) => !value))
+          throw Error("Uno o más términos no existen");
+        const needle = query?.toLowerCase();
+        const matching = s.entries.filter((e) => {
+          const assignment = taxonomyModel
+            ? s.termAssignments.find(
+                (item) =>
+                  item.entryId === e.id && item.taxonomy === taxonomyModel.slug,
+              )
+            : undefined;
+          const hasTerms =
+            !requestedTerms?.length ||
+            Boolean(
+              assignment &&
+                requestedTerms.every((value) =>
+                  assignment.termIds.includes(value!),
+                ),
+            );
+          return (
+            (!typeName || e.type === typeName) &&
+            (!status || e.status === status) &&
+            hasTerms &&
+            (!needle ||
+              JSON.stringify({
+                title: e.title,
+                type: e.type,
+                relation: e.relation,
+                data: e.data || {},
+                metadata: e.metadata || {},
+              })
+                .toLowerCase()
+                .includes(needle))
+          );
+        });
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          entries: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "No hay entradas que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.get_entry",
+      name: "get_content_entry",
+      title: "Leer entrada",
+      description:
+        "Devuelve una entrada completa, incluidos metadatos, relaciones y estado editorial.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId }: { entryId: string }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        return { entry, ui_effect: "entry_opened" };
+      },
+    }),
+    defineTool({
+      stableKey: "content.get_entry_context",
+      name: "get_entry_context",
+      title: "Leer contexto de entrada",
+      description:
+        "Devuelve una entrada junto con términos, conexiones y revisiones para que el agente tenga todo el contexto editorial en una sola llamada.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          includeRevisions: { type: "boolean" },
+        },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        includeRevisions,
+      }: {
+        entryId: string;
+        includeRevisions?: boolean;
+      }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const assignments = s.termAssignments
+          .filter((item) => item.entryId === entryId)
+          .map((item) => ({
+            ...item,
+            taxonomyData: findTaxonomy(item.taxonomy),
+            terms: item.termIds
+              .map((id) =>
+                findTaxonomy(item.taxonomy)?.terms.find(
+                  (term) => term.id === id,
+                ),
+              )
+              .filter(Boolean),
+          }));
+        const connections = s.connections
+          .filter(
+            (item) =>
+              item.fromEntryId === entryId || item.toEntryId === entryId,
+          )
+          .map((item) => ({
+            ...item,
+            relationData: s.relations.find(
+              (relation) => relation.id === item.relation,
+            ),
+            from: s.entries.find(
+              (candidate) => candidate.id === item.fromEntryId,
+            ),
+            to: s.entries.find((candidate) => candidate.id === item.toEntryId),
+          }));
+        return {
+          entry,
+          terms: assignments,
+          connections,
+          revisions:
+            includeRevisions === false
+              ? []
+              : s.revisions.filter((item) => item.entryId === entryId),
+          counts: {
+            terms: assignments.length,
+            connections: connections.length,
+            revisions:
+              includeRevisions === false
+                ? 0
+                : s.revisions.filter((item) => item.entryId === entryId).length,
+          },
+          ui_effect: "entry_context_opened",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.duplicate_entry",
+      name: "duplicate_content_entry",
+      title: "Duplicar entrada",
+      description:
+        "Crea un borrador duplicado de una entrada existente, copiando metadatos y términos, pero dejando las relaciones para una conexión explícita.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" }, title: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId, title }: { entryId: string; title?: string }) {
+        const source = s.entries.find((e) => e.id === entryId);
+        if (!source) throw Error("Entrada no encontrada");
+        const copy = {
+          ...source,
+          id: "ent_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          title: title?.trim() || source.title + " — Copy",
+          status: "Draft" as const,
+          updated: "Just now",
+          metadata: { ...(source.metadata || {}) },
+          data: { ...(source.data || {}) },
+        };
+        s.setEntries((all) => [copy, ...all]);
+        const assignments = s.termAssignments
+          .filter((item) => item.entryId === entryId)
+          .map((item) => ({
+            ...item,
+            entryId: copy.id,
+            updatedAt: new Date().toISOString(),
+          }));
+        if (assignments.length)
+          s.setTermAssignments((all) => [...all, ...assignments]);
+        return {
+          status: "created",
+          sourceId: entryId,
+          entry: copy,
+          termAssignments: assignments,
+          connectionsCopied: 0,
+          ui_effect: "entry_duplicated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.upsert_entries",
+      name: "upsert_content_entries",
+      title: "Sincronizar entradas",
+      description:
+        "Crea o actualiza entradas en lote de forma idempotente. Valida tipos y campos estructurados antes de guardar; si una entrada incluye un id existente se actualiza y sin id se crea un draft.",
+      inputSchema: {
+        type: "object",
+        properties: { entries: { type: "array", items: { type: "object" } } },
+        required: ["entries"],
+        additionalProperties: false,
+      },
+      async execute({
+        entries,
+      }: {
+        entries: Array<
+          Partial<Entry> & { id?: string; title: string; type: string }
+        >;
+      }) {
+        const known = new Map(s.entries.map((e) => [e.id, e]));
+        const created: Entry[] = [];
+        const updated: Entry[] = [];
+        for (const input of entries) {
+          if (!input.title || !input.type)
+            throw Error("Cada entrada requiere title y type");
+          const requested = s.contentTypes.find(
+            (type) => type.name === input.type || type.slug === input.type,
+          );
+          if (!requested)
+            throw Error("Tipo de contenido no encontrado: " + input.type);
+          const current = input.id ? known.get(input.id) : undefined;
+          if (input.id && !current)
+            throw Error("Entrada no encontrada: " + input.id);
+          if (current && current.type !== requested.name)
+            throw Error("No puedes cambiar el tipo de una entrada existente");
+          const data = input.data || {};
+          const unknown = Object.keys(data).filter(
+            (key) => !requested.fields.includes(key),
+          );
+          if (unknown.length)
+            throw Error(
+              "Campos no definidos en el schema: " + unknown.join(", "),
+            );
+          if (current) {
+            updated.push({
+              ...current,
+              ...input,
+              type: current.type,
+              data: { ...(current.data || {}), ...data },
+              updated: "Just now",
+            } as Entry);
+          } else {
+            const next = {
+              id:
+                input.id ||
+                "ent_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+              title: input.title,
+              type: requested.name,
+              status: input.status || "Draft",
+              updated: "Just now",
+              relation: input.relation || "No relations yet",
+              metadata: input.metadata || {},
+              data,
+            };
+            created.push(next);
+          }
+        }
+        s.setEntries((all) => {
+          const changes = new Map(
+            [...updated, ...created].map((e) => [e.id, e]),
+          );
+          return all
+            .map((e) => changes.get(e.id) || e)
+            .concat(
+              created.filter(
+                (e) => !all.some((current) => current.id === e.id),
+              ),
+            );
+        });
+        return {
+          status: "synced",
+          created: created.map((e) => e.id),
+          updated: updated.map((e) => e.id),
+          ui_effect: "entries_upserted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.create_entry",
+      name: "create_content_entry",
+      title: "Crear entrada",
+      description:
+        "Crea un borrador usando cualquier tipo de contenido definido en el schema, validando campos tipados y obligatorios.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          type: { type: "string" },
+          data: { type: "object" },
+        },
+        required: ["title", "type"],
+        additionalProperties: false,
+      },
+      async execute({
+        title,
+        type,
+        data,
+      }: {
+        title: string;
+        type: string;
+        data?: Record<string, unknown>;
+      }) {
+        if (!s.contentTypes.some((t) => t.name === type || t.slug === type))
+          throw Error("Tipo de contenido no encontrado");
+        const resolved = s.contentTypes.find(
+          (t) => t.name === type || t.slug === type,
+        )!;
+        const values = data || {};
+        const unknown = Object.keys(values).filter(
+          (key) => !resolved.fields.includes(key),
+        );
+        if (unknown.length)
+          throw Error(
+            "Campos no definidos en el schema: " + unknown.join(", "),
+          );
+        const errors = validateData(resolved, values);
+        if (errors.length) throw Error(errors.join("; "));
+        const entry = s.createEntry(title, resolved.name, values);
+        return {
+          status: "created",
+          entryId: entry.id,
+          entry,
+          title,
+          type: resolved.name,
+          data: values,
+          ui_effect: "entry_created",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.get_fields",
+      name: "get_entry_fields",
+      title: "Leer campos",
+      description:
+        "Devuelve los valores estructurados de una entrada y los campos definidos por su tipo, incluidos tipos y obligatoriedad.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId }: { entryId: string }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const model = s.contentTypes.find((t) => t.name === entry.type);
+        return {
+          entryId,
+          type: entry.type,
+          schema: model?.fields || [],
+          fieldTypes: model?.fieldTypes || {},
+          requiredFields: model?.requiredFields || [],
+          data: entry.data || {},
+          ui_effect: "fields_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.set_field",
+      name: "set_entry_field",
+      title: "Escribir campo",
+      description:
+        "Actualiza un campo estructurado de una entrada validando que exista en el tipo y que su valor cumpla el tipo declarado.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          field: { type: "string" },
+          value: {},
+        },
+        required: ["entryId", "field", "value"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        field,
+        value,
+      }: {
+        entryId: string;
+        field: string;
+        value: unknown;
+      }) {
+        const entry = s.entries.find((item) => item.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const model = s.contentTypes.find((item) => item.name === entry.type);
+        if (!model || !model.fields.includes(field))
+          throw Error("Campo no definido en el schema: " + field);
+        const errors = validateData(model, {
+          ...(entry.data || {}),
+          [field]: value,
+        });
+        if (
+          errors.some((error) => error.includes("Valor inválido para " + field))
+        )
+          throw Error(
+            errors
+              .filter((error) => error.includes("Valor inválido para " + field))
+              .join("; "),
+          );
+        const updated = {
+          ...entry,
+          data: { ...(entry.data || {}), [field]: value },
+          updated: "Just now",
+        };
+        const revision = {
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          createdAt: new Date().toISOString(),
+          action: "field_update",
+          before: entry,
+          after: updated,
+        };
+        s.setEntries((all) =>
+          all.map((item) => (item.id === entryId ? updated : item)),
+        );
+        s.setRevisions((all) => [...all, revision]);
+        return {
+          status: "updated",
+          entryId,
+          field,
+          value,
+          revisionId: revision.id,
+          ui_effect: "entry_field_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.update_entry",
+      name: "update_content_entry",
+      title: "Actualizar entrada",
+      description:
+        "Actualiza campos editables y datos estructurados de una entrada, sin perder metadatos ni relaciones, y crea una revisión.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          title: { type: "string" },
+          status: { type: "string", enum: ["Published", "Draft"] },
+          relation: { type: "string" },
+          data: { type: "object" },
+        },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        title,
+        status,
+        relation,
+        data,
+      }: {
+        entryId: string;
+        title?: string;
+        status?: "Published" | "Draft";
+        relation?: string;
+        data?: Record<string, unknown>;
+      }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const model = s.contentTypes.find((t) => t.name === entry.type);
+        const unknown = Object.keys(data || {}).filter(
+          (key) => !model?.fields.includes(key),
+        );
+        if (unknown.length)
+          throw Error(
+            "Campos no definidos en el schema: " + unknown.join(", "),
+          );
+        const updated = {
+          ...entry,
+          ...(title === undefined ? {} : { title: title.trim() }),
+          ...(status === undefined ? {} : { status }),
+          ...(relation === undefined ? {} : { relation }),
+          ...(data === undefined
+            ? {}
+            : { data: { ...(entry.data || {}), ...data } }),
+          updated: "Just now",
+        };
+        const revision = {
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          createdAt: new Date().toISOString(),
+          action: "update",
+          before: entry,
+          after: updated,
+        };
+        s.setRevisions((all) => [...all, revision]);
+        s.setEntries((all) => all.map((e) => (e.id === entryId ? updated : e)));
+        return {
+          status: "updated",
+          entry: updated,
+          revisionId: revision.id,
+          ui_effect: "entry_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.preview_update",
+      name: "preview_entry_update",
+      title: "Previsualizar actualización",
+      description:
+        "Valida una actualización y devuelve el diff sin modificar la entrada ni crear una revisión. Usa el previewId devuelto para aplicarla de forma segura.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          title: { type: "string" },
+          status: { type: "string", enum: ["Published", "Draft"] },
+          relation: { type: "string" },
+          data: { type: "object" },
+        },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        title,
+        status,
+        relation,
+        data,
+      }: {
+        entryId: string;
+        title?: string;
+        status?: "Published" | "Draft";
+        relation?: string;
+        data?: Record<string, unknown>;
+      }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const model = s.contentTypes.find((t) => t.name === entry.type);
+        const unknown = Object.keys(data || {}).filter(
+          (key) => !model?.fields.includes(key),
+        );
+        if (unknown.length)
+          throw Error(
+            "Campos no definidos en el schema: " + unknown.join(", "),
+          );
+        const proposed = {
+          ...entry,
+          ...(title === undefined ? {} : { title: title.trim() }),
+          ...(status === undefined ? {} : { status }),
+          ...(relation === undefined ? {} : { relation }),
+          ...(data === undefined
+            ? {}
+            : { data: { ...(entry.data || {}), ...data } }),
+        };
+        const changes = Object.keys(proposed)
+          .filter(
+            (key) =>
+              JSON.stringify(entry[key as keyof Entry]) !==
+              JSON.stringify(proposed[key as keyof Entry]),
+          )
+          .map((key) => ({
+            field: key,
+            before: entry[key as keyof Entry],
+            after: proposed[key as keyof Entry],
+          }));
+        const previewId = fingerprint({ entryId, entry, proposed });
+        return {
+          status: "preview",
+          previewId,
+          entryId,
+          changes,
+          willCreateRevision: changes.length > 0,
+          ui_effect: "update_preview_ready",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.apply_preview",
+      name: "apply_previewed_entry_update",
+      title: "Aplicar actualización previsualizada",
+      description:
+        "Aplica una actualización únicamente si coincide con una previsualización vigente; si la entrada cambió, rechaza la operación para evitar sobrescribir trabajo reciente.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          previewId: { type: "string" },
+          entryId: { type: "string" },
+          title: { type: "string" },
+          status: { type: "string", enum: ["Published", "Draft"] },
+          relation: { type: "string" },
+          data: { type: "object" },
+        },
+        required: ["previewId", "entryId"],
+        additionalProperties: false,
+      },
+      async execute({
+        previewId,
+        entryId,
+        title,
+        status,
+        relation,
+        data,
+      }: {
+        previewId: string;
+        entryId: string;
+        title?: string;
+        status?: "Published" | "Draft";
+        relation?: string;
+        data?: Record<string, unknown>;
+      }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const model = s.contentTypes.find((t) => t.name === entry.type);
+        const unknown = Object.keys(data || {}).filter(
+          (key) => !model?.fields.includes(key),
+        );
+        if (unknown.length)
+          throw Error(
+            "Campos no definidos en el schema: " + unknown.join(", "),
+          );
+        const proposed = {
+          ...entry,
+          ...(title === undefined ? {} : { title: title.trim() }),
+          ...(status === undefined ? {} : { status }),
+          ...(relation === undefined ? {} : { relation }),
+          ...(data === undefined
+            ? {}
+            : { data: { ...(entry.data || {}), ...data } }),
+        };
+        if (fingerprint({ entryId, entry, proposed }) !== previewId)
+          throw Error(
+            "La previsualización está obsoleta; genera una nueva antes de aplicar",
+          );
+        const changes = Object.keys(proposed).filter(
+          (key) =>
+            JSON.stringify(entry[key as keyof Entry]) !==
+            JSON.stringify(proposed[key as keyof Entry]),
+        );
+        if (!changes.length)
+          return {
+            status: "unchanged",
+            entry,
+            previewId,
+            ui_effect: "entry_update_noop",
+          };
+        const updated = { ...proposed, updated: "Just now" };
+        const revision = {
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          createdAt: new Date().toISOString(),
+          action: "update",
+          before: entry,
+          after: updated,
+        };
+        s.setRevisions((all) => [...all, revision]);
+        s.setEntries((all) => all.map((e) => (e.id === entryId ? updated : e)));
+        return {
+          status: "updated",
+          entry: updated,
+          revisionId: revision.id,
+          previewId,
+          ui_effect: "entry_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.list_revisions",
+      name: "list_entry_revisions",
+      title: "Listar revisiones de entrada",
+      description:
+        "Devuelve el historial completo de una entrada, ordenado de la revisión más reciente a la más antigua y con paginación para que un agente pueda reconstruir sus cambios.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        entryId,
+        limit,
+        offset,
+      }: {
+        entryId: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        if (!s.entries.some((entry) => entry.id === entryId))
+          throw Error("Entrada no encontrada");
+        const matching = s.revisions
+          .filter((revision) => revision.entryId === entryId)
+          .slice()
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          entryId,
+          revisions: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length
+            ? ""
+            : "No hay revisiones registradas para esta entrada",
+          ui_effect: "entry_revisions_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.restore_revision",
+      name: "restore_entry_revision",
+      title: "Restaurar revisión de entrada",
+      description:
+        "Previsualiza y, con confirm:true, restaura una revisión anterior como el estado actual de una entrada sin eliminar su historial.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          revisionId: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["entryId", "revisionId"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        revisionId,
+        confirm,
+      }: {
+        entryId: string;
+        revisionId: string;
+        confirm?: boolean;
+      }) {
+        const current = s.entries.find((entry) => entry.id === entryId);
+        if (!current) throw Error("Entrada no encontrada");
+        const revision = s.revisions.find(
+          (item) => item.id === revisionId && item.entryId === entryId,
+        );
+        if (!revision) throw Error("Revisión no encontrada para esta entrada");
+        const restored = {
+          ...revision.after,
+          id: entryId,
+          deletedAt: current.deletedAt,
+          updated: "Just now",
+        };
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            entryId,
+            revisionId,
+            current: {
+              title: current.title,
+              status: current.status,
+              updated: current.updated,
+            },
+            restoreTo: {
+              title: restored.title,
+              status: restored.status,
+              updated: restored.updated,
+            },
+            note: "Repite con confirm:true para restaurar esta revisión",
+          };
+        const audit = {
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          createdAt: new Date().toISOString(),
+          action: "revision_restore",
+          before: current,
+          after: restored,
+        };
+        s.setEntries((all) =>
+          all.map((entry) => (entry.id === entryId ? restored : entry)),
+        );
+        s.setRevisions((all) => [...all, audit]);
+        return {
+          status: "restored",
+          entry: restored,
+          revisionId: audit.id,
+          sourceRevisionId: revisionId,
+          ui_effect: "entry_revision_restored",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.set_parent",
+      name: "set_entry_parent",
+      title: "Jerarquizar entrada",
+      description:
+        "Asigna o elimina el padre de una entrada para construir páginas y CPT jerárquicos, rechazando referencias inexistentes y ciclos.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          parentEntryId: { type: "string" },
+        },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        parentEntryId,
+      }: {
+        entryId: string;
+        parentEntryId?: string;
+      }) {
+        const entry = s.entries.find((item) => item.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        if (parentEntryId === entryId)
+          throw Error("Una entrada no puede ser su propio padre");
+        if (
+          parentEntryId &&
+          !s.entries.some((item) => item.id === parentEntryId)
+        )
+          throw Error("Entrada padre no encontrada");
+        let cursor = parentEntryId;
+        while (cursor) {
+          if (cursor === entryId)
+            throw Error("La jerarquía produciría un ciclo");
+          cursor = s.entries.find((item) => item.id === cursor)?.parentEntryId;
+        }
+        const updated = {
+          ...entry,
+          parentEntryId: parentEntryId || undefined,
+          updated: "Just now",
+        };
+        s.setEntries((all) =>
+          all.map((item) => (item.id === entryId ? updated : item)),
+        );
+        return {
+          status: "updated",
+          entry: updated,
+          ui_effect: "entry_hierarchy_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.list_children",
+      name: "list_entry_children",
+      title: "Listar hijos de entrada",
+      description:
+        "Devuelve las entradas hijas directas de una página o entrada jerárquica.",
+      inputSchema: {
+        type: "object",
+        properties: { parentEntryId: { type: "string" } },
+        required: ["parentEntryId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ parentEntryId }: { parentEntryId: string }) {
+        if (!s.entries.some((item) => item.id === parentEntryId))
+          throw Error("Entrada padre no encontrada");
+        const entries = s.entries.filter(
+          (item) => item.parentEntryId === parentEntryId,
+        );
+        return {
+          parentEntryId,
+          entries,
+          count: entries.length,
+          note: entries.length ? "" : "No hay entradas hijas",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.trash_entry",
+      name: "trash_content_entry",
+      title: "Enviar entrada a papelera",
+      description:
+        "Mueve una entrada a la papelera de forma reversible, conservando sus metadatos, términos y relaciones.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId }: { entryId: string }) {
+        const entry = s.entries.find((item) => item.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        if (entry.deletedAt)
+          return {
+            status: "unchanged",
+            entryId,
+            note: "La entrada ya está en la papelera",
+          };
+        const deletedAt = new Date().toISOString();
+        s.setEntries((all) =>
+          all.map((item) =>
+            item.id === entryId
+              ? { ...item, deletedAt, updated: "Just now" }
+              : item,
+          ),
+        );
+        return {
+          status: "trashed",
+          entryId,
+          title: entry.title,
+          deletedAt,
+          ui_effect: "entry_trashed",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.list_trash",
+      name: "list_trashed_entries",
+      title: "Listar papelera",
+      description:
+        "Devuelve las entradas enviadas a la papelera para que el agente pueda revisarlas o restaurarlas.",
+      inputSchema: {
+        type: "object",
+        properties: { limit: { type: "number" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ limit }: { limit?: number }) {
+        const page = s.entries
+          .filter((entry) => entry.deletedAt)
+          .slice(0, Math.min(Math.max(limit || 25, 1), 100));
+        return {
+          entries: page,
+          count: page.length,
+          note: page.length ? "" : "La papelera está vacía",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.restore_entry",
+      name: "restore_trashed_entry",
+      title: "Restaurar entrada",
+      description:
+        "Restaura una entrada de la papelera y la devuelve a su estado editorial anterior.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId }: { entryId: string }) {
+        const entry = s.entries.find((item) => item.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        if (!entry.deletedAt)
+          return {
+            status: "unchanged",
+            entryId,
+            note: "La entrada no está en la papelera",
+          };
+        const restored = {
+          ...entry,
+          deletedAt: undefined,
+          updated: "Just now",
+        };
+        s.setEntries((all) =>
+          all.map((item) => (item.id === entryId ? restored : item)),
+        );
+        return {
+          status: "restored",
+          entry: restored,
+          ui_effect: "entry_restored",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.delete_entry",
+      name: "delete_content_entry",
+      title: "Eliminar entrada",
+      description:
+        "Prepara o elimina una entrada y limpia sus conexiones y asignaciones de términos. Requiere confirm:true para ejecutar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        confirm,
+      }: {
+        entryId: string;
+        confirm?: boolean;
+      }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const removedConnections = s.connections.filter(
+          (connection) =>
+            connection.fromEntryId === entryId ||
+            connection.toEntryId === entryId,
+        ).length;
+        const removedAssignments = s.termAssignments.filter(
+          (item) => item.entryId === entryId,
+        ).length;
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            entryId,
+            title: entry.title,
+            removedConnections,
+            removedAssignments,
+            note: "Repite con confirm:true para eliminar esta entrada",
+          };
+        s.setEntries((all) => all.filter((e) => e.id !== entryId));
+        s.setConnections((all) =>
+          all.filter(
+            (connection) =>
+              connection.fromEntryId !== entryId &&
+              connection.toEntryId !== entryId,
+          ),
+        );
+        s.setTermAssignments((all) =>
+          all.filter((item) => item.entryId !== entryId),
+        );
+        return {
+          status: "deleted",
+          entryId,
+          title: entry.title,
+          removedConnections,
+          removedAssignments,
+          ui_effect: "entry_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.get_metadata",
+      name: "get_entry_metadata",
+      title: "Leer metadatos",
+      description:
+        "Devuelve todos los metadatos personalizados de una entrada o una clave concreta.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" }, key: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId, key }: { entryId: string; key?: string }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        return {
+          entryId,
+          key: key || null,
+          value: key ? entry.metadata?.[key] : entry.metadata || {},
+          ui_effect: "metadata_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.set_metadata",
+      name: "set_entry_metadata",
+      title: "Escribir metadatos",
+      description:
+        "Crea o reemplaza un metadato personalizado en una entrada y registra una revisión.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          key: { type: "string" },
+          value: {},
+        },
+        required: ["entryId", "key", "value"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        key,
+        value,
+      }: {
+        entryId: string;
+        key: string;
+        value: unknown;
+      }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const updated = {
+          ...entry,
+          metadata: { ...(entry.metadata || {}), [key]: value },
+          updated: "Just now",
+        };
+        s.setEntries((all) => all.map((e) => (e.id === entryId ? updated : e)));
+        const revision = {
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          createdAt: new Date().toISOString(),
+          action: "metadata_update",
+          before: entry,
+          after: updated,
+        };
+        s.setRevisions((all) => [...all, revision]);
+        return {
+          entryId,
+          key,
+          value,
+          revisionId: revision.id,
+          ui_effect: "metadata_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.delete_metadata",
+      name: "delete_entry_metadata",
+      title: "Eliminar metadato",
+      description:
+        "Prepara o elimina una clave de metadatos personalizada de una entrada y registra una revisión. Requiere confirm:true para ejecutar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          key: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["entryId", "key"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        key,
+        confirm,
+      }: {
+        entryId: string;
+        key: string;
+        confirm?: boolean;
+      }) {
+        const entry = s.entries.find((e) => e.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const metadata = { ...(entry.metadata || {}) };
+        if (!(key in metadata)) return { entryId, key, status: "not_found" };
+        const removedValue = metadata[key];
+        if (!confirm)
+          return {
+            entryId,
+            key,
+            status: "confirmation_required",
+            value: removedValue,
+            note: "Repite con confirm:true para eliminar este metadato",
+          };
+        delete metadata[key];
+        const updated = { ...entry, metadata, updated: "Just now" };
+        s.setEntries((all) => all.map((e) => (e.id === entryId ? updated : e)));
+        const revision = {
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          createdAt: new Date().toISOString(),
+          action: "metadata_delete",
+          before: entry,
+          after: updated,
+        };
+        s.setRevisions((all) => [...all, revision]);
+        return {
+          entryId,
+          key,
+          status: "deleted",
+          revisionId: revision.id,
+          ui_effect: "metadata_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.set_type_filter",
+      name: "filter_content_type",
+      title: "Filtrar por tipo",
+      description:
+        "Actualiza el filtro visible de entradas. Acepta tipos creados dinámicamente.",
+      inputSchema: {
+        type: "object",
+        properties: { type: { type: "string" } },
+        required: ["type"],
+        additionalProperties: false,
+      },
+      async execute({ type }: { type: string }) {
+        if (
+          type !== "All content" &&
+          !s.contentTypes.some(
+            (item) => item.name === type || item.slug === type,
+          )
+        )
+          throw Error("Tipo de contenido no encontrado");
+        const resolved =
+          type === "All content"
+            ? "All content"
+            : s.contentTypes.find(
+                (item) => item.name === type || item.slug === type,
+              )!.name;
+        s.setActiveType(resolved);
+        return { activeType: resolved, ui_effect: "filter_updated" };
+      },
+    }),
+    defineTool({
+      stableKey: "content.set_status_filter",
+      name: "filter_content_status",
+      title: "Filtrar por estado",
+      description:
+        "Actualiza el filtro visible de entradas entre todos los estados, Published o Draft.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          status: {
+            type: "string",
+            enum: ["All statuses", "Published", "Draft"],
+          },
+        },
+        required: ["status"],
+        additionalProperties: false,
+      },
+      async execute({
+        status,
+      }: {
+        status: "All statuses" | "Published" | "Draft";
+      }) {
+        s.setActiveStatus(status);
+        return { activeStatus: status, ui_effect: "filter_updated" };
+      },
+    }),
+    defineTool({
+      stableKey: "content.schedule_entry",
+      name: "schedule_content_entry",
+      title: "Programar entrada",
+      description:
+        "Programa una entrada para una fecha futura y la mantiene como Draft hasta que un proceso de publicación la haga disponible; registra una revisión del cambio.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          publishAt: { type: "string", format: "date-time" },
+        },
+        required: ["entryId", "publishAt"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryId,
+        publishAt,
+      }: {
+        entryId: string;
+        publishAt: string;
+      }) {
+        const entry = s.entries.find((item) => item.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const timestamp = Date.parse(publishAt);
+        if (!Number.isFinite(timestamp) || timestamp <= Date.now())
+          throw Error("publishAt debe ser una fecha futura válida");
+        const updated = {
+          ...entry,
+          status: "Draft" as const,
+          scheduledAt: new Date(timestamp).toISOString(),
+          updated: "Just now",
+        };
+        const revision = {
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          createdAt: new Date().toISOString(),
+          action: "schedule",
+          before: entry,
+          after: updated,
+        };
+        s.setEntries((all) =>
+          all.map((item) => (item.id === entryId ? updated : item)),
+        );
+        s.setRevisions((all) => [...all, revision]);
+        return {
+          status: "scheduled",
+          entry: updated,
+          revisionId: revision.id,
+          ui_effect: "entry_scheduled",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.publish_due_entries",
+      name: "publish_due_entries",
+      title: "Publicar entradas vencidas",
+      description:
+        "Publica las entradas programadas cuya fecha ya llegó, validando sus tipos y campos antes de cambiar su estado y registrando revisiones.",
+      inputSchema: {
+        type: "object",
+        properties: { now: { type: "string", format: "date-time" } },
+        additionalProperties: false,
+      },
+      async execute({ now }: { now?: string }) {
+        const current = now ? Date.parse(now) : Date.now();
+        if (!Number.isFinite(current))
+          throw Error("now no es una fecha válida");
+        const due = s.entries.filter(
+          (entry) =>
+            entry.status === "Draft" &&
+            entry.scheduledAt &&
+            Date.parse(entry.scheduledAt) <= current,
+        );
+        for (const entry of due) {
+          const model = s.contentTypes.find((type) => type.name === entry.type);
+          if (!model)
+            throw Error("Tipo de contenido inexistente: " + entry.type);
+          const unknown = Object.keys(entry.data || {}).filter(
+            (key) => !model.fields.includes(key),
+          );
+          if (unknown.length)
+            throw Error(
+              "Campos no definidos en el schema: " + unknown.join(", "),
+            );
+        }
+        const updated = due.map((entry) => ({
+          ...entry,
+          status: "Published" as const,
+          scheduledAt: undefined,
+          updated: "Just now",
+        }));
+        const revisions = due.map((entry, index) => ({
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId: entry.id,
+          createdAt: new Date().toISOString(),
+          action: "publish_due",
+          before: entry,
+          after: updated[index],
+        }));
+        s.setEntries((all) =>
+          all.map(
+            (entry) => updated.find((item) => item.id === entry.id) || entry,
+          ),
+        );
+        s.setRevisions((all) => [...all, ...revisions]);
+        return {
+          status: "published",
+          entryIds: due.map((entry) => entry.id),
+          count: due.length,
+          revisionIds: revisions.map((revision) => revision.id),
+          note: due.length ? "" : "No hay entradas programadas vencidas",
+          ui_effect: "scheduled_entries_published",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.publish_entry",
+      name: "publish_content_entry",
+      title: "Publicar entrada",
+      description:
+        "Valida campos tipados y obligatorios antes de publicar una entrada existente por su id.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId }: { entryId: string }) {
+        const item = s.entries.find((e) => e.id === entryId);
+        if (!item) throw Error("Entrada no encontrada");
+        const model = s.contentTypes.find((type) => type.name === item.type);
+        if (!model) throw Error("Tipo de contenido inexistente");
+        const values = item.data || {};
+        const unknown = Object.keys(values).filter(
+          (key) => !model.fields.includes(key),
+        );
+        if (unknown.length)
+          throw Error(
+            "Campos no definidos en el schema: " + unknown.join(", "),
+          );
+        const errors = validateData(model, values);
+        if (errors.length) throw Error(errors.join("; "));
+        s.setEntries(
+          s.entries.map((e) =>
+            e.id === entryId
+              ? { ...e, status: "Published", updated: "Just now" }
+              : e,
+          ),
+        );
+        return {
+          entryId,
+          status: "Published",
+          validated: true,
+          ui_effect: "entry_published",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.resolve_relations",
+      name: "resolve_content_relations",
+      title: "Resolver relaciones",
+      description:
+        "Devuelve las conexiones estructuradas de una entrada para navegar el grafo de contenido.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId }: { entryId: string }) {
+        const item = s.entries.find((e) => e.id === entryId);
+        if (!item) throw Error("Entrada no encontrada");
+        const connections = s.connections
+          .filter((c) => c.fromEntryId === entryId || c.toEntryId === entryId)
+          .map((c) => ({
+            ...c,
+            relation:
+              s.relations.find((r) => r.id === c.relation)?.slug || c.relation,
+            from: s.entries.find((e) => e.id === c.fromEntryId),
+            to: s.entries.find((e) => e.id === c.toEntryId),
+          }));
+        return {
+          entryId,
+          title: item.title,
+          relations: item.relation,
+          connections,
+          count: connections.length,
+          ui_effect: "relations_inspected",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.get_content_stats",
+      name: "get_content_stats",
+      title: "Resumir contenido",
+      description:
+        "Devuelve estadísticas agregadas del workspace para que el agente pueda planificar operaciones sin recorrer todas las entradas.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      async execute() {
+        const byType = Object.fromEntries(
+          s.contentTypes.map((type) => [
+            type.name,
+            s.entries.filter((entry) => entry.type === type.name).length,
+          ]),
+        );
+        const byStatus = {
+          Published: s.entries.filter((entry) => entry.status === "Published")
+            .length,
+          Draft: s.entries.filter((entry) => entry.status === "Draft").length,
+        };
+        return {
+          entries: { total: s.entries.length, byType, byStatus },
+          schema: {
+            contentTypes: s.contentTypes.length,
+            taxonomies: s.taxonomies.length,
+            terms: s.taxonomies.reduce(
+              (total, taxonomy) => total + taxonomy.terms.length,
+              0,
+            ),
+            relations: s.relations.length,
+            connections: s.connections.length,
+            termAssignments: s.termAssignments.length,
+          },
+          ui_effect: "content_stats_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.list_content_types",
+      name: "list_content_types",
+      title: "Listar tipos de contenido",
+      description:
+        "Devuelve los tipos de contenido disponibles con sus slugs, campos y cantidad real de entradas.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      async execute() {
+        const contentTypes = s.contentTypes.map((type) => ({
+          ...type,
+          entryCount: s.entries.filter((entry) => entry.type === type.name)
+            .length,
+          fieldCount: type.fields.length,
+        }));
+        return {
+          contentTypes,
+          count: contentTypes.length,
+          note: contentTypes.length ? "" : "No hay tipos de contenido",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.validate_entry",
+      name: "validate_content_entry",
+      title: "Validar entrada",
+      description:
+        "Comprueba que una entrada tenga un tipo válido, campos definidos en su schema y referencias de relaciones y términos existentes antes de publicarla.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId }: { entryId: string }) {
+        const entry = s.entries.find((item) => item.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        const errors: string[] = [];
+        const model = s.contentTypes.find((item) => item.name === entry.type);
+        if (!model) errors.push("Tipo de contenido inexistente: " + entry.type);
+        for (const key of Object.keys(entry.data || {}))
+          if (model && !model.fields.includes(key))
+            errors.push("Campo no definido en el schema: " + key);
+        for (const connection of s.connections.filter(
+          (item) => item.fromEntryId === entryId || item.toEntryId === entryId,
+        )) {
+          if (!s.relations.some((item) => item.id === connection.relation))
+            errors.push("Relación inexistente: " + connection.relation);
+          if (!s.entries.some((item) => item.id === connection.fromEntryId))
+            errors.push("Origen inexistente: " + connection.fromEntryId);
+          if (!s.entries.some((item) => item.id === connection.toEntryId))
+            errors.push("Destino inexistente: " + connection.toEntryId);
+        }
+        for (const assignment of s.termAssignments.filter(
+          (item) => item.entryId === entryId,
+        )) {
+          const taxonomy = findTaxonomy(assignment.taxonomy);
+          if (!taxonomy)
+            errors.push("Taxonomía inexistente: " + assignment.taxonomy);
+          else
+            for (const termId of assignment.termIds)
+              if (!taxonomy.terms.some((term) => term.id === termId))
+                errors.push("Término inexistente: " + termId);
+        }
+        return {
+          entryId,
+          valid: errors.length === 0,
+          errors,
+          status: entry.status,
+          ui_effect: "entry_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.get_context",
+      name: "get_taxonomy_context",
+      title: "Leer contexto taxonómico",
+      description:
+        "Devuelve una taxonomía con su jerarquía, términos y cantidad de entradas asignadas para apoyar decisiones de clasificación.",
+      inputSchema: {
+        type: "object",
+        properties: { taxonomy: { type: "string" } },
+        required: ["taxonomy"],
+        additionalProperties: false,
+      },
+      async execute({ taxonomy }: { taxonomy: string }) {
+        const model = findTaxonomy(taxonomy);
+        if (!model) throw Error("Taxonomía no encontrada");
+        const terms = model.terms.map((term) => ({
+          ...term,
+          entryCount: s.termAssignments.filter(
+            (assignment) =>
+              assignment.taxonomy === model.slug &&
+              assignment.termIds.includes(term.id),
+          ).length,
+        }));
+        return {
+          taxonomy: model.name,
+          slug: model.slug,
+          hierarchical: model.hierarchical,
+          terms,
+          count: terms.length,
+          assignedEntries: new Set(
+            s.termAssignments
+              .filter((assignment) => assignment.taxonomy === model.slug)
+              .map((assignment) => assignment.entryId),
+          ).size,
+          ui_effect: "taxonomy_context_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.preview_import",
+      name: "preview_import_content_model",
+      title: "Previsualizar importación",
+      description:
+        "Valida un paquete de modelo y devuelve el impacto de reemplazar el estado actual, incluidos usuarios, roles, plugins, medios, comentarios y menús, sin modificarlo.",
+      inputSchema: {
+        type: "object",
+        properties: { model: { type: "object" } },
+        required: ["model"],
+        additionalProperties: false,
+      },
+      async execute({
+        model,
+      }: {
+        model: {
+          version?: number;
+          contentTypes?: ContentType[];
+          users?: User[];
+          roles?: Role[];
+          plugins?: Plugin[];
+          media?: MediaAsset[];
+          comments?: Comment[];
+          menus?: Menu[];
+          taxonomies?: Taxonomy[];
+          relations?: Relation[];
+          connections?: Connection[];
+          termAssignments?: TermAssignment[];
+          revisions?: Revision[];
+          entries?: Entry[];
+        };
+      }) {
+        if (
+          model.version !== undefined &&
+          (!Number.isInteger(model.version) ||
+            model.version < 1 ||
+            model.version > 6)
+        )
+          throw Error("Versión de paquete no compatible");
+        if (
+          !Array.isArray(model.contentTypes) ||
+          !Array.isArray(model.taxonomies) ||
+          !Array.isArray(model.relations)
+        )
+          throw Error("Paquete de modelo incompleto");
+        return {
+          status: "preview",
+          version: model.version || 1,
+          willReplace: {
+            contentTypes: model.contentTypes.length,
+            users: model.users?.length || 0,
+            roles: model.roles?.length || 0,
+            plugins: model.plugins?.length || 0,
+            media: model.media?.length || 0,
+            comments: model.comments?.length || 0,
+            menus: model.menus?.length || 0,
+            taxonomies: model.taxonomies.length,
+            relations: model.relations.length,
+            connections: model.connections?.length || 0,
+            termAssignments: model.termAssignments?.length || 0,
+            revisions: model.revisions?.length || 0,
+            entries: model.entries?.length || 0,
+          },
+          ui_effect: "import_preview_ready",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.get_graph",
+      name: "get_relation_graph",
+      title: "Leer grafo de relaciones",
+      description:
+        "Devuelve nodos de tipos de contenido y aristas de entradas enriquecidas con títulos, tipos y relación para navegación agentiva.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          relation: { type: "string" },
+          entryId: { type: "string" },
+        },
+        additionalProperties: false,
+      },
+      async execute({
+        relation,
+        entryId,
+      }: {
+        relation?: string;
+        entryId?: string;
+      }) {
+        const model = relation
+          ? s.relations.find(
+              (item) =>
+                item.id === relation ||
+                item.slug === relation ||
+                item.name === relation,
+            )
+          : undefined;
+        if (relation && !model) throw Error("Relación no encontrada");
+        const connections = s.connections.filter(
+          (item) =>
+            (!model || item.relation === model.id) &&
+            (!entryId ||
+              item.fromEntryId === entryId ||
+              item.toEntryId === entryId),
+        );
+        const nodes = s.contentTypes.map((type) => ({
+          type: type.name,
+          slug: type.slug,
+          entryCount: s.entries.filter((entry) => entry.type === type.name)
+            .length,
+        }));
+        const edges = connections.map((item) => ({
+          id: item.id,
+          relation: s.relations.find(
+            (candidate) => candidate.id === item.relation,
+          ),
+          from: s.entries.find((entry) => entry.id === item.fromEntryId),
+          to: s.entries.find((entry) => entry.id === item.toEntryId),
+        }));
+        return {
+          nodes,
+          edges,
+          count: edges.length,
+          note: edges.length ? "" : "No hay conexiones que coincidan",
+          ui_effect: "relation_graph_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.find_entries_by_terms",
+      name: "find_entries_by_terms",
+      title: "Buscar por términos",
+      description:
+        "Busca entradas asignadas a todos los términos indicados de una taxonomía y devuelve resultados paginados.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          terms: { type: "array", items: { type: "string" } },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        required: ["taxonomy", "terms"],
+        additionalProperties: false,
+      },
+      async execute({
+        taxonomy,
+        terms,
+        limit,
+        offset,
+      }: {
+        taxonomy: string;
+        terms: string[];
+        limit?: number;
+        offset?: number;
+      }) {
+        const model = findTaxonomy(taxonomy);
+        if (!model) throw Error("Taxonomía no encontrada");
+        const termIds = terms.map(
+          (value) =>
+            model.terms.find(
+              (term) =>
+                term.id === value || term.slug === value || term.name === value,
+            )?.id,
+        );
+        if (termIds.some((id) => !id))
+          throw Error("Uno o más términos no existen");
+        const matching = s.entries.filter((entry) => {
+          const assignment = s.termAssignments.find(
+            (item) => item.entryId === entry.id && item.taxonomy === model.slug,
+          );
+          return Boolean(
+            assignment &&
+              termIds.every((id) => assignment.termIds.includes(id!)),
+          );
+        });
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const entries = matching.slice(start, start + pageSize);
+        return {
+          taxonomy: model.slug,
+          terms: termIds,
+          entries,
+          count: entries.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + entries.length < matching.length,
+          note: matching.length ? "" : "No hay entradas con esos términos",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.bulk_set_entry_terms",
+      name: "bulk_set_entry_terms",
+      title: "Clasificar entradas en lote",
+      description:
+        "Reemplaza términos de varias entradas de forma atómica. Valida todas las entradas, taxonomías y términos antes de guardar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          assignments: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                entryId: { type: "string" },
+                taxonomy: { type: "string" },
+                terms: { type: "array", items: { type: "string" } },
+              },
+              required: ["entryId", "taxonomy", "terms"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["assignments"],
+        additionalProperties: false,
+      },
+      async execute({
+        assignments,
+      }: {
+        assignments: Array<{
+          entryId: string;
+          taxonomy: string;
+          terms: string[];
+        }>;
+      }) {
+        const prepared = assignments.map((input) => {
+          const entry = s.entries.find((item) => item.id === input.entryId);
+          if (!entry) throw Error("Entrada no encontrada: " + input.entryId);
+          const taxonomy = findTaxonomy(input.taxonomy);
+          if (!taxonomy)
+            throw Error("Taxonomía no encontrada: " + input.taxonomy);
+          const terms = input.terms.map((value) =>
+            taxonomy.terms.find(
+              (term) =>
+                term.id === value || term.slug === value || term.name === value,
+            ),
+          );
+          if (terms.some((term) => !term))
+            throw Error("Término no encontrado en " + taxonomy.slug);
+          return { entry, taxonomy, termIds: terms.map((term) => term!.id) };
+        });
+        s.setTermAssignments((all) => {
+          let next = all;
+          for (const item of prepared) {
+            const assignment = {
+              entryId: item.entry.id,
+              taxonomy: item.taxonomy.slug,
+              termIds: item.termIds,
+              updatedAt: new Date().toISOString(),
+            };
+            next = [
+              ...next.filter(
+                (current) =>
+                  !(
+                    current.entryId === assignment.entryId &&
+                    current.taxonomy === assignment.taxonomy
+                  ),
+              ),
+              ...(assignment.termIds.length ? [assignment] : []),
+            ];
+          }
+          return next;
+        });
+        return {
+          status: "classified",
+          updated: prepared.map((item) => ({
+            entryId: item.entry.id,
+            taxonomy: item.taxonomy.slug,
+            termIds: item.termIds,
+          })),
+          count: prepared.length,
+          ui_effect: "entries_terms_bulk_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.export_workspace_model",
+      name: "export_workspace_model",
+      title: "Exportar workspace completo",
+      description:
+        "Exporta el modelo portable completo del CMS, incluyendo contenido, schema, usuarios, roles, plugins, medios, comentarios, menús, taxonomías, relaciones, conexiones y revisiones.",
+      inputSchema: {
+        type: "object",
+        properties: { includeEntries: { type: "boolean" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ includeEntries }: { includeEntries?: boolean }) {
+        const withEntries = includeEntries !== false;
+        return {
+          version: 6,
+          exportedAt: new Date().toISOString(),
+          contentTypes: s.contentTypes,
+          users: s.users,
+          roles: s.roles,
+          plugins: s.plugins,
+          media: s.media,
+          comments: s.comments,
+          menus: s.menus,
+          taxonomies: s.taxonomies,
+          relations: s.relations,
+          connections: withEntries ? s.connections : [],
+          termAssignments: withEntries ? s.termAssignments : [],
+          revisions: withEntries ? s.revisions : [],
+          entries: withEntries ? s.entries : [],
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.import_workspace_model",
+      name: "import_workspace_model",
+      title: "Importar workspace completo",
+      description:
+        "Previsualiza o restaura un workspace exportado, incluidos roles, comentarios y menús. Requiere confirm:true para reemplazar el estado persistido.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          model: { type: "object" },
+          includeEntries: { type: "boolean" },
+          confirm: { type: "boolean" },
+        },
+        required: ["model"],
+        additionalProperties: false,
+      },
+      async execute({
+        model,
+        includeEntries,
+        confirm,
+      }: {
+        model: {
+          version?: number;
+          contentTypes?: ContentType[];
+          users?: User[];
+          roles?: Role[];
+          plugins?: Plugin[];
+          media?: MediaAsset[];
+          comments?: Comment[];
+          menus?: Menu[];
+          taxonomies?: Taxonomy[];
+          relations?: Relation[];
+          connections?: Connection[];
+          termAssignments?: TermAssignment[];
+          revisions?: Revision[];
+          entries?: Entry[];
+        };
+        includeEntries?: boolean;
+        confirm?: boolean;
+      }) {
+        if (
+          model.version !== undefined &&
+          (!Number.isInteger(model.version) ||
+            model.version < 1 ||
+            model.version > 6)
+        )
+          throw Error("Versión de workspace no compatible");
+        if (
+          !Array.isArray(model.contentTypes) ||
+          !Array.isArray(model.taxonomies) ||
+          !Array.isArray(model.relations)
+        )
+          throw Error(
+            "Workspace incompleto: contentTypes, taxonomies y relations son obligatorios",
+          );
+        const impact = {
+          contentTypes: model.contentTypes.length,
+          users: model.users?.length || 0,
+          roles: model.roles?.length || 0,
+          plugins: model.plugins?.length || 0,
+          media: model.media?.length || 0,
+          comments: model.comments?.length || 0,
+          menus: model.menus?.length || 0,
+          taxonomies: model.taxonomies.length,
+          relations: model.relations.length,
+          entries: model.entries?.length || 0,
+        };
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            impact,
+            note: "Repite con confirm:true para reemplazar el workspace",
+          };
+        s.setContentTypes(model.contentTypes);
+        if (Array.isArray(model.users)) s.setUsers(model.users);
+        if (Array.isArray(model.roles)) s.setRoles(model.roles);
+        if (Array.isArray(model.plugins)) s.setPlugins(model.plugins);
+        if (Array.isArray(model.media)) s.setMedia(model.media);
+        if (Array.isArray(model.comments)) s.setComments(model.comments);
+        if (Array.isArray(model.menus)) s.setMenus(model.menus);
+        s.setTaxonomies(model.taxonomies);
+        s.setRelations(model.relations);
+        if (includeEntries !== false && Array.isArray(model.entries))
+          s.setEntries(model.entries);
+        if (includeEntries !== false && Array.isArray(model.connections))
+          s.setConnections(model.connections);
+        if (includeEntries !== false && Array.isArray(model.termAssignments))
+          s.setTermAssignments(model.termAssignments);
+        if (includeEntries !== false && Array.isArray(model.revisions))
+          s.setRevisions(model.revisions);
+        return {
+          status: "imported",
+          ...impact,
+          ui_effect: "workspace_imported",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.validate_workspace",
+      name: "validate_workspace",
+      title: "Validar integridad del workspace",
+      description:
+        "Revisa referencias entre entradas, usuarios, roles, plugins, medios, comentarios, menús, taxonomías y relaciones sin modificar datos.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const errors: string[] = [];
+        const entryIds = new Set(s.entries.map((entry) => entry.id));
+        const userIds = new Set(s.users.map((user) => user.id));
+        const roleSlugs = new Set(s.roles.map((role) => role.slug));
+        const typeNames = new Set(s.contentTypes.map((type) => type.name));
+        const relationIds = new Set(s.relations.map((relation) => relation.id));
+        const taxonomyMap = new Map(
+          s.taxonomies.map((taxonomy) => [taxonomy.slug, taxonomy]),
+        );
+        for (const entry of s.entries) {
+          if (!typeNames.has(entry.type))
+            errors.push(
+              "Entrada " + entry.id + ": tipo inexistente " + entry.type,
+            );
+          if (entry.authorUserId && !userIds.has(entry.authorUserId))
+            errors.push(
+              "Entrada " +
+                entry.id +
+                ": autor inexistente " +
+                entry.authorUserId,
+            );
+          if (entry.parentEntryId && !entryIds.has(entry.parentEntryId))
+            errors.push(
+              "Entrada " +
+                entry.id +
+                ": padre inexistente " +
+                entry.parentEntryId,
+            );
+        }
+        for (const user of s.users)
+          if (!roleSlugs.has(user.role))
+            errors.push(
+              "Usuario " + user.id + ": rol inexistente " + user.role,
+            );
+        for (const connection of s.connections) {
+          if (!relationIds.has(connection.relation))
+            errors.push(
+              "Conexión " +
+                connection.id +
+                ": relación inexistente " +
+                connection.relation,
+            );
+          if (
+            !entryIds.has(connection.fromEntryId) ||
+            !entryIds.has(connection.toEntryId)
+          )
+            errors.push(
+              "Conexión " +
+                connection.id +
+                ": entrada origen o destino inexistente",
+            );
+        }
+        for (const assignment of s.termAssignments) {
+          const taxonomy = taxonomyMap.get(assignment.taxonomy);
+          if (!taxonomy)
+            errors.push(
+              "Asignación " +
+                assignment.entryId +
+                ": taxonomía inexistente " +
+                assignment.taxonomy,
+            );
+          else
+            for (const termId of assignment.termIds)
+              if (!taxonomy.terms.some((term) => term.id === termId))
+                errors.push(
+                  "Asignación " +
+                    assignment.entryId +
+                    ": término inexistente " +
+                    termId,
+                );
+        }
+        for (const comment of s.comments) {
+          if (!entryIds.has(comment.entryId))
+            errors.push(
+              "Comentario " +
+                comment.id +
+                ": entrada inexistente " +
+                comment.entryId,
+            );
+          if (comment.authorUserId && !userIds.has(comment.authorUserId))
+            errors.push(
+              "Comentario " +
+                comment.id +
+                ": autor inexistente " +
+                comment.authorUserId,
+            );
+          if (
+            comment.parentCommentId &&
+            !s.comments.some((parent) => parent.id === comment.parentCommentId)
+          )
+            errors.push(
+              "Comentario " +
+                comment.id +
+                ": padre inexistente " +
+                comment.parentCommentId,
+            );
+        }
+        for (const menu of s.menus)
+          for (const item of menu.items) {
+            if (item.entryId && !entryIds.has(item.entryId))
+              errors.push(
+                "Menú " + menu.slug + ": entrada inexistente " + item.entryId,
+              );
+            if (
+              item.parentId &&
+              !menu.items.some((parent) => parent.id === item.parentId)
+            )
+              errors.push(
+                "Menú " + menu.slug + ": padre inexistente " + item.parentId,
+              );
+          }
+        for (const asset of s.media)
+          for (const entryId of asset.attachedEntryIds)
+            if (!entryIds.has(entryId))
+              errors.push(
+                "Medio " +
+                  asset.id +
+                  ": entrada adjunta inexistente " +
+                  entryId,
+              );
+        return {
+          valid: errors.length === 0,
+          errors,
+          errorCount: errors.length,
+          checked: {
+            entries: s.entries.length,
+            users: s.users.length,
+            roles: s.roles.length,
+            connections: s.connections.length,
+            termAssignments: s.termAssignments.length,
+            comments: s.comments.length,
+            menus: s.menus.length,
+            media: s.media.length,
+          },
+          note: errors.length
+            ? "Corrige las referencias antes de importar o publicar"
+            : "No se detectaron referencias rotas",
+          ui_effect: "workspace_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "plugin.set_dependencies",
+      name: "set_plugin_dependencies",
+      title: "Definir dependencias de plugin",
+      description:
+        "Declara los plugins requeridos por una extensión para que el agente pueda comprobar compatibilidad antes de activarla.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          plugin: { type: "string" },
+          dependencies: { type: "array", items: { type: "string" } },
+        },
+        required: ["plugin", "dependencies"],
+        additionalProperties: false,
+      },
+      async execute({
+        plugin,
+        dependencies,
+      }: {
+        plugin: string;
+        dependencies: string[];
+      }) {
+        const current = s.plugins.find(
+          (item) =>
+            item.id === plugin || item.slug === plugin || item.name === plugin,
+        );
+        if (!current) throw Error("Plugin no encontrado");
+        const normalized = [
+          ...new Set(
+            dependencies
+              .map((value) => value.trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        ];
+        if (normalized.includes(current.slug))
+          throw Error("Un plugin no puede depender de sí mismo");
+        const missing = normalized.filter(
+          (slug) => !s.plugins.some((item) => item.slug === slug),
+        );
+        if (missing.length)
+          throw Error("Dependencias no registradas: " + missing.join(", "));
+        const updated = { ...current, dependencies: normalized };
+        s.setPlugins((all) =>
+          all.map((item) => (item.id === current.id ? updated : item)),
+        );
+        return {
+          status: "updated",
+          plugin: updated,
+          dependencies: normalized,
+          ui_effect: "plugin_dependencies_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "plugin.check_dependencies",
+      name: "check_plugin_dependencies",
+      title: "Comprobar dependencias",
+      description:
+        "Comprueba si las dependencias declaradas de un plugin existen y están activas antes de una activación.",
+      inputSchema: {
+        type: "object",
+        properties: { plugin: { type: "string" } },
+        required: ["plugin"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ plugin }: { plugin: string }) {
+        const current = s.plugins.find(
+          (item) =>
+            item.id === plugin || item.slug === plugin || item.name === plugin,
+        );
+        if (!current) throw Error("Plugin no encontrado");
+        const dependencies =
+          (current as Plugin & { dependencies?: string[] }).dependencies || [];
+        const checks = dependencies.map((slug) => {
+          const dependency = s.plugins.find((item) => item.slug === slug);
+          return {
+            slug,
+            registered: Boolean(dependency),
+            active: dependency?.status === "Active",
+            version: dependency?.version || null,
+          };
+        });
+        return {
+          plugin: current.slug,
+          dependencies: checks,
+          ready: checks.every((item) => item.registered && item.active),
+          note: checks.length
+            ? "Activa primero las dependencias que estén pendientes"
+            : "El plugin no declara dependencias",
+          ui_effect: "plugin_dependencies_checked",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "plugin.activate",
+      name: "activate_plugin",
+      title: "Activar plugin con dependencias",
+      description:
+        "Activa un plugin solo cuando todas sus dependencias declaradas existen y están activas.",
+      inputSchema: {
+        type: "object",
+        properties: { plugin: { type: "string" } },
+        required: ["plugin"],
+        additionalProperties: false,
+      },
+      async execute({ plugin }: { plugin: string }) {
+        const current = s.plugins.find(
+          (item) =>
+            item.id === plugin || item.slug === plugin || item.name === plugin,
+        );
+        if (!current) throw Error("Plugin no encontrado");
+        const dependencies =
+          (current as Plugin & { dependencies?: string[] }).dependencies || [];
+        const missing = dependencies.filter((slug) => {
+          const dependency = s.plugins.find((item) => item.slug === slug);
+          return !dependency || dependency.status !== "Active";
+        });
+        if (missing.length)
+          throw Error("Dependencias no activas: " + missing.join(", "));
+        const updated = { ...current, status: "Active" as const };
+        s.setPlugins((all) =>
+          all.map((item) => (item.id === current.id ? updated : item)),
+        );
+        return {
+          status: "active",
+          plugin: updated,
+          ui_effect: "plugin_activated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "plugin.uninstall",
+      name: "uninstall_plugin",
+      title: "Desinstalar plugin",
+      description:
+        "Prepara o elimina el manifiesto de un plugin y bloquea la operación si otro plugin activo depende de él.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          plugin: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["plugin"],
+        additionalProperties: false,
+      },
+      async execute({
+        plugin,
+        confirm,
+      }: {
+        plugin: string;
+        confirm?: boolean;
+      }) {
+        const current = s.plugins.find(
+          (item) =>
+            item.id === plugin || item.slug === plugin || item.name === plugin,
+        );
+        if (!current) throw Error("Plugin no encontrado");
+        const dependents = s.plugins
+          .filter(
+            (item) =>
+              item.id !== current.id &&
+              item.status === "Active" &&
+              (
+                (item as Plugin & { dependencies?: string[] }).dependencies ||
+                []
+              ).includes(current.slug),
+          )
+          .map((item) => item.slug);
+        if (dependents.length)
+          throw Error(
+            "No se puede desinstalar: plugins activos dependientes " +
+              dependents.join(", "),
+          );
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            plugin: current.slug,
+            name: current.name,
+            note: "Repite con confirm:true para eliminar el manifiesto",
+          };
+        s.setPlugins((all) => all.filter((item) => item.id !== current.id));
+        return {
+          status: "uninstalled",
+          plugin: current.slug,
+          ui_effect: "plugin_uninstalled",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "role.delete_role",
+      name: "delete_role",
+      title: "Eliminar rol",
+      description:
+        "Prepara o elimina un rol personalizado y bloquea la operación si es un rol del sistema o todavía está asignado a usuarios.",
+      inputSchema: {
+        type: "object",
+        properties: { role: { type: "string" }, confirm: { type: "boolean" } },
+        required: ["role"],
+        additionalProperties: false,
+      },
+      async execute({ role, confirm }: { role: string; confirm?: boolean }) {
+        const current = s.roles.find(
+          (item) =>
+            item.id === role || item.slug === role || item.name === role,
+        );
+        if (!current) throw Error("Rol no encontrado");
+        if (current.system)
+          throw Error("No se puede eliminar un rol del sistema");
+        const assigned = s.users
+          .filter(
+            (user) => user.role === current.slug || user.role === current.name,
+          )
+          .map((user) => ({ id: user.id, name: user.name }));
+        if (assigned.length)
+          throw Error(
+            "No se puede eliminar: el rol está asignado a " +
+              assigned.length +
+              " usuario(s)",
+          );
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            role: current.slug,
+            name: current.name,
+            note: "Repite con confirm:true para eliminar este rol",
+          };
+        s.setRoles((all) => all.filter((item) => item.id !== current.id));
+        return {
+          status: "deleted",
+          role: current.slug,
+          ui_effect: "role_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "role.assign_users",
+      name: "assign_users_to_role",
+      title: "Asignar usuarios a rol",
+      description:
+        "Asigna varios usuarios a un rol existente en una operación validada, sincronizando sus capacidades con las del rol.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          role: { type: "string" },
+          userIds: { type: "array", items: { type: "string" } },
+        },
+        required: ["role", "userIds"],
+        additionalProperties: false,
+      },
+      async execute({ role, userIds }: { role: string; userIds: string[] }) {
+        const selected = s.roles.find(
+          (item) =>
+            item.id === role || item.slug === role || item.name === role,
+        );
+        if (!selected) throw Error("Rol no encontrado");
+        const unique = [...new Set(userIds)];
+        const missing = unique.filter(
+          (id) => !s.users.some((user) => user.id === id),
+        );
+        if (missing.length)
+          throw Error("Usuarios no encontrados: " + missing.join(", "));
+        const assigned = s.users
+          .filter((user) => unique.includes(user.id))
+          .map((user) => ({
+            ...user,
+            role: selected.slug,
+            capabilities: selected.capabilities,
+          }));
+        s.setUsers((all) =>
+          all.map((user) =>
+            unique.includes(user.id)
+              ? {
+                  ...user,
+                  role: selected.slug,
+                  capabilities: selected.capabilities,
+                }
+              : user,
+          ),
+        );
+        return {
+          status: "updated",
+          role: selected.slug,
+          users: assigned,
+          count: assigned.length,
+          ui_effect: "users_role_assigned",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.bulk_attach",
+      name: "bulk_attach_media",
+      title: "Adjuntar medios en lote",
+      description:
+        "Adjunta varios medios a varias entradas validando previamente todos los recursos y entradas para evitar relaciones parciales.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          attachments: { type: "array", items: { type: "object" } },
+        },
+        required: ["attachments"],
+        additionalProperties: false,
+      },
+      async execute({
+        attachments,
+      }: {
+        attachments: Array<{ mediaId: string; entryIds: string[] }>;
+      }) {
+        const prepared = attachments.map((input) => {
+          const media = s.media.find(
+            (asset) =>
+              asset.id === input.mediaId || asset.name === input.mediaId,
+          );
+          if (!media) throw Error("Medio no encontrado: " + input.mediaId);
+          const entryIds = [...new Set(input.entryIds)];
+          const missing = entryIds.filter(
+            (id) => !s.entries.some((entry) => entry.id === id),
+          );
+          if (missing.length)
+            throw Error(
+              "Entradas no encontradas para " +
+                media.id +
+                ": " +
+                missing.join(", "),
+            );
+          return { media, entryIds };
+        });
+        s.setMedia((all) =>
+          all.map((asset) => {
+            const item = prepared.find((input) => input.media.id === asset.id);
+            return item
+              ? {
+                  ...asset,
+                  attachedEntryIds: [
+                    ...new Set([...asset.attachedEntryIds, ...item.entryIds]),
+                  ],
+                }
+              : asset;
+          }),
+        );
+        return {
+          status: "attached",
+          attachments: prepared.map((item) => ({
+            mediaId: item.media.id,
+            entryIds: item.entryIds,
+          })),
+          count: prepared.length,
+          ui_effect: "media_bulk_attached",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "site.get_settings",
+      name: "get_site_settings",
+      title: "Leer ajustes del sitio",
+      description:
+        "Devuelve la identidad y configuración pública del sitio, incluyendo opciones personalizadas persistidas para agentes.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const raw = window.localStorage.getItem("waypoint.settings");
+        const settings = raw
+          ? JSON.parse(raw)
+          : {
+              siteName: "Northstar Journal",
+              description: "A publication about design and culture.",
+              url: "http://localhost:3001",
+              timezone: "America/Mexico_City",
+              options: {},
+            };
+        return { settings, ui_effect: "site_settings_read" };
+      },
+    }),
+    defineTool({
+      stableKey: "site.update_settings",
+      name: "update_site_settings",
+      title: "Actualizar ajustes del sitio",
+      description:
+        "Actualiza parcialmente la identidad, URL, zona horaria y opciones personalizadas del sitio con validación antes de persistir.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          siteName: { type: "string" },
+          description: { type: "string" },
+          url: { type: "string" },
+          timezone: { type: "string" },
+          options: { type: "object" },
+        },
+        additionalProperties: false,
+      },
+      async execute({
+        siteName,
+        description,
+        url,
+        timezone,
+        options,
+      }: {
+        siteName?: string;
+        description?: string;
+        url?: string;
+        timezone?: string;
+        options?: Record<string, unknown>;
+      }) {
+        const raw = window.localStorage.getItem("waypoint.settings");
+        const current = raw
+          ? JSON.parse(raw)
+          : {
+              siteName: "Northstar Journal",
+              description: "A publication about design and culture.",
+              url: "http://localhost:3001",
+              timezone: "America/Mexico_City",
+              options: {},
+            };
+        if (url !== undefined) {
+          try {
+            new URL(url);
+          } catch {
+            throw Error("URL del sitio inválida");
+          }
+        }
+        if (siteName !== undefined && !siteName.trim())
+          throw Error("El nombre del sitio no puede estar vacío");
+        const settings = {
+          ...current,
+          ...(siteName === undefined ? {} : { siteName: siteName.trim() }),
+          ...(description === undefined
+            ? {}
+            : { description: description.trim() }),
+          ...(url === undefined ? {} : { url: url.trim().replace(/\/$/, "") }),
+          ...(timezone === undefined ? {} : { timezone: timezone.trim() }),
+          ...(options === undefined
+            ? {}
+            : { options: { ...(current.options || {}), ...options } }),
+        };
+        window.localStorage.setItem(
+          "waypoint.settings",
+          JSON.stringify(settings),
+        );
+        window.dispatchEvent(new Event("waypoint-settings-updated"));
+        return {
+          status: "updated",
+          settings,
+          ui_effect: "site_settings_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "site.reset_settings",
+      name: "reset_site_settings",
+      title: "Restablecer ajustes del sitio",
+      description:
+        "Prepara o restablece la configuración del sitio a sus valores iniciales; requiere confirm:true porque elimina opciones personalizadas.",
+      inputSchema: {
+        type: "object",
+        properties: { confirm: { type: "boolean" } },
+        additionalProperties: false,
+      },
+      async execute({ confirm }: { confirm?: boolean }) {
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            note: "Repite con confirm:true para eliminar las opciones personalizadas",
+          };
+        const settings = {
+          siteName: "Northstar Journal",
+          description: "A publication about design and culture.",
+          url: "http://localhost:3001",
+          timezone: "America/Mexico_City",
+          options: {},
+        };
+        window.localStorage.setItem(
+          "waypoint.settings",
+          JSON.stringify(settings),
+        );
+        window.dispatchEvent(new Event("waypoint-settings-updated"));
+        return { status: "reset", settings, ui_effect: "site_settings_reset" };
+      },
+    }),
+    defineTool({
+      stableKey: "content.bulk_set_metadata",
+      name: "bulk_set_entry_metadata",
+      title: "Actualizar metadatos en lote",
+      description:
+        "Fusiona metadatos en varias entradas de forma atómica: valida todos los IDs y claves antes de guardar cualquier cambio.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          updates: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                entryId: { type: "string" },
+                metadata: { type: "object" },
+              },
+              required: ["entryId", "metadata"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["updates"],
+        additionalProperties: false,
+      },
+      async execute({
+        updates,
+      }: {
+        updates: Array<{ entryId: string; metadata: Record<string, unknown> }>;
+      }) {
+        const prepared = updates.map((input) => {
+          const entry = s.entries.find((item) => item.id === input.entryId);
+          if (!entry) throw Error("Entrada no encontrada: " + input.entryId);
+          if (
+            !input.metadata ||
+            typeof input.metadata !== "object" ||
+            Array.isArray(input.metadata)
+          )
+            throw Error("Metadatos inválidos para " + input.entryId);
+          return { entry, metadata: input.metadata };
+        });
+        const revisions = prepared.map((item) => {
+          const updated = {
+            ...item.entry,
+            metadata: { ...(item.entry.metadata || {}), ...item.metadata },
+            updated: "Just now",
+          };
+          return {
+            entry: item.entry,
+            updated,
+            revision: {
+              id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+              entryId: item.entry.id,
+              createdAt: new Date().toISOString(),
+              action: "metadata_bulk_update",
+              before: item.entry,
+              after: updated,
+            },
+          };
+        });
+        s.setEntries((all) =>
+          all.map(
+            (entry) =>
+              revisions.find((item) => item.entry.id === entry.id)?.updated ||
+              entry,
+          ),
+        );
+        s.setRevisions((all) => [
+          ...all,
+          ...revisions.map((item) => item.revision),
+        ]);
+        return {
+          status: "updated",
+          entries: revisions.map((item) => item.updated),
+          revisionIds: revisions.map((item) => item.revision.id),
+          count: revisions.length,
+          ui_effect: "entry_metadata_bulk_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "comment.bulk_moderate",
+      name: "bulk_moderate_comments",
+      title: "Moderar comentarios en lote",
+      description:
+        "Actualiza el estado de varios comentarios de forma atómica, validando que todos existan antes de cambiar la cola de moderación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          commentIds: { type: "array", items: { type: "string" } },
+          status: { type: "string", enum: ["Pending", "Approved", "Spam"] },
+        },
+        required: ["commentIds", "status"],
+        additionalProperties: false,
+      },
+      async execute({
+        commentIds,
+        status,
+      }: {
+        commentIds: string[];
+        status: "Pending" | "Approved" | "Spam";
+      }) {
+        const unique = [...new Set(commentIds)];
+        const missing = unique.filter(
+          (id) => !s.comments.some((comment) => comment.id === id),
+        );
+        if (missing.length)
+          throw Error("Comentarios no encontrados: " + missing.join(", "));
+        const now = new Date().toISOString();
+        const updated = s.comments
+          .filter((comment) => unique.includes(comment.id))
+          .map((comment) => ({ ...comment, status, updatedAt: now }));
+        s.setComments((all) =>
+          all.map((comment) =>
+            unique.includes(comment.id)
+              ? { ...comment, status, updatedAt: now }
+              : comment,
+          ),
+        );
+        return {
+          status: "updated",
+          moderationStatus: status,
+          comments: updated,
+          count: updated.length,
+          ui_effect: "comments_bulk_moderated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.bulk_create_terms",
+      name: "bulk_create_terms",
+      title: "Crear términos en lote",
+      description:
+        "Crea varios términos dentro de una taxonomía validando slugs, duplicados y padres antes de persistir el vocabulario.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          terms: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                slug: { type: "string" },
+                parent: { type: ["string", "null"] },
+                description: { type: "string" },
+              },
+              required: ["name", "slug"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["taxonomy", "terms"],
+        additionalProperties: false,
+      },
+      async execute({
+        taxonomy,
+        terms,
+      }: {
+        taxonomy: string;
+        terms: Array<{
+          name: string;
+          slug: string;
+          parent?: string | null;
+          description?: string;
+        }>;
+      }) {
+        const current = findTaxonomy(taxonomy);
+        if (!current) throw Error("Taxonomía no encontrada");
+        const existingSlugs = new Set(current.terms.map((term) => term.slug));
+        const requestedSlugs = new Set<string>();
+        const prepared = terms.map((input) => {
+          const slug = input.slug.trim().toLowerCase();
+          if (!input.name.trim() || !/^[a-z0-9-]+$/.test(slug))
+            throw Error("Nombre o slug inválido: " + input.slug);
+          if (existingSlugs.has(slug) || requestedSlugs.has(slug))
+            throw Error("Slug de término duplicado: " + slug);
+          requestedSlugs.add(slug);
+          const parentId = input.parent
+            ? current.terms.find(
+                (term) =>
+                  term.id === input.parent || term.slug === input.parent,
+              )?.id
+            : null;
+          if (input.parent && !parentId)
+            throw Error("Padre no encontrado: " + input.parent);
+          return {
+            id: "term_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+            name: input.name.trim(),
+            slug,
+            parent: parentId,
+            description: input.description?.trim(),
+          };
+        });
+        s.setTaxonomies((all) =>
+          all.map((item) =>
+            item.slug === current.slug
+              ? { ...item, terms: [...item.terms, ...prepared] }
+              : item,
+          ),
+        );
+        return {
+          status: "created",
+          taxonomy: current.slug,
+          terms: prepared,
+          count: prepared.length,
+          ui_effect: "terms_bulk_created",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.bulk_connect",
+      name: "bulk_connect_entries",
+      title: "Conectar entradas en lote",
+      description:
+        "Crea varias conexiones de relaciones validando tipos, entradas, duplicados y cardinalidad antes de persistir el grafo.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          connections: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                relation: { type: "string" },
+                fromEntryId: { type: "string" },
+                toEntryId: { type: "string" },
+              },
+              required: ["relation", "fromEntryId", "toEntryId"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["connections"],
+        additionalProperties: false,
+      },
+      async execute({
+        connections,
+      }: {
+        connections: Array<{
+          relation: string;
+          fromEntryId: string;
+          toEntryId: string;
+        }>;
+      }) {
+        const prepared = connections.map((input) => {
+          const model = s.relations.find(
+            (relation) =>
+              relation.id === input.relation ||
+              relation.slug === input.relation ||
+              relation.name === input.relation,
+          );
+          if (!model) throw Error("Relación no encontrada: " + input.relation);
+          const from = s.entries.find(
+            (entry) => entry.id === input.fromEntryId,
+          );
+          const to = s.entries.find((entry) => entry.id === input.toEntryId);
+          if (!from || !to)
+            throw Error("Entrada origen o destino no encontrada");
+          if (from.type !== model.fromType || to.type !== model.toType)
+            throw Error("Los tipos no coinciden con la relación " + model.slug);
+          return { model, from, to };
+        });
+        for (const model of s.relations.filter((relation) =>
+          prepared.some(
+            (item) =>
+              item.model.id === relation.id && relation.cardinality === "one",
+          ),
+        )) {
+          const grouped = new Map<string, number>();
+          for (const item of prepared.filter(
+            (item) => item.model.id === model.id,
+          ))
+            grouped.set(item.from.id, (grouped.get(item.from.id) || 0) + 1);
+          for (const [fromId, count] of grouped)
+            if (count > 1)
+              throw Error(
+                "La relación " +
+                  model.slug +
+                  " admite un solo destino para " +
+                  fromId,
+              );
+        }
+        const next = prepared
+          .filter(
+            (item) =>
+              !s.connections.some(
+                (connection) =>
+                  connection.relation === item.model.id &&
+                  connection.fromEntryId === item.from.id &&
+                  connection.toEntryId === item.to.id,
+              ),
+          )
+          .map((item) => ({
+            id: "conn_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+            relation: item.model.id,
+            fromEntryId: item.from.id,
+            toEntryId: item.to.id,
+            createdAt: new Date().toISOString(),
+          }));
+        s.setConnections((all) => [...all, ...next]);
+        return {
+          status: "connected",
+          connections: next,
+          count: next.length,
+          ui_effect: "entries_bulk_connected",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.bulk_set_metadata",
+      name: "bulk_set_user_metadata",
+      title: "Actualizar metadatos de usuarios en lote",
+      description:
+        "Fusiona metadatos en varios usuarios validando todos los perfiles antes de guardar cambios de segmentación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          updates: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                userId: { type: "string" },
+                metadata: { type: "object" },
+              },
+              required: ["userId", "metadata"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["updates"],
+        additionalProperties: false,
+      },
+      async execute({
+        updates,
+      }: {
+        updates: Array<{ userId: string; metadata: Record<string, unknown> }>;
+      }) {
+        const prepared = updates.map((input) => {
+          const user = s.users.find((item) => item.id === input.userId);
+          if (!user) throw Error("Usuario no encontrado: " + input.userId);
+          if (
+            !input.metadata ||
+            typeof input.metadata !== "object" ||
+            Array.isArray(input.metadata)
+          )
+            throw Error("Metadatos inválidos para " + input.userId);
+          return { user, metadata: input.metadata };
+        });
+        const updated = prepared.map((item) => ({
+          ...item.user,
+          metadata: { ...(item.user.metadata || {}), ...item.metadata },
+        }));
+        s.setUsers((all) =>
+          all.map(
+            (user) => updated.find((item) => item.id === user.id) || user,
+          ),
+        );
+        return {
+          status: "updated",
+          users: updated,
+          count: updated.length,
+          ui_effect: "user_metadata_bulk_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.bulk_set_field",
+      name: "bulk_set_entry_field",
+      title: "Actualizar campos en lote",
+      description:
+        "Actualiza un campo tipado en varias entradas validando cada schema, valor y campo obligatorio antes de guardar revisiones.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          updates: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                entryId: { type: "string" },
+                field: { type: "string" },
+                value: {},
+              },
+              required: ["entryId", "field", "value"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["updates"],
+        additionalProperties: false,
+      },
+      async execute({
+        updates,
+      }: {
+        updates: Array<{ entryId: string; field: string; value: unknown }>;
+      }) {
+        const prepared = updates.map((input) => {
+          const entry = s.entries.find((item) => item.id === input.entryId);
+          if (!entry) throw Error("Entrada no encontrada: " + input.entryId);
+          const model = s.contentTypes.find((type) => type.name === entry.type);
+          if (!model)
+            throw Error("Tipo de contenido inexistente: " + entry.type);
+          if (!model.fields.includes(input.field))
+            throw Error("Campo no definido en el schema: " + input.field);
+          const updated = {
+            ...entry,
+            data: { ...(entry.data || {}), [input.field]: input.value },
+            updated: "Just now",
+          };
+          const errors = validateData(model, updated.data || {});
+          if (errors.length) throw Error(errors.join("; "));
+          return { entry, updated };
+        });
+        const revisions = prepared.map((item) => ({
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId: item.entry.id,
+          createdAt: new Date().toISOString(),
+          action: "field_bulk_update",
+          before: item.entry,
+          after: item.updated,
+        }));
+        s.setEntries((all) =>
+          all.map(
+            (entry) =>
+              prepared.find((item) => item.entry.id === entry.id)?.updated ||
+              entry,
+          ),
+        );
+        s.setRevisions((all) => [...all, ...revisions]);
+        return {
+          status: "updated",
+          entries: prepared.map((item) => item.updated),
+          revisionIds: revisions.map((revision) => revision.id),
+          count: prepared.length,
+          ui_effect: "entry_fields_bulk_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.bulk_publish",
+      name: "bulk_publish_entries",
+      title: "Publicar entradas en lote",
+      description:
+        "Publica varias entradas solo después de validar cada tipo, campo definido, valor tipado y requisito obligatorio; registra una revisión por cada entrada.",
+      inputSchema: {
+        type: "object",
+        properties: { entryIds: { type: "array", items: { type: "string" } } },
+        required: ["entryIds"],
+        additionalProperties: false,
+      },
+      async execute({ entryIds }: { entryIds: string[] }) {
+        const unique = [...new Set(entryIds)];
+        const prepared = unique.map((entryId) => {
+          const entry = s.entries.find((item) => item.id === entryId);
+          if (!entry) throw Error("Entrada no encontrada: " + entryId);
+          const model = s.contentTypes.find((type) => type.name === entry.type);
+          if (!model)
+            throw Error("Tipo de contenido inexistente: " + entry.type);
+          const unknown = Object.keys(entry.data || {}).filter(
+            (key) => !model.fields.includes(key),
+          );
+          if (unknown.length)
+            throw Error(
+              "Campos no definidos en " + entryId + ": " + unknown.join(", "),
+            );
+          const errors = validateData(model, entry.data || {});
+          if (errors.length)
+            throw Error(
+              "No se puede publicar " + entryId + ": " + errors.join("; "),
+            );
+          return entry;
+        });
+        const now = "Just now";
+        const updated = prepared.map((entry) => ({
+          ...entry,
+          status: "Published" as const,
+          scheduledAt: undefined,
+          updated: now,
+        }));
+        const revisions = prepared.map((entry, index) => ({
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId: entry.id,
+          createdAt: new Date().toISOString(),
+          action: "bulk_publish",
+          before: entry,
+          after: updated[index],
+        }));
+        s.setEntries((all) =>
+          all.map(
+            (entry) => updated.find((item) => item.id === entry.id) || entry,
+          ),
+        );
+        s.setRevisions((all) => [...all, ...revisions]);
+        return {
+          status: "published",
+          entryIds: prepared.map((entry) => entry.id),
+          entries: updated,
+          revisionIds: revisions.map((revision) => revision.id),
+          count: prepared.length,
+          ui_effect: "entries_bulk_published",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.bulk_trash",
+      name: "bulk_trash_entries",
+      title: "Enviar entradas a la papelera",
+      description:
+        "Prepara o mueve varias entradas a la papelera, conservando sus datos para restauración y limpiando conexiones y términos asociados; registra revisiones al confirmar.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryIds: { type: "array", items: { type: "string" } },
+          confirm: { type: "boolean" },
+        },
+        required: ["entryIds"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryIds,
+        confirm,
+      }: {
+        entryIds: string[];
+        confirm?: boolean;
+      }) {
+        const unique = [...new Set(entryIds)];
+        const selected = unique.map((entryId) => {
+          const entry = s.entries.find((item) => item.id === entryId);
+          if (!entry) throw Error("Entrada no encontrada: " + entryId);
+          return entry;
+        });
+        const connectionCount = s.connections.filter(
+          (connection) =>
+            unique.includes(connection.fromEntryId) ||
+            unique.includes(connection.toEntryId),
+        ).length;
+        const assignmentCount = s.termAssignments.filter((assignment) =>
+          unique.includes(assignment.entryId),
+        ).length;
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            entryIds: unique,
+            titles: selected.map((entry) => entry.title),
+            connectionCount,
+            assignmentCount,
+            note: "Repite con confirm:true para mover estas entradas a la papelera",
+          };
+        const now = new Date().toISOString();
+        const updated = selected.map((entry) => ({
+          ...entry,
+          deletedAt: now,
+          updated: "Just now",
+        }));
+        const revisions = selected.map((entry, index) => ({
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId: entry.id,
+          createdAt: new Date().toISOString(),
+          action: "bulk_trash",
+          before: entry,
+          after: updated[index],
+        }));
+        s.setEntries((all) =>
+          all.map(
+            (entry) => updated.find((item) => item.id === entry.id) || entry,
+          ),
+        );
+        s.setRevisions((all) => [...all, ...revisions]);
+        s.setConnections((all) =>
+          all.filter(
+            (connection) =>
+              !unique.includes(connection.fromEntryId) &&
+              !unique.includes(connection.toEntryId),
+          ),
+        );
+        s.setTermAssignments((all) =>
+          all.filter((assignment) => !unique.includes(assignment.entryId)),
+        );
+        return {
+          status: "trashed",
+          entryIds: unique,
+          connectionCount,
+          assignmentCount,
+          revisionIds: revisions.map((revision) => revision.id),
+          count: unique.length,
+          ui_effect: "entries_bulk_trashed",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.bulk_restore",
+      name: "bulk_restore_entries",
+      title: "Restaurar entradas en lote",
+      description:
+        "Restaura varias entradas que estén en la papelera y deja intactas las entradas activas o los IDs no seleccionados; registra una revisión por cada restauración.",
+      inputSchema: {
+        type: "object",
+        properties: { entryIds: { type: "array", items: { type: "string" } } },
+        required: ["entryIds"],
+        additionalProperties: false,
+      },
+      async execute({ entryIds }: { entryIds: string[] }) {
+        const unique = [...new Set(entryIds)];
+        const missing = unique.filter(
+          (id) => !s.entries.some((entry) => entry.id === id),
+        );
+        if (missing.length)
+          throw Error("Entradas no encontradas: " + missing.join(", "));
+        const restored = s.entries.filter(
+          (entry) => unique.includes(entry.id) && entry.deletedAt,
+        );
+        const alreadyActive = s.entries
+          .filter((entry) => unique.includes(entry.id) && !entry.deletedAt)
+          .map((entry) => entry.id);
+        const updated = restored.map((entry) => ({
+          ...entry,
+          deletedAt: undefined,
+          updated: "Just now",
+        }));
+        const revisions = restored.map((entry, index) => ({
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId: entry.id,
+          createdAt: new Date().toISOString(),
+          action: "bulk_restore",
+          before: entry,
+          after: updated[index],
+        }));
+        s.setEntries((all) =>
+          all.map(
+            (entry) => updated.find((item) => item.id === entry.id) || entry,
+          ),
+        );
+        s.setRevisions((all) => [...all, ...revisions]);
+        return {
+          status: "restored",
+          entryIds: restored.map((entry) => entry.id),
+          alreadyActive,
+          revisionIds: revisions.map((revision) => revision.id),
+          count: restored.length,
+          note: restored.length
+            ? "Entradas restauradas correctamente"
+            : "Ninguna entrada seleccionada estaba en la papelera",
+          ui_effect: "entries_bulk_restored",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.reorder_items",
+      name: "reorder_menu_items",
+      title: "Reordenar elementos de menú",
+      description:
+        "Reordena todos o parte de los elementos de un menú usando un mapa explícito de posiciones y valida que cada elemento pertenezca al menú.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          menu: { type: "string" },
+          items: { type: "array", items: { type: "object" } },
+        },
+        required: ["menu", "items"],
+        additionalProperties: false,
+      },
+      async execute({
+        menu,
+        items,
+      }: {
+        menu: string;
+        items: Array<{
+          itemId: string;
+          order: number;
+          parentId?: string | null;
+        }>;
+      }) {
+        const current = s.menus.find(
+          (item) =>
+            item.id === menu || item.slug === menu || item.name === menu,
+        );
+        if (!current) throw Error("Menú no encontrado");
+        const unique = [...new Set(items.map((item) => item.itemId))];
+        if (unique.length !== items.length)
+          throw Error("Hay elementos de menú duplicados en la solicitud");
+        const missing = unique.filter(
+          (id) => !current.items.some((item) => item.id === id),
+        );
+        if (missing.length)
+          throw Error(
+            "Elementos de menú no encontrados: " + missing.join(", "),
+          );
+        const itemIds = new Set(current.items.map((item) => item.id));
+        for (const input of items) {
+          if (!Number.isInteger(input.order) || input.order < 0)
+            throw Error("El orden debe ser un entero no negativo");
+          if (
+            input.parentId &&
+            (input.parentId === input.itemId || !itemIds.has(input.parentId))
+          )
+            throw Error("Padre de menú inválido: " + input.parentId);
+        }
+        const updated = {
+          ...current,
+          items: current.items
+            .map((item) => {
+              const input = items.find(
+                (candidate) => candidate.itemId === item.id,
+              );
+              return input
+                ? {
+                    ...item,
+                    order: input.order,
+                    parentId:
+                      input.parentId === null ? undefined : input.parentId,
+                  }
+                : item;
+            })
+            .sort((a, b) => a.order - b.order),
+        };
+        s.setMenus((all) =>
+          all.map((item) => (item.id === current.id ? updated : item)),
+        );
+        return {
+          status: "reordered",
+          menu: updated,
+          updatedItemIds: unique,
+          count: unique.length,
+          ui_effect: "menu_items_reordered",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.list_public",
+      name: "list_public_entries",
+      title: "Listar contenido público",
+      description:
+        "Devuelve únicamente entradas publicadas y fuera de la papelera, con filtros opcionales por tipo y texto para alimentar experiencias públicas.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          query: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        type,
+        query,
+        limit,
+        offset,
+      }: {
+        type?: string;
+        query?: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        const model = type
+          ? s.contentTypes.find(
+              (item) => item.name === type || item.slug === type,
+            )
+          : undefined;
+        if (type && !model) throw Error("Tipo de contenido no encontrado");
+        const needle = query?.trim().toLowerCase();
+        const matching = s.entries.filter(
+          (entry) =>
+            !entry.deletedAt &&
+            entry.status === "Published" &&
+            (!model || entry.type === model.name) &&
+            (!needle ||
+              JSON.stringify({
+                title: entry.title,
+                type: entry.type,
+                relation: entry.relation,
+                data: entry.data || {},
+                metadata: entry.metadata || {},
+              })
+                .toLowerCase()
+                .includes(needle)),
+        );
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          entries: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "No hay contenido público que coincida",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.get_agent_manifest",
+      name: "get_agent_manifest",
+      title: "Descubrir capacidades del agente",
+      description:
+        "Devuelve un manifiesto compacto de capacidades, recursos y operaciones que requieren confirmación para que un agente planifique acciones seguras.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        return {
+          version: "1.1",
+          resources: [
+            "content_types",
+            "entries",
+            "fields",
+            "metadata",
+            "taxonomies",
+            "terms",
+            "relations",
+            "users",
+            "roles",
+            "plugins",
+            "media",
+            "comments",
+            "menus",
+            "site_settings",
+            "revisions",
+            "scheduling",
+          ],
+          operations: {
+            read: [
+              "schema.get_content_model",
+              "schema.get_workspace_model",
+              "schema.activity",
+              "content.list_revisions",
+              "schema.export_workspace_model",
+              "schema.preview_import_content_model",
+              "schema.validate_workspace",
+              "content.list_content_entries",
+              "content.list_public_entries",
+              "content.get_public_entry",
+              "content.get_public_entry_context",
+              "content.list_public_related",
+              "content.list_public_author",
+              "content.list_scheduled_entries",
+              "content.get_entry_context",
+              "content.compare_revisions",
+              "taxonomy.get_taxonomy_context",
+              "taxonomy.get_public_term_context",
+              "relation.get_graph",
+              "user.list_users",
+              "user.get_user",
+              "user.check_user_capability",
+              "user.list_user_content",
+              "user.search_users",
+              "role.list_roles",
+              "plugin.list_plugins",
+              "plugin.check_dependencies",
+              "media.list_media_assets",
+              "media.search_media",
+              "comment.list_comments",
+              "comment.search_comments",
+              "comment.get_comment_thread",
+              "menu.list_menus",
+              "menu.get_navigation_model",
+              "site.get_settings",
+              "site.public_settings",
+            ],
+            write: [
+              "schema.import_workspace_model",
+              "schema.create_content_type",
+              "content.create_content_entry",
+              "content.update_content_entry",
+              "content.bulk_set_entry_field",
+              "content.bulk_set_entry_metadata",
+              "content.bulk_publish",
+              "content.schedule_entry",
+              "content.publish_due_entries",
+              "content.unschedule",
+              "content.bulk_schedule",
+              "content.bulk_unschedule",
+              "content.bulk_trash",
+              "content.bulk_restore",
+              "content.restore_revision",
+              "taxonomy.create_taxonomy",
+              "taxonomy.create_term",
+              "taxonomy.bulk_create_terms",
+              "taxonomy.bulk_set_entry_terms",
+              "relation.bulk_connect",
+              "user.create_user",
+              "user.update_user",
+              "user.bulk_set_user_metadata",
+              "role.create_role",
+              "media.register_media_asset",
+              "media.bulk_attach",
+              "media.update_metadata",
+              "media.bulk_update_metadata",
+              "comment.create_comment",
+              "comment.bulk_moderate",
+              "role.assign_users",
+              "plugin.install_plugin",
+              "plugin.set_dependencies",
+              "plugin.activate",
+              "menu.create_menu",
+              "menu.add_menu_item",
+              "menu.reorder_menu_items",
+              "site.update_settings",
+            ],
+            confirmationRequired: [
+              "content.delete_content_entry",
+              "content.restore_revision",
+              "content.bulk_trash",
+              "user.delete_user",
+              "user.delete_user_metadata",
+              "content.delete_entry_metadata",
+              "comment.delete_comment",
+              "comment.delete_comment_thread",
+              "menu.delete_menu",
+              "menu.delete_menu_item",
+              "plugin.uninstall",
+              "role.delete_role",
+              "site.reset_settings",
+            ],
+            discoverable: [
+              "schema.get_content_model",
+              "schema.get_workspace_model",
+              "user.list_users",
+              "user.check_capability",
+              "role.list_roles",
+              "role.create_role",
+              "role.update_role",
+              "user.get_user",
+              "user.create_user",
+              "user.update_user",
+              "user.delete_user",
+              "user.get_metadata",
+              "user.set_metadata",
+              "user.delete_metadata",
+              "content.assign_author",
+              "user.list_authored_content",
+              "content.set_slug",
+              "plugin.list_plugins",
+              "plugin.get_plugin",
+              "plugin.install_plugin",
+              "plugin.set_status",
+              "media.list_assets",
+              "media.register_asset",
+              "media.attach_to_entry",
+              "media.detach_from_entry",
+              "comment.list_comments",
+              "comment.get_stats",
+              "menu.list_menus",
+              "menu.get_navigation_model",
+              "menu.create_menu",
+              "menu.update_menu",
+              "menu.delete_menu",
+              "menu.add_item",
+              "menu.update_item",
+              "menu.delete_item",
+              "comment.create_comment",
+              "comment.moderate_comment",
+              "comment.delete_comment",
+              "schema.validate_content_model",
+              "schema.export_content_model",
+              "schema.import_content_model",
+              "taxonomy.create_taxonomy",
+              "taxonomy.list_taxonomies",
+              "taxonomy.update_taxonomy",
+              "taxonomy.delete_taxonomy",
+              "taxonomy.create_term",
+              "taxonomy.list_terms",
+              "taxonomy.update_term",
+              "taxonomy.delete_term",
+              "taxonomy.set_entry_terms",
+              "taxonomy.get_entry_terms",
+              "relation.create_relation",
+              "relation.update_relation",
+              "relation.delete_relation",
+              "relation.list_relations",
+              "relation.connect_entries",
+              "relation.disconnect_entries",
+              "relation.list_connections",
+              "schema.create_content_type",
+              "schema.update_content_type",
+              "schema.delete_content_type",
+              "content.list_entries",
+              "content.get_entry",
+              "content.get_entry_context",
+              "content.duplicate_entry",
+              "content.upsert_entries",
+              "content.create_entry",
+              "content.get_fields",
+              "content.set_field",
+              "content.update_entry",
+              "content.preview_update",
+              "content.apply_preview",
+              "content.list_revisions",
+              "content.restore_revision",
+              "content.set_parent",
+              "content.list_children",
+              "content.trash_entry",
+              "content.list_trash",
+              "content.restore_entry",
+              "content.delete_entry",
+              "content.get_metadata",
+              "content.set_metadata",
+              "content.delete_metadata",
+              "content.set_type_filter",
+              "content.set_status_filter",
+              "content.schedule_entry",
+              "content.publish_due_entries",
+              "content.publish_entry",
+              "content.resolve_relations",
+              "schema.get_content_stats",
+              "schema.list_content_types",
+              "content.validate_entry",
+              "taxonomy.get_context",
+              "schema.preview_import",
+              "relation.get_graph",
+              "taxonomy.find_entries_by_terms",
+              "taxonomy.bulk_set_entry_terms",
+              "schema.export_workspace_model",
+              "schema.import_workspace_model",
+              "schema.validate_workspace",
+              "plugin.set_dependencies",
+              "plugin.check_dependencies",
+              "plugin.activate",
+              "plugin.uninstall",
+              "role.delete_role",
+              "role.assign_users",
+              "media.bulk_attach",
+              "site.get_settings",
+              "site.update_settings",
+              "site.reset_settings",
+              "content.bulk_set_metadata",
+              "comment.bulk_moderate",
+              "taxonomy.bulk_create_terms",
+              "relation.bulk_connect",
+              "user.bulk_set_metadata",
+              "content.bulk_set_field",
+              "content.bulk_publish",
+              "content.bulk_trash",
+              "content.bulk_restore",
+              "menu.reorder_items",
+              "content.list_public",
+              "schema.get_agent_manifest",
+              "content.unschedule",
+              "content.compare_revisions",
+              "content.list_scheduled",
+              "user.search",
+              "media.search",
+              "comment.search",
+              "taxonomy.search_terms",
+              "menu.public_navigation",
+              "content.get_public_entry",
+              "content.get_public_context",
+              "taxonomy.public_term_context",
+              "relation.public_related",
+              "media.bulk_detach",
+              "content.bulk_duplicate",
+              "content.bulk_assign_author",
+              "comment.thread",
+              "menu.validate",
+              "taxonomy.validate",
+              "relation.validate",
+              "media.unattached",
+              "media.delete",
+              "schema.validate_types",
+              "plugin.validate",
+              "content.public_author",
+              "user.public_profile",
+              "site.public_settings",
+              "comment.delete_thread",
+              "media.validate",
+              "user.validate",
+              "schema.health",
+              "content.bulk_schedule",
+              "content.bulk_unschedule",
+              "media.update_metadata",
+              "schema.activity",
+              "media.bulk_update_metadata",
+            ],
+            safetyNotes: [
+              "Las operaciones WebMCP actúan sobre el estado del workspace actual.",
+              "La autorización definitiva debe implementarse en el servidor.",
+              "Las operaciones masivas validan el lote antes de persistirlo.",
+              "Las importaciones, eliminaciones y cambios de publicación deben validarse o confirmarse según indique cada herramienta.",
+            ],
+          },
+          counts: {
+            entries: s.entries.length,
+            contentTypes: s.contentTypes.length,
+            taxonomies: s.taxonomies.length,
+            relations: s.relations.length,
+            users: s.users.length,
+            roles: s.roles.length,
+            plugins: s.plugins.length,
+            media: s.media.length,
+            comments: s.comments.length,
+            menus: s.menus.length,
+          },
+          ui_effect: "agent_manifest_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.unschedule",
+      name: "unschedule_content_entry",
+      title: "Cancelar programación",
+      description:
+        "Cancela la fecha de publicación de una entrada programada y la conserva como borrador sin alterar sus campos; registra una revisión del cambio.",
+      inputSchema: {
+        type: "object",
+        properties: { entryId: { type: "string" } },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      async execute({ entryId }: { entryId: string }) {
+        const entry = s.entries.find((item) => item.id === entryId);
+        if (!entry) throw Error("Entrada no encontrada");
+        if (!entry.scheduledAt)
+          return {
+            status: "unchanged",
+            entryId,
+            note: "La entrada no tiene una publicación programada",
+          };
+        const updated = {
+          ...entry,
+          status: "Draft" as const,
+          scheduledAt: undefined,
+          updated: "Just now",
+        };
+        const revision = {
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId,
+          createdAt: new Date().toISOString(),
+          action: "unschedule",
+          before: entry,
+          after: updated,
+        };
+        s.setEntries((all) =>
+          all.map((item) => (item.id === entryId ? updated : item)),
+        );
+        s.setRevisions((all) => [...all, revision]);
+        return {
+          status: "unscheduled",
+          entry: updated,
+          revisionId: revision.id,
+          ui_effect: "entry_unscheduled",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.compare_revisions",
+      name: "compare_entry_revisions",
+      title: "Comparar revisiones",
+      description:
+        "Compara dos revisiones de una entrada y devuelve los campos, metadatos y estado que cambiaron.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          fromRevisionId: { type: "string" },
+          toRevisionId: { type: "string" },
+        },
+        required: ["entryId", "fromRevisionId", "toRevisionId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        entryId,
+        fromRevisionId,
+        toRevisionId,
+      }: {
+        entryId: string;
+        fromRevisionId: string;
+        toRevisionId: string;
+      }) {
+        const revisions = s.revisions.filter(
+          (revision) => revision.entryId === entryId,
+        );
+        const from = revisions.find(
+          (revision) => revision.id === fromRevisionId,
+        );
+        const to = revisions.find((revision) => revision.id === toRevisionId);
+        if (!from || !to)
+          throw Error("Una o ambas revisiones no existen para esta entrada");
+        const before = from.after;
+        const after = to.after;
+        const fields = [
+          ...new Set([
+            ...Object.keys(before.data || {}),
+            ...Object.keys(after.data || {}),
+          ]),
+        ]
+          .filter(
+            (field) =>
+              JSON.stringify(before.data?.[field]) !==
+              JSON.stringify(after.data?.[field]),
+          )
+          .map((field) => ({
+            field,
+            before: before.data?.[field],
+            after: after.data?.[field],
+          }));
+        const metadata = [
+          ...new Set([
+            ...Object.keys(before.metadata || {}),
+            ...Object.keys(after.metadata || {}),
+          ]),
+        ]
+          .filter(
+            (key) =>
+              JSON.stringify(before.metadata?.[key]) !==
+              JSON.stringify(after.metadata?.[key]),
+          )
+          .map((key) => ({
+            key,
+            before: before.metadata?.[key],
+            after: after.metadata?.[key],
+          }));
+        return {
+          entryId,
+          fromRevisionId,
+          toRevisionId,
+          changes: {
+            title:
+              before.title === after.title
+                ? undefined
+                : { before: before.title, after: after.title },
+            status:
+              before.status === after.status
+                ? undefined
+                : { before: before.status, after: after.status },
+            slug:
+              before.slug === after.slug
+                ? undefined
+                : { before: before.slug, after: after.slug },
+            fields,
+            metadata,
+          },
+          changed: Boolean(
+            before.title !== after.title ||
+              before.status !== after.status ||
+              before.slug !== after.slug ||
+              fields.length ||
+              metadata.length,
+          ),
+          ui_effect: "revisions_compared",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.list_scheduled",
+      name: "list_scheduled_entries",
+      title: "Listar entradas programadas",
+      description:
+        "Devuelve entradas en borrador con fecha futura de publicación, ordenadas cronológicamente para apoyar el calendario editorial.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        type,
+        limit,
+        offset,
+      }: {
+        type?: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        const model = type
+          ? s.contentTypes.find(
+              (item) => item.name === type || item.slug === type,
+            )
+          : undefined;
+        if (type && !model) throw Error("Tipo de contenido no encontrado");
+        const matching = s.entries
+          .filter(
+            (entry) =>
+              !entry.deletedAt &&
+              entry.status === "Draft" &&
+              entry.scheduledAt &&
+              (!model || entry.type === model.name),
+          )
+          .sort(
+            (a, b) => Date.parse(a.scheduledAt!) - Date.parse(b.scheduledAt!),
+          );
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          entries: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "No hay entradas programadas",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.search",
+      name: "search_users",
+      title: "Buscar usuarios",
+      description:
+        "Busca usuarios por texto libre en nombre, email, rol, capacidades y metadatos, con filtros de estado y paginación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string" },
+          role: { type: "string" },
+          status: { type: "string", enum: ["Active", "Invited"] },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        query,
+        role,
+        status,
+        limit,
+        offset,
+      }: {
+        query?: string;
+        role?: string;
+        status?: "Active" | "Invited";
+        limit?: number;
+        offset?: number;
+      }) {
+        const needle = query?.trim().toLowerCase();
+        const matching = s.users.filter(
+          (user) =>
+            (!role || user.role === role) &&
+            (!status || user.status === status) &&
+            (!needle ||
+              JSON.stringify({
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                capabilities: user.capabilities,
+                metadata: user.metadata || {},
+              })
+                .toLowerCase()
+                .includes(needle)),
+        );
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          users: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "No hay usuarios que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.search",
+      name: "search_media",
+      title: "Buscar medios",
+      description:
+        "Busca recursos multimedia por nombre, MIME, texto alternativo, URL o metadatos, con paginación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string" },
+          mimeType: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        query,
+        mimeType,
+        limit,
+        offset,
+      }: {
+        query?: string;
+        mimeType?: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        const needle = query?.trim().toLowerCase();
+        const matching = s.media.filter(
+          (asset) =>
+            (!mimeType || asset.mimeType === mimeType) &&
+            (!needle ||
+              JSON.stringify({
+                name: asset.name,
+                url: asset.url,
+                mimeType: asset.mimeType,
+                alt: asset.alt || "",
+                metadata: asset.metadata || {},
+              })
+                .toLowerCase()
+                .includes(needle)),
+        );
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          media: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "No hay medios que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "comment.search",
+      name: "search_comments",
+      title: "Buscar comentarios",
+      description:
+        "Busca comentarios por contenido, autor, email, entrada y estado de moderación, con paginación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string" },
+          entryId: { type: "string" },
+          status: { type: "string", enum: ["Pending", "Approved", "Spam"] },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        query,
+        entryId,
+        status,
+        limit,
+        offset,
+      }: {
+        query?: string;
+        entryId?: string;
+        status?: "Pending" | "Approved" | "Spam";
+        limit?: number;
+        offset?: number;
+      }) {
+        const needle = query?.trim().toLowerCase();
+        const matching = s.comments.filter(
+          (comment) =>
+            (!entryId || comment.entryId === entryId) &&
+            (!status || comment.status === status) &&
+            (!needle ||
+              JSON.stringify({
+                content: comment.content,
+                authorName: comment.authorName,
+                authorEmail: comment.authorEmail || "",
+                metadata: comment.metadata || {},
+              })
+                .toLowerCase()
+                .includes(needle)),
+        );
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          comments: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "No hay comentarios que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.search_terms",
+      name: "search_taxonomy_terms",
+      title: "Buscar términos",
+      description:
+        "Busca términos dentro de una taxonomía por nombre, slug o descripción e informa su uso actual en entradas.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          query: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        required: ["taxonomy"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        taxonomy,
+        query,
+        limit,
+        offset,
+      }: {
+        taxonomy: string;
+        query?: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        const current = findTaxonomy(taxonomy);
+        if (!current) throw Error("Taxonomía no encontrada");
+        const needle = query?.trim().toLowerCase();
+        const matching = current.terms
+          .filter(
+            (term) =>
+              !needle ||
+              JSON.stringify({
+                name: term.name,
+                slug: term.slug,
+                description: term.description || "",
+              })
+                .toLowerCase()
+                .includes(needle),
+          )
+          .map((term) => ({
+            ...term,
+            entryCount: s.termAssignments.filter(
+              (assignment) =>
+                assignment.taxonomy === current.slug &&
+                assignment.termIds.includes(term.id),
+            ).length,
+          }));
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          taxonomy: current.slug,
+          terms: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "No hay términos que coincidan",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.public_navigation",
+      name: "get_public_navigation",
+      title: "Resolver navegación pública",
+      description:
+        "Devuelve menús listos para frontend, resolviendo entradas a sus slugs y excluyendo destinos eliminados o inexistentes.",
+      inputSchema: {
+        type: "object",
+        properties: { menu: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ menu }: { menu?: string }) {
+        const selected = s.menus.filter(
+          (item) =>
+            !menu ||
+            item.id === menu ||
+            item.slug === menu ||
+            item.name === menu,
+        );
+        if (menu && !selected.length) throw Error("Menú no encontrado");
+        const result = selected.map((current) => ({
+          ...current,
+          items: current.items
+            .filter((item) => {
+              const entry = item.entryId
+                ? s.entries.find((candidate) => candidate.id === item.entryId)
+                : undefined;
+              return !item.entryId || Boolean(entry && !entry.deletedAt);
+            })
+            .map((item) => {
+              const entry = item.entryId
+                ? s.entries.find((candidate) => candidate.id === item.entryId)
+                : undefined;
+              return {
+                ...item,
+                destination:
+                  item.url ||
+                  (entry?.slug && "/" + entry.slug) ||
+                  "/entry/" + item.entryId,
+              };
+            })
+            .sort((a, b) => a.order - b.order),
+        }));
+        return {
+          menus: result,
+          count: result.length,
+          itemCount: result.reduce(
+            (total, item) => total + item.items.length,
+            0,
+          ),
+          ui_effect: "public_navigation_resolved",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.get_public_entry",
+      name: "get_public_entry",
+      title: "Leer entrada pública",
+      description:
+        "Resuelve una entrada publicada por tipo y slug, excluyendo contenido en borrador o papelera.",
+      inputSchema: {
+        type: "object",
+        properties: { type: { type: "string" }, slug: { type: "string" } },
+        required: ["type", "slug"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ type, slug }: { type: string; slug: string }) {
+        const model = s.contentTypes.find(
+          (item) => item.name === type || item.slug === type,
+        );
+        if (!model) throw Error("Tipo de contenido no encontrado");
+        const entry = s.entries.find(
+          (item) =>
+            item.type === model.name &&
+            item.slug === slug &&
+            !item.deletedAt &&
+            item.status === "Published",
+        );
+        if (!entry) throw Error("Entrada pública no encontrada");
+        return {
+          entry,
+          canonicalUrl: "/" + model.slug + "/" + entry.slug,
+          ui_effect: "public_entry_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.get_public_context",
+      name: "get_public_entry_context",
+      title: "Leer contexto público",
+      description:
+        "Devuelve una entrada publicada junto con autor, términos, relaciones, medios adjuntos y comentarios aprobados, excluyendo datos privados.",
+      inputSchema: {
+        type: "object",
+        properties: { type: { type: "string" }, slug: { type: "string" } },
+        required: ["type", "slug"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ type, slug }: { type: string; slug: string }) {
+        const model = s.contentTypes.find(
+          (item) => item.name === type || item.slug === type,
+        );
+        if (!model) throw Error("Tipo de contenido no encontrado");
+        const entry = s.entries.find(
+          (item) =>
+            item.type === model.name &&
+            item.slug === slug &&
+            !item.deletedAt &&
+            item.status === "Published",
+        );
+        if (!entry) throw Error("Entrada pública no encontrada");
+        const author = entry.authorUserId
+          ? s.users.find((user) => user.id === entry.authorUserId)
+          : undefined;
+        const assignments = s.termAssignments.filter(
+          (item) => item.entryId === entry.id,
+        );
+        const terms = assignments.flatMap((assignment) => {
+          const taxonomy = findTaxonomy(assignment.taxonomy);
+          return assignment.termIds
+            .map((termId) => ({
+              taxonomy: assignment.taxonomy,
+              term: taxonomy?.terms.find((term) => term.id === termId),
+            }))
+            .filter((item) => item.term)
+            .map((item) => item);
+        });
+        const connections = s.connections
+          .filter(
+            (connection) =>
+              connection.fromEntryId === entry.id ||
+              connection.toEntryId === entry.id,
+          )
+          .map((connection) => ({
+            relation:
+              s.relations.find(
+                (relation) => relation.id === connection.relation,
+              )?.slug || connection.relation,
+            from: s.entries.find(
+              (item) =>
+                item.id === connection.fromEntryId &&
+                !item.deletedAt &&
+                item.status === "Published",
+            ),
+            to: s.entries.find(
+              (item) =>
+                item.id === connection.toEntryId &&
+                !item.deletedAt &&
+                item.status === "Published",
+            ),
+          }))
+          .filter((connection) => connection.from && connection.to);
+        const media = s.media
+          .filter((asset) => asset.attachedEntryIds.includes(entry.id))
+          .map((asset) => ({
+            id: asset.id,
+            name: asset.name,
+            url: asset.url,
+            mimeType: asset.mimeType,
+            alt: asset.alt,
+            metadata: asset.metadata,
+          }));
+        const comments = s.comments
+          .filter(
+            (comment) =>
+              comment.entryId === entry.id && comment.status === "Approved",
+          )
+          .map((comment) => ({
+            id: comment.id,
+            parentCommentId: comment.parentCommentId,
+            authorName: comment.authorName,
+            content: comment.content,
+            createdAt: comment.createdAt,
+          }));
+        return {
+          entry,
+          author: author ? { id: author.id, name: author.name } : undefined,
+          terms,
+          connections,
+          media,
+          comments,
+          canonicalUrl: "/" + model.slug + "/" + entry.slug,
+          ui_effect: "public_entry_context_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.public_term_context",
+      name: "get_public_term_context",
+      title: "Leer contexto público del término",
+      description:
+        "Devuelve un término, su taxonomía, padre, hijos y entradas publicadas asociadas para construir páginas semánticas públicas.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          taxonomy: { type: "string" },
+          term: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        required: ["taxonomy", "term"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        taxonomy,
+        term,
+        limit,
+        offset,
+      }: {
+        taxonomy: string;
+        term: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        const current = findTaxonomy(taxonomy);
+        if (!current) throw Error("Taxonomía no encontrada");
+        const selected = current.terms.find(
+          (item) =>
+            item.id === term || item.slug === term || item.name === term,
+        );
+        if (!selected) throw Error("Término no encontrado");
+        const parent = selected.parent
+          ? current.terms.find((item) => item.id === selected.parent)
+          : undefined;
+        const children = current.terms.filter(
+          (item) => item.parent === selected.id,
+        );
+        const matching = s.entries.filter(
+          (entry) =>
+            !entry.deletedAt &&
+            entry.status === "Published" &&
+            s.termAssignments.some(
+              (assignment) =>
+                assignment.entryId === entry.id &&
+                assignment.taxonomy === current.slug &&
+                assignment.termIds.includes(selected.id),
+            ),
+        );
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          taxonomy: {
+            name: current.name,
+            slug: current.slug,
+            hierarchical: current.hierarchical,
+          },
+          term: selected,
+          parent,
+          children,
+          entries: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "No hay entradas públicas asociadas",
+          ui_effect: "public_term_context_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.public_related",
+      name: "list_public_related_entries",
+      title: "Listar contenido relacionado público",
+      description:
+        "Devuelve entradas publicadas relacionadas con otra entrada pública, resolviendo la relación y excluyendo destinos no visibles.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          relation: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        required: ["entryId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        entryId,
+        relation,
+        limit,
+        offset,
+      }: {
+        entryId: string;
+        relation?: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        const source = s.entries.find(
+          (entry) =>
+            entry.id === entryId &&
+            !entry.deletedAt &&
+            entry.status === "Published",
+        );
+        if (!source) throw Error("Entrada pública no encontrada");
+        const model = relation
+          ? s.relations.find(
+              (item) =>
+                item.id === relation ||
+                item.slug === relation ||
+                item.name === relation,
+            )
+          : undefined;
+        if (relation && !model) throw Error("Relación no encontrada");
+        const connections = s.connections.filter(
+          (connection) =>
+            (!model || connection.relation === model.id) &&
+            (connection.fromEntryId === source.id ||
+              connection.toEntryId === source.id),
+        );
+        const related = connections
+          .map((connection) => {
+            const targetId =
+              connection.fromEntryId === source.id
+                ? connection.toEntryId
+                : connection.fromEntryId;
+            const target = s.entries.find(
+              (entry) =>
+                entry.id === targetId &&
+                !entry.deletedAt &&
+                entry.status === "Published",
+            );
+            return target
+              ? {
+                  relation:
+                    s.relations.find((item) => item.id === connection.relation)
+                      ?.slug || connection.relation,
+                  entry: target,
+                }
+              : undefined;
+          })
+          .filter(Boolean) as Array<{ relation: string; entry: Entry }>;
+        const unique = related.filter(
+          (item, index) =>
+            related.findIndex(
+              (candidate) =>
+                candidate.entry.id === item.entry.id &&
+                candidate.relation === item.relation,
+            ) === index,
+        );
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = unique.slice(start, start + pageSize);
+        return {
+          entryId,
+          related: page,
+          count: page.length,
+          total: unique.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < unique.length,
+          note: unique.length ? "" : "No hay contenido relacionado público",
+          ui_effect: "public_related_entries_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.bulk_detach",
+      name: "bulk_detach_media",
+      title: "Desvincular medios en lote",
+      description:
+        "Elimina vínculos entre varios medios y entradas validando previamente todos los recursos y destinos.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          attachments: { type: "array", items: { type: "object" } },
+        },
+        required: ["attachments"],
+        additionalProperties: false,
+      },
+      async execute({
+        attachments,
+      }: {
+        attachments: Array<{ mediaId: string; entryIds: string[] }>;
+      }) {
+        const prepared = attachments.map((input) => {
+          const media = s.media.find(
+            (asset) =>
+              asset.id === input.mediaId || asset.name === input.mediaId,
+          );
+          if (!media) throw Error("Medio no encontrado: " + input.mediaId);
+          const entryIds = [...new Set(input.entryIds)];
+          const missing = entryIds.filter(
+            (id) => !s.entries.some((entry) => entry.id === id),
+          );
+          if (missing.length)
+            throw Error(
+              "Entradas no encontradas para " +
+                media.id +
+                ": " +
+                missing.join(", "),
+            );
+          return { media, entryIds };
+        });
+        s.setMedia((all) =>
+          all.map((asset) => {
+            const item = prepared.find((input) => input.media.id === asset.id);
+            return item
+              ? {
+                  ...asset,
+                  attachedEntryIds: asset.attachedEntryIds.filter(
+                    (entryId) => !item.entryIds.includes(entryId),
+                  ),
+                }
+              : asset;
+          }),
+        );
+        return {
+          status: "detached",
+          attachments: prepared.map((item) => ({
+            mediaId: item.media.id,
+            entryIds: item.entryIds,
+          })),
+          count: prepared.length,
+          ui_effect: "media_bulk_detached",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.bulk_duplicate",
+      name: "bulk_duplicate_entries",
+      title: "Duplicar entradas en lote",
+      description:
+        "Crea borradores a partir de varias entradas existentes, copiando campos y metadatos con IDs y slugs nuevos.",
+      inputSchema: {
+        type: "object",
+        properties: { entryIds: { type: "array", items: { type: "string" } } },
+        required: ["entryIds"],
+        additionalProperties: false,
+      },
+      async execute({ entryIds }: { entryIds: string[] }) {
+        const unique = [...new Set(entryIds)];
+        const source = unique.map((entryId) => {
+          const entry = s.entries.find(
+            (item) => item.id === entryId && !item.deletedAt,
+          );
+          if (!entry)
+            throw Error("Entrada no encontrada o en papelera: " + entryId);
+          return entry;
+        });
+        const existingSlugs = new Set(
+          s.entries.map((entry) => entry.slug).filter(Boolean),
+        );
+        const copies = source.map((entry) => {
+          const base =
+            (entry.slug || entry.title)
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-|-$/g, "") || "entry";
+          let slug = base + "-copy";
+          let suffix = 2;
+          while (existingSlugs.has(slug)) {
+            slug = base + "-copy-" + suffix++;
+          }
+          existingSlugs.add(slug);
+          return {
+            ...entry,
+            id: "ent_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+            title: entry.title + " (Copy)",
+            slug,
+            status: "Draft" as const,
+            updated: "Just now",
+            deletedAt: undefined,
+            scheduledAt: undefined,
+            data: entry.data ? { ...entry.data } : undefined,
+            metadata: entry.metadata ? { ...entry.metadata } : undefined,
+          };
+        });
+        s.setEntries((all) => [...copies, ...all]);
+        return {
+          status: "duplicated",
+          sourceEntryIds: unique,
+          entries: copies,
+          count: copies.length,
+          ui_effect: "entries_bulk_duplicated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.bulk_assign_author",
+      name: "bulk_assign_entry_author",
+      title: "Asignar autor en lote",
+      description:
+        "Asigna un usuario existente como autor de varias entradas, validando todo el lote antes de persistirlo.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryIds: { type: "array", items: { type: "string" } },
+          userId: { type: "string" },
+        },
+        required: ["entryIds", "userId"],
+        additionalProperties: false,
+      },
+      async execute({
+        entryIds,
+        userId,
+      }: {
+        entryIds: string[];
+        userId: string;
+      }) {
+        const author = s.users.find((user) => user.id === userId);
+        if (!author) throw Error("Usuario no encontrado");
+        const unique = [...new Set(entryIds)];
+        const missing = unique.filter(
+          (entryId) => !s.entries.some((entry) => entry.id === entryId),
+        );
+        if (missing.length)
+          throw Error("Entradas no encontradas: " + missing.join(", "));
+        const updated = s.entries
+          .filter((entry) => unique.includes(entry.id))
+          .map((entry) => ({
+            ...entry,
+            authorUserId: userId,
+            updated: "Just now",
+          }));
+        s.setEntries((all) =>
+          all.map((entry) =>
+            unique.includes(entry.id)
+              ? { ...entry, authorUserId: userId, updated: "Just now" }
+              : entry,
+          ),
+        );
+        return {
+          status: "assigned",
+          author: { id: author.id, name: author.name },
+          entries: updated,
+          count: updated.length,
+          ui_effect: "entries_bulk_author_assigned",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "comment.thread",
+      name: "get_comment_thread",
+      title: "Leer hilo de comentarios",
+      description:
+        "Devuelve un comentario y sus respuestas descendientes en orden, con opción de limitar la lectura al contenido aprobado.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          commentId: { type: "string" },
+          publicOnly: { type: "boolean" },
+        },
+        required: ["commentId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        commentId,
+        publicOnly,
+      }: {
+        commentId: string;
+        publicOnly?: boolean;
+      }) {
+        const root = s.comments.find((comment) => comment.id === commentId);
+        if (!root) throw Error("Comentario no encontrado");
+        const allowed = (comment: Comment) =>
+          !publicOnly || comment.status === "Approved";
+        if (!allowed(root)) throw Error("El comentario no está publicado");
+        const thread: Comment[] = [];
+        const visit = (parentId: string) => {
+          for (const comment of s.comments
+            .filter((item) => item.parentCommentId === parentId)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+            if (allowed(comment)) {
+              thread.push(comment);
+              visit(comment.id);
+            }
+          }
+        };
+        thread.push(root);
+        visit(root.id);
+        return {
+          root,
+          comments: thread,
+          count: thread.length,
+          publicOnly: Boolean(publicOnly),
+          ui_effect: "comment_thread_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "menu.validate",
+      name: "validate_menus",
+      title: "Validar menús",
+      description:
+        "Revisa la integridad de todos los menús: IDs duplicados, órdenes repetidos, padres inválidos y ciclos jerárquicos.",
+      inputSchema: {
+        type: "object",
+        properties: { menu: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ menu }: { menu?: string }) {
+        const selected = s.menus.filter(
+          (item) =>
+            !menu ||
+            item.id === menu ||
+            item.slug === menu ||
+            item.name === menu,
+        );
+        if (menu && !selected.length) throw Error("Menú no encontrado");
+        const errors: string[] = [];
+        for (const current of selected) {
+          const ids = new Set<string>();
+          const orders = new Set<number>();
+          for (const item of current.items) {
+            if (ids.has(item.id))
+              errors.push("Menú " + current.slug + ": ID duplicado " + item.id);
+            ids.add(item.id);
+            if (orders.has(item.order))
+              errors.push(
+                "Menú " + current.slug + ": orden duplicado " + item.order,
+              );
+            orders.add(item.order);
+            if (
+              item.parentId &&
+              !ids.has(item.parentId) &&
+              !current.items.some((parent) => parent.id === item.parentId)
+            )
+              errors.push(
+                "Menú " + current.slug + ": padre inexistente " + item.parentId,
+              );
+            let cursor = item.parentId;
+            const visited = new Set<string>();
+            while (cursor) {
+              if (visited.has(cursor) || cursor === item.id) {
+                errors.push("Menú " + current.slug + ": ciclo en " + item.id);
+                break;
+              }
+              visited.add(cursor);
+              cursor = current.items.find(
+                (parent) => parent.id === cursor,
+              )?.parentId;
+            }
+          }
+        }
+        return {
+          valid: errors.length === 0,
+          errors,
+          errorCount: errors.length,
+          checked: selected.map((item) => ({
+            menu: item.slug,
+            items: item.items.length,
+          })),
+          note: errors.length
+            ? "Corrige la estructura antes de publicarla"
+            : "Todos los menús son válidos",
+          ui_effect: "menus_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "taxonomy.validate",
+      name: "validate_taxonomies",
+      title: "Validar taxonomías",
+      description:
+        "Revisa taxonomías y términos para detectar slugs duplicados, padres inválidos, ciclos jerárquicos y asignaciones rotas.",
+      inputSchema: {
+        type: "object",
+        properties: { taxonomy: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ taxonomy }: { taxonomy?: string }) {
+        const selected = s.taxonomies.filter(
+          (item) =>
+            !taxonomy || item.slug === taxonomy || item.name === taxonomy,
+        );
+        if (taxonomy && !selected.length)
+          throw Error("Taxonomía no encontrada");
+        const errors: string[] = [];
+        for (const current of selected) {
+          const slugs = new Set<string>();
+          const ids = new Set<string>();
+          for (const term of current.terms) {
+            if (slugs.has(term.slug))
+              errors.push(
+                "Taxonomía " + current.slug + ": slug duplicado " + term.slug,
+              );
+            slugs.add(term.slug);
+            if (ids.has(term.id))
+              errors.push(
+                "Taxonomía " + current.slug + ": ID duplicado " + term.id,
+              );
+            ids.add(term.id);
+            if (
+              term.parent &&
+              !current.terms.some((parent) => parent.id === term.parent)
+            )
+              errors.push(
+                "Término " + term.slug + ": padre inexistente " + term.parent,
+              );
+            let cursor = term.parent;
+            const visited = new Set<string>();
+            while (cursor) {
+              if (visited.has(cursor) || cursor === term.id) {
+                errors.push(
+                  "Taxonomía " + current.slug + ": ciclo en " + term.id,
+                );
+                break;
+              }
+              visited.add(cursor);
+              cursor =
+                current.terms.find((parent) => parent.id === cursor)?.parent ||
+                null;
+            }
+          }
+          for (const assignment of s.termAssignments.filter(
+            (item) => item.taxonomy === current.slug,
+          ))
+            for (const termId of assignment.termIds)
+              if (!ids.has(termId))
+                errors.push(
+                  "Asignación " +
+                    assignment.entryId +
+                    ": término inexistente " +
+                    termId,
+                );
+        }
+        return {
+          valid: errors.length === 0,
+          errors,
+          errorCount: errors.length,
+          checked: selected.map((item) => ({
+            taxonomy: item.slug,
+            terms: item.terms.length,
+          })),
+          note: errors.length
+            ? "Corrige el vocabulario antes de publicarlo"
+            : "Todas las taxonomías son válidas",
+          ui_effect: "taxonomies_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "relation.validate",
+      name: "validate_relations",
+      title: "Validar relaciones",
+      description:
+        "Revisa relaciones y conexiones para detectar tipos incompatibles, entradas inexistentes, duplicados y cardinalidad inválida.",
+      inputSchema: {
+        type: "object",
+        properties: { relation: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ relation }: { relation?: string }) {
+        const selected = s.relations.filter(
+          (item) =>
+            !relation ||
+            item.id === relation ||
+            item.slug === relation ||
+            item.name === relation,
+        );
+        if (relation && !selected.length) throw Error("Relación no encontrada");
+        const errors: string[] = [];
+        const entriesById = new Map(
+          s.entries.map((entry) => [entry.id, entry]),
+        );
+        for (const model of selected) {
+          const seen = new Set<string>();
+          const grouped = new Map<string, number>();
+          for (const connection of s.connections.filter(
+            (item) => item.relation === model.id,
+          )) {
+            const key = connection.fromEntryId + ">" + connection.toEntryId;
+            if (seen.has(key))
+              errors.push(
+                "Relación " + model.slug + ": conexión duplicada " + key,
+              );
+            seen.add(key);
+            const from = entriesById.get(connection.fromEntryId);
+            const to = entriesById.get(connection.toEntryId);
+            if (!from || !to)
+              errors.push(
+                "Relación " + model.slug + ": entrada inexistente en " + key,
+              );
+            else {
+              if (from.type !== model.fromType)
+                errors.push(
+                  "Relación " +
+                    model.slug +
+                    ": origen " +
+                    from.id +
+                    " no coincide con " +
+                    model.fromType,
+                );
+              if (to.type !== model.toType)
+                errors.push(
+                  "Relación " +
+                    model.slug +
+                    ": destino " +
+                    to.id +
+                    " no coincide con " +
+                    model.toType,
+                );
+            }
+            grouped.set(
+              connection.fromEntryId,
+              (grouped.get(connection.fromEntryId) || 0) + 1,
+            );
+          }
+          if (model.cardinality === "one")
+            for (const [fromId, count] of grouped)
+              if (count > 1)
+                errors.push(
+                  "Relación " +
+                    model.slug +
+                    ": " +
+                    fromId +
+                    " tiene " +
+                    count +
+                    " destinos y admite uno",
+                );
+        }
+        return {
+          valid: errors.length === 0,
+          errors,
+          errorCount: errors.length,
+          checked: selected.map((item) => ({
+            relation: item.slug,
+            connections: s.connections.filter(
+              (connection) => connection.relation === item.id,
+            ).length,
+          })),
+          note: errors.length
+            ? "Corrige las conexiones antes de publicar"
+            : "Todas las relaciones son válidas",
+          ui_effect: "relations_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.unattached",
+      name: "list_unattached_media",
+      title: "Listar medios no utilizados",
+      description:
+        "Devuelve recursos multimedia sin entradas asociadas, con filtros opcionales por tipo MIME y paginación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          mimeType: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        mimeType,
+        limit,
+        offset,
+      }: {
+        mimeType?: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        const matching = s.media.filter(
+          (asset) =>
+            asset.attachedEntryIds.length === 0 &&
+            (!mimeType || asset.mimeType === mimeType),
+        );
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          media: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length
+            ? "Hay medios sin usar"
+            : "No hay medios sin entradas asociadas",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.delete",
+      name: "delete_media_asset",
+      title: "Eliminar medio",
+      description:
+        "Prepara o elimina un recurso multimedia; requiere confirmación y bloquea el borrado si todavía está adjunto a entradas.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          mediaId: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["mediaId"],
+        additionalProperties: false,
+      },
+      async execute({
+        mediaId,
+        confirm,
+      }: {
+        mediaId: string;
+        confirm?: boolean;
+      }) {
+        const asset = s.media.find(
+          (item) => item.id === mediaId || item.name === mediaId,
+        );
+        if (!asset) throw Error("Medio no encontrado");
+        if (asset.attachedEntryIds.length)
+          throw Error(
+            "No se puede eliminar: el medio está adjunto a " +
+              asset.attachedEntryIds.length +
+              " entrada(s)",
+          );
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            mediaId: asset.id,
+            name: asset.name,
+            note: "Repite con confirm:true para eliminar este medio",
+          };
+        s.setMedia((all) => all.filter((item) => item.id !== asset.id));
+        return {
+          status: "deleted",
+          mediaId: asset.id,
+          name: asset.name,
+          ui_effect: "media_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.validate_types",
+      name: "validate_content_types",
+      title: "Validar tipos de contenido",
+      description:
+        "Revisa slugs, campos, tipos y requisitos de los content types junto con sus entradas antes de publicar cambios de schema.",
+      inputSchema: {
+        type: "object",
+        properties: { type: { type: "string" } },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ type }: { type?: string }) {
+        const selected = s.contentTypes.filter(
+          (item) => !type || item.slug === type || item.name === type,
+        );
+        if (type && !selected.length)
+          throw Error("Tipo de contenido no encontrado");
+        const errors: string[] = [];
+        const selectedNames = new Set(selected.map((item) => item.name));
+        const slugs = new Set<string>();
+        for (const model of selected) {
+          if (slugs.has(model.slug))
+            errors.push("Slug de tipo duplicado " + model.slug);
+          slugs.add(model.slug);
+          const fields = new Set<string>();
+          for (const field of model.fields) {
+            if (fields.has(field))
+              errors.push("Tipo " + model.slug + ": campo duplicado " + field);
+            fields.add(field);
+          }
+          for (const field of model.requiredFields || [])
+            if (!fields.has(field))
+              errors.push(
+                "Tipo " + model.slug + ": requisito no definido " + field,
+              );
+          for (const field of Object.keys(model.fieldTypes || {}))
+            if (!fields.has(field))
+              errors.push(
+                "Tipo " + model.slug + ": tipo de campo no definido " + field,
+              );
+          for (const entry of s.entries.filter(
+            (item) => item.type === model.name && !item.deletedAt,
+          )) {
+            const unknown = Object.keys(entry.data || {}).filter(
+              (field) => !fields.has(field),
+            );
+            if (unknown.length)
+              errors.push(
+                "Entrada " +
+                  entry.id +
+                  ": campos no definidos " +
+                  unknown.join(", "),
+              );
+            for (const required of model.requiredFields || [])
+              if (
+                entry.status === "Published" &&
+                (entry.data?.[required] === undefined ||
+                  entry.data?.[required] === null ||
+                  entry.data?.[required] === "")
+              )
+                errors.push(
+                  "Entrada " +
+                    entry.id +
+                    ": campo obligatorio ausente " +
+                    required,
+                );
+          }
+        }
+        for (const entry of s.entries.filter(
+          (item) =>
+            !item.deletedAt &&
+            !selectedNames.has(item.type) &&
+            (!type || item.type === type),
+        ))
+          errors.push(
+            "Entrada " + entry.id + ": tipo inexistente " + entry.type,
+          );
+        return {
+          valid: errors.length === 0,
+          errors,
+          errorCount: errors.length,
+          checked: selected.map((item) => ({
+            type: item.slug,
+            fields: item.fields.length,
+            entries: s.entries.filter(
+              (entry) => entry.type === item.name && !entry.deletedAt,
+            ).length,
+          })),
+          note: errors.length
+            ? "Corrige el schema antes de publicar"
+            : "Todos los tipos de contenido son válidos",
+          ui_effect: "content_types_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "plugin.validate",
+      name: "validate_plugins",
+      title: "Validar plugins",
+      description:
+        "Revisa dependencias de plugins para detectar referencias faltantes, ciclos y extensiones activas que no están listas.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const errors: string[] = [];
+        const bySlug = new Map(
+          s.plugins.map((plugin) => [plugin.slug, plugin]),
+        );
+        const visiting = new Set<string>();
+        const visited = new Set<string>();
+        const walk = (slug: string) => {
+          if (visiting.has(slug)) {
+            errors.push("Ciclo de dependencias en " + slug);
+            return;
+          }
+          if (visited.has(slug)) return;
+          visiting.add(slug);
+          const plugin = bySlug.get(slug);
+          const dependencies =
+            (plugin as (Plugin & { dependencies?: string[] }) | undefined)
+              ?.dependencies || [];
+          for (const dependency of dependencies) {
+            if (!bySlug.has(dependency))
+              errors.push(
+                "Plugin " + slug + ": dependencia inexistente " + dependency,
+              );
+            else walk(dependency);
+          }
+          visiting.delete(slug);
+          visited.add(slug);
+        };
+        for (const plugin of s.plugins) {
+          walk(plugin.slug);
+          const dependencies =
+            (plugin as Plugin & { dependencies?: string[] }).dependencies || [];
+          if (plugin.status === "Active")
+            for (const dependency of dependencies)
+              if (bySlug.get(dependency)?.status !== "Active")
+                errors.push(
+                  "Plugin activo " +
+                    plugin.slug +
+                    ": dependencia no activa " +
+                    dependency,
+                );
+        }
+        return {
+          valid: errors.length === 0,
+          errors,
+          errorCount: errors.length,
+          plugins: s.plugins.map((plugin) => ({
+            slug: plugin.slug,
+            status: plugin.status,
+            dependencies:
+              (plugin as Plugin & { dependencies?: string[] }).dependencies ||
+              [],
+          })),
+          note: errors.length
+            ? "Corrige el registro antes de activar extensiones"
+            : "Todos los plugins son compatibles",
+          ui_effect: "plugins_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.public_author",
+      name: "list_public_author_content",
+      title: "Listar contenido público por autor",
+      description:
+        "Devuelve entradas publicadas y visibles de un autor, con filtro opcional por tipo y paginación para páginas públicas de perfil.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          userId: { type: "string" },
+          type: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        required: ["userId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        userId,
+        type,
+        limit,
+        offset,
+      }: {
+        userId: string;
+        type?: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        const author = s.users.find((user) => user.id === userId);
+        if (!author) throw Error("Usuario no encontrado");
+        const model = type
+          ? s.contentTypes.find(
+              (item) => item.name === type || item.slug === type,
+            )
+          : undefined;
+        if (type && !model) throw Error("Tipo de contenido no encontrado");
+        const matching = s.entries.filter(
+          (entry) =>
+            entry.authorUserId === userId &&
+            !entry.deletedAt &&
+            entry.status === "Published" &&
+            (!model || entry.type === model.name),
+        );
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching.slice(start, start + pageSize);
+        return {
+          author: { id: author.id, name: author.name },
+          entries: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "El autor no tiene contenido público",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.public_profile",
+      name: "get_public_user_profile",
+      title: "Leer perfil público",
+      description:
+        "Devuelve un perfil de usuario seguro para frontend, omitiendo email, capacidades y metadatos privados.",
+      inputSchema: {
+        type: "object",
+        properties: { userId: { type: "string" } },
+        required: ["userId"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({ userId }: { userId: string }) {
+        const user = s.users.find((item) => item.id === userId);
+        if (!user) throw Error("Usuario no encontrado");
+        const published = s.entries.filter(
+          (entry) =>
+            entry.authorUserId === userId &&
+            !entry.deletedAt &&
+            entry.status === "Published",
+        );
+        return {
+          profile: {
+            id: user.id,
+            name: user.name,
+            role: user.role,
+            status: user.status,
+          },
+          publishedEntryCount: published.length,
+          ui_effect: "public_user_profile_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "site.public_settings",
+      name: "get_public_site_settings",
+      title: "Leer ajustes públicos",
+      description:
+        "Devuelve únicamente la identidad pública del sitio, omitiendo opciones internas y datos de configuración privada.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const raw = window.localStorage.getItem("waypoint.settings");
+        const settings = raw
+          ? JSON.parse(raw)
+          : {
+              siteName: "Northstar Journal",
+              description: "A publication about design and culture.",
+              url: "http://localhost:3001",
+              timezone: "America/Mexico_City",
+            };
+        return {
+          settings: {
+            siteName: settings.siteName,
+            description: settings.description,
+            url: settings.url,
+            timezone: settings.timezone,
+          },
+          ui_effect: "public_site_settings_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "comment.delete_thread",
+      name: "delete_comment_thread",
+      title: "Eliminar hilo de comentarios",
+      description:
+        "Prepara o elimina un comentario y todas sus respuestas descendientes; requiere confirmación porque borra una conversación completa.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          commentId: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["commentId"],
+        additionalProperties: false,
+      },
+      async execute({
+        commentId,
+        confirm,
+      }: {
+        commentId: string;
+        confirm?: boolean;
+      }) {
+        const root = s.comments.find((comment) => comment.id === commentId);
+        if (!root) throw Error("Comentario no encontrado");
+        const ids = new Set([commentId]);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const comment of s.comments)
+            if (
+              comment.parentCommentId &&
+              ids.has(comment.parentCommentId) &&
+              !ids.has(comment.id)
+            ) {
+              ids.add(comment.id);
+              changed = true;
+            }
+        }
+        const removed = s.comments.filter((comment) => ids.has(comment.id));
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            commentId,
+            rootContent: root.content,
+            count: removed.length,
+            commentIds: [...ids],
+            note: "Repite con confirm:true para eliminar el hilo completo",
+          };
+        s.setComments((all) => all.filter((comment) => !ids.has(comment.id)));
+        return {
+          status: "deleted",
+          commentId,
+          commentIds: [...ids],
+          count: removed.length,
+          ui_effect: "comment_thread_deleted",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.validate",
+      name: "validate_media_assets",
+      title: "Validar biblioteca multimedia",
+      description:
+        "Revisa URLs, MIME, tamaños y referencias de medios adjuntos para detectar recursos inconsistentes.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const errors: string[] = [];
+        const entryIds = new Set(s.entries.map((entry) => entry.id));
+        for (const asset of s.media) {
+          try {
+            new URL(asset.url);
+          } catch {
+            errors.push("Medio " + asset.id + ": URL inválida");
+          }
+          if (!asset.mimeType.includes("/"))
+            errors.push("Medio " + asset.id + ": MIME inválido");
+          if (!Number.isFinite(asset.size) || asset.size < 0)
+            errors.push("Medio " + asset.id + ": tamaño inválido");
+          for (const entryId of asset.attachedEntryIds)
+            if (!entryIds.has(entryId))
+              errors.push(
+                "Medio " +
+                  asset.id +
+                  ": entrada adjunta inexistente " +
+                  entryId,
+              );
+        }
+        return {
+          valid: errors.length === 0,
+          errors,
+          errorCount: errors.length,
+          checked: s.media.map((asset) => ({
+            id: asset.id,
+            name: asset.name,
+            attached: asset.attachedEntryIds.length,
+          })),
+          note: errors.length
+            ? "Corrige la biblioteca antes de publicar"
+            : "Todos los medios son válidos",
+          ui_effect: "media_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "user.validate",
+      name: "validate_users",
+      title: "Validar usuarios",
+      description:
+        "Revisa la integridad del directorio para detectar emails duplicados o inválidos, roles inexistentes y capacidades inconsistentes.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const errors: string[] = [];
+        const emails = new Set<string>();
+        const roles = new Map(s.roles.map((role) => [role.slug, role]));
+        for (const user of s.users) {
+          const email = user.email.trim().toLowerCase();
+          if (!email.includes("@"))
+            errors.push("Usuario " + user.id + ": email inválido");
+          if (emails.has(email)) errors.push("Email duplicado: " + email);
+          emails.add(email);
+          const role = roles.get(user.role);
+          if (!role)
+            errors.push(
+              "Usuario " + user.id + ": rol inexistente " + user.role,
+            );
+          else
+            for (const capability of role.capabilities)
+              if (!user.capabilities.includes(capability))
+                errors.push(
+                  "Usuario " +
+                    user.id +
+                    ": falta capacidad heredada " +
+                    capability,
+                );
+        }
+        return {
+          valid: errors.length === 0,
+          errors,
+          errorCount: errors.length,
+          checked: s.users.map((user) => ({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            status: user.status,
+          })),
+          note: errors.length
+            ? "Corrige el directorio antes de asignar contenido"
+            : "Todos los usuarios son válidos",
+          ui_effect: "users_validated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.health",
+      name: "get_workspace_health",
+      title: "Resumir salud del workspace",
+      description:
+        "Calcula un preflight compacto del workspace con conteos y señales de problemas en contenido, usuarios, taxonomías, relaciones, medios, comentarios y menús.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const entryIds = new Set(s.entries.map((entry) => entry.id));
+        const userIds = new Set(s.users.map((user) => user.id));
+        const typeNames = new Set(s.contentTypes.map((type) => type.name));
+        const checks = {
+          entriesWithoutType: s.entries.filter(
+            (entry) => !typeNames.has(entry.type),
+          ).length,
+          entriesWithoutAuthor: s.entries.filter(
+            (entry) => entry.authorUserId && !userIds.has(entry.authorUserId),
+          ).length,
+          brokenConnections: s.connections.filter(
+            (connection) =>
+              !entryIds.has(connection.fromEntryId) ||
+              !entryIds.has(connection.toEntryId) ||
+              !s.relations.some(
+                (relation) => relation.id === connection.relation,
+              ),
+          ).length,
+          brokenAssignments: s.termAssignments.filter((assignment) => {
+            const taxonomy = findTaxonomy(assignment.taxonomy);
+            return (
+              !taxonomy ||
+              assignment.termIds.some(
+                (termId) => !taxonomy.terms.some((term) => term.id === termId),
+              )
+            );
+          }).length,
+          brokenMediaReferences: s.media.reduce(
+            (total, asset) =>
+              total +
+              asset.attachedEntryIds.filter((entryId) => !entryIds.has(entryId))
+                .length,
+            0,
+          ),
+          brokenComments: s.comments.filter(
+            (comment) => !entryIds.has(comment.entryId),
+          ).length,
+          brokenMenuItems: s.menus.reduce(
+            (total, menu) =>
+              total +
+              menu.items.filter(
+                (item) => item.entryId && !entryIds.has(item.entryId),
+              ).length,
+            0,
+          ),
+          pendingComments: s.comments.filter(
+            (comment) => comment.status === "Pending",
+          ).length,
+          scheduledEntries: s.entries.filter(
+            (entry) => !entry.deletedAt && Boolean(entry.scheduledAt),
+          ).length,
+        };
+        const issueCount = Object.entries(checks)
+          .filter(
+            ([key]) =>
+              key.startsWith("broken") || key.startsWith("entriesWithout"),
+          )
+          .reduce((total, [, value]) => total + (value as number), 0);
+        return {
+          status: issueCount ? "needs_attention" : "healthy",
+          issueCount,
+          checks,
+          counts: {
+            entries: s.entries.length,
+            contentTypes: s.contentTypes.length,
+            taxonomies: s.taxonomies.length,
+            relations: s.relations.length,
+            users: s.users.length,
+            roles: s.roles.length,
+            plugins: s.plugins.length,
+            media: s.media.length,
+            comments: s.comments.length,
+            menus: s.menus.length,
+          },
+          note: issueCount
+            ? "Ejecuta las validaciones específicas antes de publicar"
+            : "El workspace no presenta referencias rotas",
+          ui_effect: "workspace_health_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.bulk_schedule",
+      name: "bulk_schedule_entries",
+      title: "Programar entradas en lote",
+      description:
+        "Programa varias entradas con fechas futuras, validando el lote completo antes de devolverlas a estado borrador.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          schedules: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                entryId: { type: "string" },
+                publishAt: { type: "string", format: "date-time" },
+              },
+              required: ["entryId", "publishAt"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["schedules"],
+        additionalProperties: false,
+      },
+      async execute({
+        schedules,
+      }: {
+        schedules: Array<{ entryId: string; publishAt: string }>;
+      }) {
+        const uniqueIds = [...new Set(schedules.map((item) => item.entryId))];
+        if (uniqueIds.length !== schedules.length)
+          throw Error("Hay entradas duplicadas en la solicitud");
+        const prepared = schedules.map((input) => {
+          const entry = s.entries.find(
+            (item) => item.id === input.entryId && !item.deletedAt,
+          );
+          if (!entry)
+            throw Error(
+              "Entrada no encontrada o en papelera: " + input.entryId,
+            );
+          const timestamp = Date.parse(input.publishAt);
+          if (!Number.isFinite(timestamp) || timestamp <= Date.now())
+            throw Error(
+              "publishAt debe ser una fecha futura válida para " +
+                input.entryId,
+            );
+          return { entry, publishAt: new Date(timestamp).toISOString() };
+        });
+        const updated = prepared.map((item) => ({
+          ...item.entry,
+          status: "Draft" as const,
+          scheduledAt: item.publishAt,
+          updated: "Just now",
+        }));
+        const revisions = updated.map((item) => ({
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId: item.id,
+          createdAt: new Date().toISOString(),
+          action: "bulk_schedule",
+          before: prepared.find((candidate) => candidate.entry.id === item.id)!
+            .entry,
+          after: item,
+        }));
+        s.setEntries((all) =>
+          all.map(
+            (entry) =>
+              updated.find((item) => item.entry.id === entry.id) || entry,
+          ),
+        );
+        s.setRevisions((all) => [...all, ...revisions]);
+        return {
+          status: "scheduled",
+          entries: updated,
+          count: updated.length,
+          ui_effect: "entries_bulk_scheduled",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "content.bulk_unschedule",
+      name: "bulk_unschedule_entries",
+      title: "Cancelar programación en lote",
+      description:
+        "Cancela la programación de varias entradas y las conserva como borradores sin modificar sus campos; registra una revisión por cada cambio.",
+      inputSchema: {
+        type: "object",
+        properties: { entryIds: { type: "array", items: { type: "string" } } },
+        required: ["entryIds"],
+        additionalProperties: false,
+      },
+      async execute({ entryIds }: { entryIds: string[] }) {
+        const unique = [...new Set(entryIds)];
+        const missing = unique.filter(
+          (id) => !s.entries.some((entry) => entry.id === id),
+        );
+        if (missing.length)
+          throw Error("Entradas no encontradas: " + missing.join(", "));
+        const prepared = s.entries.filter(
+          (entry) => unique.includes(entry.id) && entry.scheduledAt,
+        );
+        const unscheduled = prepared.map((entry) => entry.id);
+        const unchanged = s.entries
+          .filter((entry) => unique.includes(entry.id) && !entry.scheduledAt)
+          .map((entry) => entry.id);
+        const updated = prepared.map((entry) => ({
+          ...entry,
+          status: "Draft" as const,
+          scheduledAt: undefined,
+          updated: "Just now",
+        }));
+        const revisions = prepared.map((entry, index) => ({
+          id: "rev_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+          entryId: entry.id,
+          createdAt: new Date().toISOString(),
+          action: "bulk_unschedule",
+          before: entry,
+          after: updated[index],
+        }));
+        s.setEntries((all) =>
+          all.map(
+            (entry) => updated.find((item) => item.id === entry.id) || entry,
+          ),
+        );
+        s.setRevisions((all) => [...all, ...revisions]);
+        return {
+          status: "unscheduled",
+          entryIds: unscheduled,
+          unchanged,
+          count: unscheduled.length,
+          revisionIds: revisions.map((revision) => revision.id),
+          note: unscheduled.length
+            ? "Programaciones canceladas"
+            : "Ninguna entrada seleccionada estaba programada",
+          ui_effect: "entries_bulk_unscheduled",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.update_metadata",
+      name: "update_media_metadata",
+      title: "Actualizar metadatos multimedia",
+      description:
+        "Actualiza el texto alternativo y los metadatos editoriales de un medio sin modificar sus vínculos con entradas.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          mediaId: { type: "string" },
+          alt: { type: "string" },
+          metadata: { type: "object" },
+        },
+        required: ["mediaId"],
+        additionalProperties: false,
+      },
+      async execute({
+        mediaId,
+        alt,
+        metadata,
+      }: {
+        mediaId: string;
+        alt?: string;
+        metadata?: Record<string, unknown>;
+      }) {
+        const current = s.media.find(
+          (asset) => asset.id === mediaId || asset.name === mediaId,
+        );
+        if (!current) throw Error("Medio no encontrado");
+        if (alt === undefined && metadata === undefined)
+          throw Error("Indica alt o metadata para actualizar");
+        if (
+          metadata !== undefined &&
+          (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
+        )
+          throw Error("Metadatos inválidos");
+        const updated = {
+          ...current,
+          ...(alt === undefined ? {} : { alt: alt.trim() }),
+          ...(metadata === undefined
+            ? {}
+            : { metadata: { ...(current.metadata || {}), ...metadata } }),
+        };
+        s.setMedia((all) =>
+          all.map((asset) => (asset.id === current.id ? updated : asset)),
+        );
+        return {
+          status: "updated",
+          media: updated,
+          linkedEntryIds: updated.attachedEntryIds,
+          ui_effect: "media_metadata_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "schema.activity",
+      name: "get_activity_log",
+      title: "Leer actividad editorial",
+      description:
+        "Devuelve las revisiones persistidas como registro de actividad, filtradas opcionalmente por entrada o acción y con paginación.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entryId: { type: "string" },
+          action: { type: "string" },
+          limit: { type: "number" },
+          offset: { type: "number" },
+        },
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute({
+        entryId,
+        action,
+        limit,
+        offset,
+      }: {
+        entryId?: string;
+        action?: string;
+        limit?: number;
+        offset?: number;
+      }) {
+        const matching = s.revisions
+          .filter(
+            (revision) =>
+              (!entryId || revision.entryId === entryId) &&
+              (!action || revision.action === action),
+          )
+          .slice()
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        const start = Math.max(0, offset || 0);
+        const pageSize = Math.min(Math.max(limit || 25, 1), 100);
+        const page = matching
+          .slice(start, start + pageSize)
+          .map((revision) => ({
+            id: revision.id,
+            entryId: revision.entryId,
+            entryTitle: revision.after.title,
+            action: revision.action,
+            createdAt: revision.createdAt,
+            before: revision.before,
+            after: revision.after,
+          }));
+        return {
+          activity: page,
+          count: page.length,
+          total: matching.length,
+          offset: start,
+          limit: pageSize,
+          hasMore: start + page.length < matching.length,
+          note: matching.length ? "" : "No hay actividad editorial registrada",
+          ui_effect: "activity_log_read",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "media.bulk_update_metadata",
+      name: "bulk_update_media_metadata",
+      title: "Actualizar metadatos multimedia en lote",
+      description:
+        "Actualiza alt y metadatos de varios medios validando todo el lote antes de persistirlo; conserva intactos sus vínculos con entradas.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          updates: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                mediaId: { type: "string" },
+                alt: { type: "string" },
+                metadata: { type: "object" },
+              },
+              required: ["mediaId"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["updates"],
+        additionalProperties: false,
+      },
+      async execute({
+        updates,
+      }: {
+        updates: Array<{
+          mediaId: string;
+          alt?: string;
+          metadata?: Record<string, unknown>;
+        }>;
+      }) {
+        const prepared = updates.map((input) => {
+          const current = s.media.find(
+            (asset) =>
+              asset.id === input.mediaId || asset.name === input.mediaId,
+          );
+          if (!current) throw Error("Medio no encontrado: " + input.mediaId);
+          if (input.alt === undefined && input.metadata === undefined)
+            throw Error("Indica alt o metadata para " + input.mediaId);
+          if (
+            input.metadata !== undefined &&
+            (!input.metadata ||
+              typeof input.metadata !== "object" ||
+              Array.isArray(input.metadata))
+          )
+            throw Error("Metadatos inválidos para " + input.mediaId);
+          return { current, input };
+        });
+        const updated = prepared.map(({ current, input }) => ({
+          ...current,
+          ...(input.alt === undefined ? {} : { alt: input.alt.trim() }),
+          ...(input.metadata === undefined
+            ? {}
+            : { metadata: { ...(current.metadata || {}), ...input.metadata } }),
+        }));
+        s.setMedia((all) =>
+          all.map(
+            (asset) => updated.find((item) => item.id === asset.id) || asset,
+          ),
+        );
+        return {
+          status: "updated",
+          media: updated.map((asset) => ({
+            id: asset.id,
+            name: asset.name,
+            alt: asset.alt,
+            metadata: asset.metadata,
+            linkedEntryIds: asset.attachedEntryIds,
+          })),
+          count: updated.length,
+          ui_effect: "media_metadata_bulk_updated",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "automation.remove_action",
+      name: "remove_action",
+      title: "Eliminar acción",
+      description:
+        "Prepara o elimina una acción declarativa registrada; requiere confirm:true para borrar la capacidad automatizable.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string" },
+          confirm: { type: "boolean" },
+        },
+        required: ["action"],
+        additionalProperties: false,
+      },
+      async execute({
+        action,
+        confirm,
+      }: {
+        action: string;
+        confirm?: boolean;
+      }) {
+        const actions = readRegistry("waypoint.actions") as Action[];
+        const current = actions.find(
+          (item) => item.id === action || item.name === action,
+        );
+        if (!current) throw Error("Acción no encontrada");
+        if (!confirm)
+          return {
+            status: "confirmation_required",
+            action: current,
+            note: "Repite con confirm:true para eliminar esta acción",
+          };
+        writeRegistry(
+          "waypoint.actions",
+          actions.filter((item) => item.id !== current.id),
+        );
+        return {
+          status: "removed",
+          actionId: current.id,
+          ui_effect: "action_removed",
+        };
+      },
+    }),
+    defineTool({
+      stableKey: "automation.list_hook_events",
+      name: "list_hook_events",
+      title: "Listar eventos de hooks",
+      description:
+        "Devuelve el catálogo de eventos que el runtime emite para que el agente pueda registrar hooks con nombres válidos.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      async execute() {
+        const events = [
+          "content.changed",
+          "entry.created",
+          "content_type.created",
+          "user.created",
+          "user.deleted",
+          "role.created",
+          "role.updated",
+          "role.deleted",
+          "plugin.installed",
+          "plugin.uninstalled",
+          "user.updated",
+          "plugin.status_changed",
+          "settings.updated",
+        ];
+        return {
+          events,
+          count: events.length,
+          note: "Los eventos se notifican en el runtime del navegador; los hooks no ejecutan código externo",
+          ui_effect: "hook_events_listed",
+        };
+      },
+    }),
+  ];
+}

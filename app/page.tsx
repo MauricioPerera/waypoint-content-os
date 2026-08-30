@@ -116,8 +116,23 @@ type Plugin = {
   status: "Active" | "Inactive";
   capabilities: string[];
 };
-type Hook = { id: string; name: string; event: string; priority: number; enabled: boolean; pluginSlug?: string; description?: string };
-type Action = { id: string; name: string; label: string; description: string; pluginSlug?: string; capabilities?: string[] };
+type Hook = {
+  id: string;
+  name: string;
+  event: string;
+  priority: number;
+  enabled: boolean;
+  pluginSlug?: string;
+  description?: string;
+};
+type Action = {
+  id: string;
+  name: string;
+  label: string;
+  description: string;
+  pluginSlug?: string;
+  capabilities?: string[];
+};
 type MediaAsset = {
   id: string;
   name: string;
@@ -373,8 +388,22 @@ const defaultSiteSettings: SiteSettings = {
 function emitRegisteredHooks(event: string, payload: Record<string, unknown>) {
   try {
     const raw = window.localStorage.getItem("waypoint.hooks");
-    const hooks = raw ? JSON.parse(raw) as Hook[] : [];
-    hooks.filter((hook) => hook.enabled && hook.event === event).sort((a, b) => a.priority - b.priority).forEach((hook) => window.dispatchEvent(new CustomEvent("waypoint-hook", { detail: { hook, event, payload, emittedAt: new Date().toISOString() } })));
+    const hooks = raw ? (JSON.parse(raw) as Hook[]) : [];
+    hooks
+      .filter((hook) => hook.enabled && hook.event === event)
+      .sort((a, b) => a.priority - b.priority)
+      .forEach((hook) =>
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: {
+              hook,
+              event,
+              payload,
+              emittedAt: new Date().toISOString(),
+            },
+          }),
+        ),
+      );
   } catch {
     // Invalid registry data must never interrupt content persistence.
   }
@@ -495,9 +524,11 @@ export default function Home() {
     activeStatus,
   ]);
   useEffect(() => {
-    const onModelUpdated = () => emitRegisteredHooks("content.changed", { source: "workspace-model" });
+    const onModelUpdated = () =>
+      emitRegisteredHooks("content.changed", { source: "workspace-model" });
     window.addEventListener("waypoint-model-updated", onModelUpdated);
-    return () => window.removeEventListener("waypoint-model-updated", onModelUpdated);
+    return () =>
+      window.removeEventListener("waypoint-model-updated", onModelUpdated);
   }, []);
   const notify = (message: string) => {
     setToast(message);
@@ -508,7 +539,7 @@ export default function Home() {
     type: string,
     data: Record<string, unknown> = {},
   ): Entry => {
-  const entry: Entry = {
+    const entry: Entry = {
       id: "ent_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
       title,
       type,
@@ -716,8 +747,112 @@ export default function Home() {
               create={() => setShowRelation(true)}
             />
           )}{" "}
-          {view === "users" && <Users roles={roles} create={(user) => { if (users.some((item) => item.email.toLowerCase() === user.email.toLowerCase())) return; setUsers((all) => [user, ...all]); emitRegisteredHooks("user.created", { user }); notify("User created"); }} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); emitRegisteredHooks("user.updated", { user: next }); notify("User updated"); }} remove={(user) => { if (!window.confirm(`Delete user ${user.name}?`)) return; setUsers((all) => all.filter((item) => item.id !== user.id)); setEntries((all) => all.map((entry) => entry.authorUserId === user.id ? { ...entry, authorUserId: undefined } : entry)); emitRegisteredHooks("user.deleted", { userId: user.id }); notify("User deleted"); }} />}{" "}           {view === "roles" && <Roles roles={roles} create={(role) => { if (roles.some((item) => item.slug === role.slug)) return; setRoles((all) => [role, ...all]); emitRegisteredHooks("role.created", { role }); notify("Role created"); }} remove={(role) => { if (role.system) return; if (users.some((user) => user.role === role.slug)) { notify("Role is assigned to users"); return; } if (!window.confirm(`Delete role ${role.name}?`)) return; setRoles((all) => all.filter((item) => item.id !== role.id)); emitRegisteredHooks("role.deleted", { roleId: role.id }); notify("Role deleted"); }} />}
-          {view === "plugins" && <Plugins plugins={plugins} install={(plugin) => { if (plugins.some((item) => item.slug === plugin.slug)) return; setPlugins((all) => [plugin, ...all]); emitRegisteredHooks("plugin.installed", { plugin }); notify("Plugin installed"); }} remove={(plugin) => { if (!window.confirm(`Uninstall plugin ${plugin.name}?`)) return; setPlugins((all) => all.filter((item) => item.id !== plugin.id)); emitRegisteredHooks("plugin.uninstalled", { plugin }); notify("Plugin uninstalled"); }} toggle={(plugin) => { const updated = { ...plugin, status: plugin.status === "Active" ? "Inactive" as const : "Active" as const }; setPlugins((all) => all.map((item) => item.id === plugin.id ? updated : item)); emitRegisteredHooks("plugin.status_changed", { plugin: updated }); notify(updated.status === "Active" ? "Plugin enabled" : "Plugin disabled"); }} />}{" "}
+          {view === "users" && (
+            <Users
+              roles={roles}
+              create={(user) => {
+                if (
+                  users.some(
+                    (item) =>
+                      item.email.toLowerCase() === user.email.toLowerCase(),
+                  )
+                )
+                  return;
+                setUsers((all) => [user, ...all]);
+                emitRegisteredHooks("user.created", { user });
+                notify("User created");
+              }}
+              update={(next) => {
+                setUsers((all) =>
+                  all.map((user) => (user.id === next.id ? next : user)),
+                );
+                emitRegisteredHooks("user.updated", { user: next });
+                notify("User updated");
+              }}
+              remove={(user) => {
+                if (!window.confirm(`Delete user ${user.name}?`)) return;
+                setUsers((all) => all.filter((item) => item.id !== user.id));
+                setEntries((all) =>
+                  all.map((entry) =>
+                    entry.authorUserId === user.id
+                      ? { ...entry, authorUserId: undefined }
+                      : entry,
+                  ),
+                );
+                emitRegisteredHooks("user.deleted", { userId: user.id });
+                notify("User deleted");
+              }}
+            />
+          )}{" "}
+          {view === "roles" && (
+            <Roles
+              roles={roles}
+              create={(role) => {
+                if (roles.some((item) => item.slug === role.slug)) return;
+                setRoles((all) => [role, ...all]);
+                emitRegisteredHooks("role.created", { role });
+                notify("Role created");
+              }}
+              update={(role) => {
+                if (role.system) return;
+                setRoles((all) =>
+                  all.map((item) => (item.id === role.id ? role : item)),
+                );
+                emitRegisteredHooks("role.updated", { role });
+                notify("Role updated");
+              }}
+              remove={(role) => {
+                if (role.system) return;
+                if (users.some((user) => user.role === role.slug)) {
+                  notify("Role is assigned to users");
+                  return;
+                }
+                if (!window.confirm(`Delete role ${role.name}?`)) return;
+                setRoles((all) => all.filter((item) => item.id !== role.id));
+                emitRegisteredHooks("role.deleted", { roleId: role.id });
+                notify("Role deleted");
+              }}
+            />
+          )}
+          {view === "plugins" && (
+            <Plugins
+              plugins={plugins}
+              install={(plugin) => {
+                if (plugins.some((item) => item.slug === plugin.slug)) return;
+                setPlugins((all) => [plugin, ...all]);
+                emitRegisteredHooks("plugin.installed", { plugin });
+                notify("Plugin installed");
+              }}
+              remove={(plugin) => {
+                if (!window.confirm(`Uninstall plugin ${plugin.name}?`)) return;
+                setPlugins((all) =>
+                  all.filter((item) => item.id !== plugin.id),
+                );
+                emitRegisteredHooks("plugin.uninstalled", { plugin });
+                notify("Plugin uninstalled");
+              }}
+              toggle={(plugin) => {
+                const updated = {
+                  ...plugin,
+                  status:
+                    plugin.status === "Active"
+                      ? ("Inactive" as const)
+                      : ("Active" as const),
+                };
+                setPlugins((all) =>
+                  all.map((item) => (item.id === plugin.id ? updated : item)),
+                );
+                emitRegisteredHooks("plugin.status_changed", {
+                  plugin: updated,
+                });
+                notify(
+                  updated.status === "Active"
+                    ? "Plugin enabled"
+                    : "Plugin disabled",
+                );
+              }}
+            />
+          )}{" "}
           {view === "media" && <Media media={media} />}{" "}
           {view === "comments" && (
             <Comments comments={comments} entries={entries} />
@@ -728,14 +863,19 @@ export default function Home() {
               settings={settings}
               save={(next) => {
                 setSettings(next);
-                window.localStorage.setItem("waypoint.settings", JSON.stringify(next));
+                window.localStorage.setItem(
+                  "waypoint.settings",
+                  JSON.stringify(next),
+                );
                 window.dispatchEvent(new Event("waypoint-settings-updated"));
                 emitRegisteredHooks("settings.updated", { settings: next });
                 notify("Settings saved");
               }}
             />
           )}
-          {view === "activity" && <ActivityLog revisions={revisions} entries={entries} />}
+          {view === "activity" && (
+            <ActivityLog revisions={revisions} entries={entries} />
+          )}
         </main>
         {showEntry && (
           <EntryModal
@@ -923,8 +1063,18 @@ function Sidebar({
           active={view === "plugins"}
           on={() => setView("plugins")}
         />
-        <Nav icon="✦" text="Agent activity" active={view === "activity"} on={() => setView("activity")} />
-        <Nav icon="⚙" text="Settings" active={view === "settings"} on={() => setView("settings")} />
+        <Nav
+          icon="✦"
+          text="Agent activity"
+          active={view === "activity"}
+          on={() => setView("activity")}
+        />
+        <Nav
+          icon="⚙"
+          text="Settings"
+          active={view === "settings"}
+          on={() => setView("settings")}
+        />
       </nav>
       <div className="sidebar-bottom">
         <div className="agent-status">
@@ -982,7 +1132,8 @@ function Settings({
           <p className="kicker">WORKSPACE CONFIGURATION</p>
           <h1>Settings</h1>
           <p className="subhead">
-            Control the public identity and runtime context available to your content agent.
+            Control the public identity and runtime context available to your
+            content agent.
           </p>
         </div>
       </div>
@@ -993,31 +1144,320 @@ function Settings({
             <h2>Public settings</h2>
           </div>
         </div>
-        <div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}>
-          <label>Site name<input value={draft.siteName} onChange={(event) => setDraft({ ...draft, siteName: event.target.value })} /></label>
-          <label>Description<input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
-          <label>URL<input type="url" value={draft.url} onChange={(event) => setDraft({ ...draft, url: event.target.value })} /></label>
-          <label>Timezone<input value={draft.timezone} onChange={(event) => setDraft({ ...draft, timezone: event.target.value })} /></label>
+        <div
+          className="modal"
+          style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}
+        >
+          <label>
+            Site name
+            <input
+              value={draft.siteName}
+              onChange={(event) =>
+                setDraft({ ...draft, siteName: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Description
+            <input
+              value={draft.description}
+              onChange={(event) =>
+                setDraft({ ...draft, description: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            URL
+            <input
+              type="url"
+              value={draft.url}
+              onChange={(event) =>
+                setDraft({ ...draft, url: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Timezone
+            <input
+              value={draft.timezone}
+              onChange={(event) =>
+                setDraft({ ...draft, timezone: event.target.value })
+              }
+            />
+          </label>
           <div className="modal-actions">
-            <button className="primary-button" disabled={!draft.siteName.trim() || !draft.url.trim()} onClick={() => save({ ...draft, siteName: draft.siteName.trim(), description: draft.description.trim(), url: draft.url.trim().replace(/\/$/, ""), timezone: draft.timezone.trim() })}>Save settings</button>
+            <button
+              className="primary-button"
+              disabled={!draft.siteName.trim() || !draft.url.trim()}
+              onClick={() =>
+                save({
+                  ...draft,
+                  siteName: draft.siteName.trim(),
+                  description: draft.description.trim(),
+                  url: draft.url.trim().replace(/\/$/, ""),
+                  timezone: draft.timezone.trim(),
+                })
+              }
+            >
+              Save settings
+            </button>
           </div>
         </div>
       </section>
     </div>
   );
 }
-function Roles({ roles, create, remove }: { roles: Role[]; create: (role: Role) => void; remove: (role: Role) => void }) {
-  const [draft, setDraft] = useState({ name: "", slug: "", description: "", capabilities: "" });
-  const save = () => { const slug = draft.slug.trim().toLowerCase(); if (!draft.name.trim() || !/^[a-z0-9-]+$/.test(slug)) return; create({ id: "role_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: draft.name.trim(), slug, description: draft.description.trim(), capabilities: [...new Set(draft.capabilities.split(",").map((item) => item.trim()).filter(Boolean))] }); setDraft({ name: "", slug: "", description: "", capabilities: "" }); };
-  return <div className="page"><div className="page-heading compact"><div><p className="kicker">ACCESS CONTROL</p><h1>Roles</h1><p className="subhead">Reusable capability bundles for users and agent operations.</p></div><span className="live-chip"><i />{roles.length} roles</span></div><section className="card entries-card"><div className="card-heading"><div><p className="eyebrow">ROLE REGISTRY</p><h2>Available roles</h2></div></div><div className="type-list">{roles.map((role) => <div className="type-row" key={role.id}><span className="entry-icon lavender">⚿</span><span><b>{role.name}</b><small>{role.slug} · {role.description || "No description"}</small></span><strong>{role.capabilities.length} capabilities</strong>{!role.system && <button className="text-button" onClick={() => remove(role)}>Delete</button>}</div>)}</div></section><section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">NEW ROLE</p><h2>Create capability bundle</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label>Slug<input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} placeholder="reviewer" /></label><label>Description<input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label><label>Capabilities<input value={draft.capabilities} onChange={(event) => setDraft({ ...draft, capabilities: event.target.value })} placeholder="content.read, content.review" /></label><div className="modal-actions"><button className="primary-button" disabled={!draft.name.trim() || !draft.slug.trim()} onClick={save}>Create role</button></div></div></section></div>;
+function Roles({
+  roles,
+  create,
+  update,
+  remove,
+}: {
+  roles: Role[];
+  create: (role: Role) => void;
+  update: (role: Role) => void;
+  remove: (role: Role) => void;
+}) {
+  const [draft, setDraft] = useState({
+    name: "",
+    slug: "",
+    description: "",
+    capabilities: "",
+  });
+  const [editing, setEditing] = useState<Role>();
+  const save = () => {
+    const slug = draft.slug.trim().toLowerCase();
+    if (!draft.name.trim() || !/^[a-z0-9-]+$/.test(slug)) return;
+    create({
+      id: "role_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+      name: draft.name.trim(),
+      slug,
+      description: draft.description.trim(),
+      capabilities: [
+        ...new Set(
+          draft.capabilities
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        ),
+      ],
+    });
+    setDraft({ name: "", slug: "", description: "", capabilities: "" });
+  };
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">ACCESS CONTROL</p>
+          <h1>Roles</h1>
+          <p className="subhead">
+            Reusable capability bundles for users and agent operations.
+          </p>
+        </div>
+        <span className="live-chip">
+          <i />
+          {roles.length} roles
+        </span>
+      </div>
+      <section className="card entries-card">
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">ROLE REGISTRY</p>
+            <h2>Available roles</h2>
+          </div>
+        </div>
+        <div className="type-list">
+          {roles.map((role) => (
+            <div className="type-row" key={role.id}>
+              <span className="entry-icon lavender">⚿</span>
+              <span>
+                <b>{role.name}</b>
+                <small>
+                  {role.slug} · {role.description || "No description"}
+                </small>
+              </span>
+              <strong>{role.capabilities.length} capabilities</strong>
+              {!role.system && (
+                <>
+                  <button
+                    className="text-button"
+                    onClick={() => setEditing(role)}
+                  >
+                    Edit
+                  </button>
+                  <button className="text-button" onClick={() => remove(role)}>
+                    Delete
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+      {editing && (
+        <section className="card entries-card" style={{ marginTop: 16 }}>
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">EDIT ROLE</p>
+              <h2>{editing.name}</h2>
+            </div>
+            <button
+              className="text-button"
+              onClick={() => setEditing(undefined)}
+            >
+              Close
+            </button>
+          </div>
+          <div
+            className="modal"
+            style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}
+          >
+            <label>
+              Description
+              <input
+                value={editing.description}
+                onChange={(event) =>
+                  setEditing({ ...editing, description: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Capabilities
+              <input
+                value={editing.capabilities.join(", ")}
+                onChange={(event) =>
+                  setEditing({
+                    ...editing,
+                    capabilities: event.target.value
+                      .split(",")
+                      .map((item) => item.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
+            </label>
+            <div className="modal-actions">
+              <button
+                className="primary-button"
+                onClick={() => {
+                  update(editing);
+                  setEditing(undefined);
+                }}
+              >
+                Save role
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      <section className="card entries-card" style={{ marginTop: 16 }}>
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">NEW ROLE</p>
+            <h2>Create capability bundle</h2>
+          </div>
+        </div>
+        <div
+          className="modal"
+          style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}
+        >
+          <label>
+            Name
+            <input
+              value={draft.name}
+              onChange={(event) =>
+                setDraft({ ...draft, name: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Slug
+            <input
+              value={draft.slug}
+              onChange={(event) =>
+                setDraft({ ...draft, slug: event.target.value })
+              }
+              placeholder="reviewer"
+            />
+          </label>
+          <label>
+            Description
+            <input
+              value={draft.description}
+              onChange={(event) =>
+                setDraft({ ...draft, description: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Capabilities
+            <input
+              value={draft.capabilities}
+              onChange={(event) =>
+                setDraft({ ...draft, capabilities: event.target.value })
+              }
+              placeholder="content.read, content.review"
+            />
+          </label>
+          <div className="modal-actions">
+            <button
+              className="primary-button"
+              disabled={!draft.name.trim() || !draft.slug.trim()}
+              onClick={save}
+            >
+              Create role
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
 }
-function Users({ users, roles, create, update, remove }: { users: User[]; roles: Role[]; create: (user: User) => void; update: (user: User) => void; remove: (user: User) => void }) {
+function Users({
+  users,
+  roles,
+  create,
+  update,
+  remove,
+}: {
+  users: User[];
+  roles: Role[];
+  create: (user: User) => void;
+  update: (user: User) => void;
+  remove: (user: User) => void;
+}) {
   const [editing, setEditing] = useState<User>();
   const [metadataText, setMetadataText] = useState("");
   const [creating, setCreating] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", email: "", role: roles[0]?.slug || "", status: "Invited" as "Active" | "Invited", metadata: "{}" });
-  const openEditor = (user: User) => { setEditing(user); setMetadataText(JSON.stringify(user.metadata || {}, null, 2)); };
-  const saveEditor = () => { if (!editing) return; let metadata: Record<string, unknown>; try { metadata = JSON.parse(metadataText || "{}"); } catch { return; } if (!metadata || Array.isArray(metadata) || typeof metadata !== "object") return; update({ ...editing, name: editing.name.trim(), email: editing.email.trim().toLowerCase(), metadata }); setEditing(undefined); };
+  const [newUser, setNewUser] = useState({
+    name: "",
+    email: "",
+    role: roles[0]?.slug || "",
+    status: "Invited" as "Active" | "Invited",
+    metadata: "{}",
+  });
+  const openEditor = (user: User) => {
+    setEditing(user);
+    setMetadataText(JSON.stringify(user.metadata || {}, null, 2));
+  };
+  const saveEditor = () => {
+    if (!editing) return;
+    let metadata: Record<string, unknown>;
+    try {
+      metadata = JSON.parse(metadataText || "{}");
+    } catch {
+      return;
+    }
+    if (!metadata || Array.isArray(metadata) || typeof metadata !== "object")
+      return;
+    update({
+      ...editing,
+      name: editing.name.trim(),
+      email: editing.email.trim().toLowerCase(),
+      metadata,
+    });
+    setEditing(undefined);
+  };
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -1028,7 +1468,9 @@ function Users({ users, roles, create, update, remove }: { users: User[]; roles:
             People, roles and capabilities available to your content agent.
           </p>
         </div>
-        <button className="primary-button" onClick={() => setCreating(true)}>＋ New user</button>
+        <button className="primary-button" onClick={() => setCreating(true)}>
+          ＋ New user
+        </button>
         <span className="live-chip">
           <i />
           {users.length} members
@@ -1075,15 +1517,195 @@ function Users({ users, roles, create, update, remove }: { users: User[]; roles:
                   </td>
                   <td>{user.capabilities.length} granted</td>
                   <td>{Object.keys(user.metadata || {}).length} keys</td>
-                  <td><button className="text-button" onClick={() => openEditor(user)}>Edit</button><button className="text-button" onClick={() => remove(user)}>Delete</button></td>
+                  <td>
+                    <button
+                      className="text-button"
+                      onClick={() => openEditor(user)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="text-button"
+                      onClick={() => remove(user)}
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
-      {creating && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">NEW MEMBER</p><h2>Invite user</h2></div><button className="text-button" onClick={() => setCreating(false)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={newUser.name} onChange={(event) => setNewUser({ ...newUser, name: event.target.value })} /></label><label>Email<input type="email" value={newUser.email} onChange={(event) => setNewUser({ ...newUser, email: event.target.value })} /></label><label>Role<select value={newUser.role} onChange={(event) => setNewUser({ ...newUser, role: event.target.value })}>{roles.map((role) => <option key={role.slug} value={role.slug}>{role.name}</option>)}</select></label><label>Status<select value={newUser.status} onChange={(event) => setNewUser({ ...newUser, status: event.target.value as "Active" | "Invited" })}><option>Invited</option><option>Active</option></select></label><label>Metadata (JSON)<textarea rows={5} value={newUser.metadata} onChange={(event) => setNewUser({ ...newUser, metadata: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" disabled={!newUser.name.trim() || !newUser.email.includes("@")} onClick={() => { let metadata: Record<string, unknown>; try { metadata = JSON.parse(newUser.metadata || "{}"); } catch { return; } const role = roles.find((item) => item.slug === newUser.role) || roles[0]; if (!role) return; create({ id: "usr_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: newUser.name.trim(), email: newUser.email.trim().toLowerCase(), role: role.slug, status: newUser.status, capabilities: role.capabilities, metadata }); setNewUser({ name: "", email: "", role: roles[0]?.slug || "", status: "Invited", metadata: "{}" }); setCreating(false); }}>Create user</button></div></div></section>}
-      {editing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">USER PROFILE</p><h2>Edit {editing.name}</h2></div><button className="text-button" onClick={() => setEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label>Email<input type="email" value={editing.email} onChange={(event) => setEditing({ ...editing, email: event.target.value })} /></label><label>Metadata (JSON)<textarea rows={7} value={metadataText} onChange={(event) => setMetadataText(event.target.value)} /></label><div className="modal-actions"><button className="primary-button" onClick={saveEditor}>Save user</button></div></div></section>}
+      {creating && (
+        <section className="card entries-card" style={{ marginTop: 16 }}>
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">NEW MEMBER</p>
+              <h2>Invite user</h2>
+            </div>
+            <button className="text-button" onClick={() => setCreating(false)}>
+              Close
+            </button>
+          </div>
+          <div
+            className="modal"
+            style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}
+          >
+            <label>
+              Name
+              <input
+                value={newUser.name}
+                onChange={(event) =>
+                  setNewUser({ ...newUser, name: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Email
+              <input
+                type="email"
+                value={newUser.email}
+                onChange={(event) =>
+                  setNewUser({ ...newUser, email: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Role
+              <select
+                value={newUser.role}
+                onChange={(event) =>
+                  setNewUser({ ...newUser, role: event.target.value })
+                }
+              >
+                {roles.map((role) => (
+                  <option key={role.slug} value={role.slug}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select
+                value={newUser.status}
+                onChange={(event) =>
+                  setNewUser({
+                    ...newUser,
+                    status: event.target.value as "Active" | "Invited",
+                  })
+                }
+              >
+                <option>Invited</option>
+                <option>Active</option>
+              </select>
+            </label>
+            <label>
+              Metadata (JSON)
+              <textarea
+                rows={5}
+                value={newUser.metadata}
+                onChange={(event) =>
+                  setNewUser({ ...newUser, metadata: event.target.value })
+                }
+              />
+            </label>
+            <div className="modal-actions">
+              <button
+                className="primary-button"
+                disabled={!newUser.name.trim() || !newUser.email.includes("@")}
+                onClick={() => {
+                  let metadata: Record<string, unknown>;
+                  try {
+                    metadata = JSON.parse(newUser.metadata || "{}");
+                  } catch {
+                    return;
+                  }
+                  const role =
+                    roles.find((item) => item.slug === newUser.role) ||
+                    roles[0];
+                  if (!role) return;
+                  create({
+                    id:
+                      "usr_" +
+                      Math.random().toString(16).slice(2, 8).toUpperCase(),
+                    name: newUser.name.trim(),
+                    email: newUser.email.trim().toLowerCase(),
+                    role: role.slug,
+                    status: newUser.status,
+                    capabilities: role.capabilities,
+                    metadata,
+                  });
+                  setNewUser({
+                    name: "",
+                    email: "",
+                    role: roles[0]?.slug || "",
+                    status: "Invited",
+                    metadata: "{}",
+                  });
+                  setCreating(false);
+                }}
+              >
+                Create user
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      {editing && (
+        <section className="card entries-card" style={{ marginTop: 16 }}>
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">USER PROFILE</p>
+              <h2>Edit {editing.name}</h2>
+            </div>
+            <button
+              className="text-button"
+              onClick={() => setEditing(undefined)}
+            >
+              Close
+            </button>
+          </div>
+          <div
+            className="modal"
+            style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}
+          >
+            <label>
+              Name
+              <input
+                value={editing.name}
+                onChange={(event) =>
+                  setEditing({ ...editing, name: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Email
+              <input
+                type="email"
+                value={editing.email}
+                onChange={(event) =>
+                  setEditing({ ...editing, email: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Metadata (JSON)
+              <textarea
+                rows={7}
+                value={metadataText}
+                onChange={(event) => setMetadataText(event.target.value)}
+              />
+            </label>
+            <div className="modal-actions">
+              <button className="primary-button" onClick={saveEditor}>
+                Save user
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -1255,21 +1877,148 @@ function Menus({ menus }: { menus: Menu[] }) {
     </div>
   );
 }
-function Plugins({ plugins, install, remove, toggle }: { plugins: Plugin[]; install: (plugin: Plugin) => void; remove: (plugin: Plugin) => void; toggle: (plugin: Plugin) => void }) {
+function Plugins({
+  plugins,
+  install,
+  remove,
+  toggle,
+}: {
+  plugins: Plugin[];
+  install: (plugin: Plugin) => void;
+  remove: (plugin: Plugin) => void;
+  toggle: (plugin: Plugin) => void;
+}) {
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [hookName, setHookName] = useState("");
   const [hookEvent, setHookEvent] = useState("content.changed");
   const [actionName, setActionName] = useState("");
   const [actionLabel, setActionLabel] = useState("");
-  const [pluginDraft, setPluginDraft] = useState({ name: "", slug: "", version: "1.0.0", author: "", capabilities: "" });
-  useEffect(() => { const sync = () => { try { setHooks(JSON.parse(window.localStorage.getItem("waypoint.hooks") || "[]")); setActions(JSON.parse(window.localStorage.getItem("waypoint.actions") || "[]")); } catch { setHooks([]); setActions([]); } }; sync(); window.addEventListener("waypoint-model-updated", sync); return () => window.removeEventListener("waypoint-model-updated", sync); }, []);
-  const registerHook = () => { if (!hookName.trim() || hooks.some((hook) => hook.name === hookName.trim())) return; const hook: Hook = { id: "hook_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: hookName.trim(), event: hookEvent, priority: 10, enabled: true }; window.localStorage.setItem("waypoint.hooks", JSON.stringify([...hooks, hook])); window.dispatchEvent(new Event("waypoint-model-updated")); setHookName(""); };
-  const registerAction = () => { if (!actionName.trim() || !actionLabel.trim() || actions.some((action) => action.name === actionName.trim())) return; const action: Action = { id: "act_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: actionName.trim(), label: actionLabel.trim(), description: actionLabel.trim(), capabilities: [] }; window.localStorage.setItem("waypoint.actions", JSON.stringify([...actions, action])); window.dispatchEvent(new Event("waypoint-model-updated")); setActionName(""); setActionLabel(""); };
-  const toggleHook = (hook: Hook) => { window.localStorage.setItem("waypoint.hooks", JSON.stringify(hooks.map((item) => item.id === hook.id ? { ...item, enabled: !item.enabled } : item))); window.dispatchEvent(new Event("waypoint-model-updated")); };
-  const removeHook = (hook: Hook) => { if (!window.confirm(`Remove hook ${hook.name}?`)) return; window.localStorage.setItem("waypoint.hooks", JSON.stringify(hooks.filter((item) => item.id !== hook.id))); window.dispatchEvent(new Event("waypoint-model-updated")); };
-  const removeAction = (action: Action) => { if (!window.confirm(`Remove action ${action.label}?`)) return; window.localStorage.setItem("waypoint.actions", JSON.stringify(actions.filter((item) => item.id !== action.id))); window.dispatchEvent(new Event("waypoint-model-updated")); };
-  const installPlugin = () => { const slug = pluginDraft.slug.trim().toLowerCase(); if (!pluginDraft.name.trim() || !/^[a-z0-9-]+$/.test(slug) || !pluginDraft.version.trim() || !pluginDraft.author.trim()) return; install({ id: "plg_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: pluginDraft.name.trim(), slug, version: pluginDraft.version.trim(), author: pluginDraft.author.trim(), description: "Declarative plugin manifest", status: "Inactive", capabilities: [...new Set(pluginDraft.capabilities.split(",").map((value) => value.trim()).filter(Boolean))] }); setPluginDraft({ name: "", slug: "", version: "1.0.0", author: "", capabilities: "" }); };
+  const [pluginDraft, setPluginDraft] = useState({
+    name: "",
+    slug: "",
+    version: "1.0.0",
+    author: "",
+    capabilities: "",
+  });
+  useEffect(() => {
+    const sync = () => {
+      try {
+        setHooks(
+          JSON.parse(window.localStorage.getItem("waypoint.hooks") || "[]"),
+        );
+        setActions(
+          JSON.parse(window.localStorage.getItem("waypoint.actions") || "[]"),
+        );
+      } catch {
+        setHooks([]);
+        setActions([]);
+      }
+    };
+    sync();
+    window.addEventListener("waypoint-model-updated", sync);
+    return () => window.removeEventListener("waypoint-model-updated", sync);
+  }, []);
+  const registerHook = () => {
+    if (!hookName.trim() || hooks.some((hook) => hook.name === hookName.trim()))
+      return;
+    const hook: Hook = {
+      id: "hook_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+      name: hookName.trim(),
+      event: hookEvent,
+      priority: 10,
+      enabled: true,
+    };
+    window.localStorage.setItem(
+      "waypoint.hooks",
+      JSON.stringify([...hooks, hook]),
+    );
+    window.dispatchEvent(new Event("waypoint-model-updated"));
+    setHookName("");
+  };
+  const registerAction = () => {
+    if (
+      !actionName.trim() ||
+      !actionLabel.trim() ||
+      actions.some((action) => action.name === actionName.trim())
+    )
+      return;
+    const action: Action = {
+      id: "act_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+      name: actionName.trim(),
+      label: actionLabel.trim(),
+      description: actionLabel.trim(),
+      capabilities: [],
+    };
+    window.localStorage.setItem(
+      "waypoint.actions",
+      JSON.stringify([...actions, action]),
+    );
+    window.dispatchEvent(new Event("waypoint-model-updated"));
+    setActionName("");
+    setActionLabel("");
+  };
+  const toggleHook = (hook: Hook) => {
+    window.localStorage.setItem(
+      "waypoint.hooks",
+      JSON.stringify(
+        hooks.map((item) =>
+          item.id === hook.id ? { ...item, enabled: !item.enabled } : item,
+        ),
+      ),
+    );
+    window.dispatchEvent(new Event("waypoint-model-updated"));
+  };
+  const removeHook = (hook: Hook) => {
+    if (!window.confirm(`Remove hook ${hook.name}?`)) return;
+    window.localStorage.setItem(
+      "waypoint.hooks",
+      JSON.stringify(hooks.filter((item) => item.id !== hook.id)),
+    );
+    window.dispatchEvent(new Event("waypoint-model-updated"));
+  };
+  const removeAction = (action: Action) => {
+    if (!window.confirm(`Remove action ${action.label}?`)) return;
+    window.localStorage.setItem(
+      "waypoint.actions",
+      JSON.stringify(actions.filter((item) => item.id !== action.id)),
+    );
+    window.dispatchEvent(new Event("waypoint-model-updated"));
+  };
+  const installPlugin = () => {
+    const slug = pluginDraft.slug.trim().toLowerCase();
+    if (
+      !pluginDraft.name.trim() ||
+      !/^[a-z0-9-]+$/.test(slug) ||
+      !pluginDraft.version.trim() ||
+      !pluginDraft.author.trim()
+    )
+      return;
+    install({
+      id: "plg_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+      name: pluginDraft.name.trim(),
+      slug,
+      version: pluginDraft.version.trim(),
+      author: pluginDraft.author.trim(),
+      description: "Declarative plugin manifest",
+      status: "Inactive",
+      capabilities: [
+        ...new Set(
+          pluginDraft.capabilities
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+        ),
+      ],
+    });
+    setPluginDraft({
+      name: "",
+      slug: "",
+      version: "1.0.0",
+      author: "",
+      capabilities: "",
+    });
+  };
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -1307,20 +2056,263 @@ function Plugins({ plugins, install, remove, toggle }: { plugins: Plugin[]; inst
                 {plugin.status}
               </span>
               <strong>{plugin.capabilities.length} caps</strong>
-              <button className="text-button" onClick={() => toggle(plugin)}>{plugin.status === "Active" ? "Disable" : "Enable"}</button>
-              <button className="text-button" onClick={() => remove(plugin)}>Uninstall</button>
+              <button className="text-button" onClick={() => toggle(plugin)}>
+                {plugin.status === "Active" ? "Disable" : "Enable"}
+              </button>
+              <button className="text-button" onClick={() => remove(plugin)}>
+                Uninstall
+              </button>
             </div>
           ))}
         </div>
       </section>
       <div className="lower-grid" style={{ marginTop: 16 }}>
-        <section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">EVENT SUBSCRIPTIONS</p><h2>Hooks</h2></div><span className="live-chip"><i />{hooks.filter((hook) => hook.enabled).length} enabled</span></div>{hooks.length ? hooks.map((hook) => <div className="taxonomy-summary" key={hook.id}><span className="taxonomy-symbol">↗</span><div><b>{hook.name}</b><small>{hook.event} · priority {hook.priority}</small></div><span className={hook.enabled ? "live-chip" : "status"}>{hook.enabled ? "Enabled" : "Disabled"}</span><button className="text-button" onClick={() => toggleHook(hook)}>{hook.enabled ? "Disable" : "Enable"}</button><button className="text-button" onClick={() => removeHook(hook)}>Remove</button></div>) : <p className="subhead" style={{ padding: "0 21px 20px" }}>No hooks registered yet.</p>}</section>
-        <section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">DECLARATIVE COMMANDS</p><h2>Actions</h2></div><span className="live-chip"><i />{actions.length} registered</span></div>{actions.length ? actions.map((action) => <div className="taxonomy-summary" key={action.id}><span className="taxonomy-symbol">✦</span><div><b>{action.label}</b><small>{action.name} · {(action.capabilities || []).length} capabilities</small></div><button className="text-button" onClick={() => removeAction(action)}>Remove</button></div>) : <p className="subhead" style={{ padding: "0 21px 20px" }}>No actions registered yet.</p>}</section>
+        <section className="card relation-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">EVENT SUBSCRIPTIONS</p>
+              <h2>Hooks</h2>
+            </div>
+            <span className="live-chip">
+              <i />
+              {hooks.filter((hook) => hook.enabled).length} enabled
+            </span>
+          </div>
+          {hooks.length ? (
+            hooks.map((hook) => (
+              <div className="taxonomy-summary" key={hook.id}>
+                <span className="taxonomy-symbol">↗</span>
+                <div>
+                  <b>{hook.name}</b>
+                  <small>
+                    {hook.event} · priority {hook.priority}
+                  </small>
+                </div>
+                <span className={hook.enabled ? "live-chip" : "status"}>
+                  {hook.enabled ? "Enabled" : "Disabled"}
+                </span>
+                <button
+                  className="text-button"
+                  onClick={() => toggleHook(hook)}
+                >
+                  {hook.enabled ? "Disable" : "Enable"}
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() => removeHook(hook)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="subhead" style={{ padding: "0 21px 20px" }}>
+              No hooks registered yet.
+            </p>
+          )}
+        </section>
+        <section className="card relation-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">DECLARATIVE COMMANDS</p>
+              <h2>Actions</h2>
+            </div>
+            <span className="live-chip">
+              <i />
+              {actions.length} registered
+            </span>
+          </div>
+          {actions.length ? (
+            actions.map((action) => (
+              <div className="taxonomy-summary" key={action.id}>
+                <span className="taxonomy-symbol">✦</span>
+                <div>
+                  <b>{action.label}</b>
+                  <small>
+                    {action.name} · {(action.capabilities || []).length}{" "}
+                    capabilities
+                  </small>
+                </div>
+                <button
+                  className="text-button"
+                  onClick={() => removeAction(action)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="subhead" style={{ padding: "0 21px 20px" }}>
+              No actions registered yet.
+            </p>
+          )}
+        </section>
       </div>
-      <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">NEW MANIFEST</p><h2>Install declarative plugin</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={pluginDraft.name} onChange={(event) => setPluginDraft({ ...pluginDraft, name: event.target.value })} placeholder="Editorial tools" /></label><label>Slug<input value={pluginDraft.slug} onChange={(event) => setPluginDraft({ ...pluginDraft, slug: event.target.value })} placeholder="editorial-tools" /></label><label>Version<input value={pluginDraft.version} onChange={(event) => setPluginDraft({ ...pluginDraft, version: event.target.value })} /></label><label>Author<input value={pluginDraft.author} onChange={(event) => setPluginDraft({ ...pluginDraft, author: event.target.value })} placeholder="Your team" /></label><label>Capabilities<input value={pluginDraft.capabilities} onChange={(event) => setPluginDraft({ ...pluginDraft, capabilities: event.target.value })} placeholder="content.extend, tools.register" /></label><div className="modal-actions"><button className="primary-button" disabled={!pluginDraft.name.trim() || !pluginDraft.slug.trim() || !pluginDraft.author.trim()} onClick={installPlugin}>Install plugin</button></div></div></section>
+      <section className="card entries-card" style={{ marginTop: 16 }}>
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">NEW MANIFEST</p>
+            <h2>Install declarative plugin</h2>
+          </div>
+        </div>
+        <div
+          className="modal"
+          style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}
+        >
+          <label>
+            Name
+            <input
+              value={pluginDraft.name}
+              onChange={(event) =>
+                setPluginDraft({ ...pluginDraft, name: event.target.value })
+              }
+              placeholder="Editorial tools"
+            />
+          </label>
+          <label>
+            Slug
+            <input
+              value={pluginDraft.slug}
+              onChange={(event) =>
+                setPluginDraft({ ...pluginDraft, slug: event.target.value })
+              }
+              placeholder="editorial-tools"
+            />
+          </label>
+          <label>
+            Version
+            <input
+              value={pluginDraft.version}
+              onChange={(event) =>
+                setPluginDraft({ ...pluginDraft, version: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Author
+            <input
+              value={pluginDraft.author}
+              onChange={(event) =>
+                setPluginDraft({ ...pluginDraft, author: event.target.value })
+              }
+              placeholder="Your team"
+            />
+          </label>
+          <label>
+            Capabilities
+            <input
+              value={pluginDraft.capabilities}
+              onChange={(event) =>
+                setPluginDraft({
+                  ...pluginDraft,
+                  capabilities: event.target.value,
+                })
+              }
+              placeholder="content.extend, tools.register"
+            />
+          </label>
+          <div className="modal-actions">
+            <button
+              className="primary-button"
+              disabled={
+                !pluginDraft.name.trim() ||
+                !pluginDraft.slug.trim() ||
+                !pluginDraft.author.trim()
+              }
+              onClick={installPlugin}
+            >
+              Install plugin
+            </button>
+          </div>
+        </div>
+      </section>
       <div className="lower-grid" style={{ marginTop: 16 }}>
-        <section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">NEW SUBSCRIPTION</p><h2>Register hook</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={hookName} onChange={(event) => setHookName(event.target.value)} placeholder="e.g. notify_editor" /></label><label>Event<select value={hookEvent} onChange={(event) => setHookEvent(event.target.value)}>{["content.changed", "entry.created", "content_type.created", "user.updated", "plugin.status_changed", "settings.updated"].map((event) => <option key={event}>{event}</option>)}</select></label><div className="modal-actions"><button className="primary-button" disabled={!hookName.trim()} onClick={registerHook}>Register hook</button></div></div></section>
-        <section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">NEW COMMAND</p><h2>Register action</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Internal name<input value={actionName} onChange={(event) => setActionName(event.target.value)} placeholder="e.g. refresh_cache" /></label><label>Label<input value={actionLabel} onChange={(event) => setActionLabel(event.target.value)} placeholder="Refresh cache" /></label><div className="modal-actions"><button className="primary-button" disabled={!actionName.trim() || !actionLabel.trim()} onClick={registerAction}>Register action</button></div></div></section>
+        <section className="card relation-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">NEW SUBSCRIPTION</p>
+              <h2>Register hook</h2>
+            </div>
+          </div>
+          <div
+            className="modal"
+            style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}
+          >
+            <label>
+              Name
+              <input
+                value={hookName}
+                onChange={(event) => setHookName(event.target.value)}
+                placeholder="e.g. notify_editor"
+              />
+            </label>
+            <label>
+              Event
+              <select
+                value={hookEvent}
+                onChange={(event) => setHookEvent(event.target.value)}
+              >
+                {[
+                  "content.changed",
+                  "entry.created",
+                  "content_type.created",
+                  "user.updated",
+                  "plugin.status_changed",
+                  "settings.updated",
+                ].map((event) => (
+                  <option key={event}>{event}</option>
+                ))}
+              </select>
+            </label>
+            <div className="modal-actions">
+              <button
+                className="primary-button"
+                disabled={!hookName.trim()}
+                onClick={registerHook}
+              >
+                Register hook
+              </button>
+            </div>
+          </div>
+        </section>
+        <section className="card relation-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">NEW COMMAND</p>
+              <h2>Register action</h2>
+            </div>
+          </div>
+          <div
+            className="modal"
+            style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}
+          >
+            <label>
+              Internal name
+              <input
+                value={actionName}
+                onChange={(event) => setActionName(event.target.value)}
+                placeholder="e.g. refresh_cache"
+              />
+            </label>
+            <label>
+              Label
+              <input
+                value={actionLabel}
+                onChange={(event) => setActionLabel(event.target.value)}
+                placeholder="Refresh cache"
+              />
+            </label>
+            <div className="modal-actions">
+              <button
+                className="primary-button"
+                disabled={!actionName.trim() || !actionLabel.trim()}
+                onClick={registerAction}
+              >
+                Register action
+              </button>
+            </div>
+          </div>
+        </section>
       </div>
       <div className="health-note">
         <span>ⓘ</span>
@@ -1639,9 +2631,59 @@ function Status({ label }: { label: string }) {
     </span>
   );
 }
-function ActivityLog({ revisions, entries }: { revisions: Revision[]; entries: Entry[] }) {
-  const ordered = revisions.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return <div className="page"><div className="page-heading compact"><div><p className="kicker">AUDIT TRAIL</p><h1>Agent activity</h1><p className="subhead">A chronological record of changes made through the CMS and its agents.</p></div><span className="live-chip"><i />{revisions.length} events</span></div><section className="card entries-card"><div className="card-heading"><div><p className="eyebrow">REVISION HISTORY</p><h2>Workspace changes</h2></div></div>{ordered.length ? <div className="activity-list">{ordered.map((revision) => <Activity key={revision.id} icon="✦" title={revision.action.replaceAll("_", " ")} detail={`${entries.find((entry) => entry.id === revision.entryId)?.title || revision.after.title} · ${revision.id}`} time={new Date(revision.createdAt).toLocaleString()} />)}</div> : <p className="subhead" style={{ padding: "0 21px 20px" }}>No tracked changes yet.</p>}</section></div>;
+function ActivityLog({
+  revisions,
+  entries,
+}: {
+  revisions: Revision[];
+  entries: Entry[];
+}) {
+  const ordered = revisions
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">AUDIT TRAIL</p>
+          <h1>Agent activity</h1>
+          <p className="subhead">
+            A chronological record of changes made through the CMS and its
+            agents.
+          </p>
+        </div>
+        <span className="live-chip">
+          <i />
+          {revisions.length} events
+        </span>
+      </div>
+      <section className="card entries-card">
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">REVISION HISTORY</p>
+            <h2>Workspace changes</h2>
+          </div>
+        </div>
+        {ordered.length ? (
+          <div className="activity-list">
+            {ordered.map((revision) => (
+              <Activity
+                key={revision.id}
+                icon="✦"
+                title={revision.action.replaceAll("_", " ")}
+                detail={`${entries.find((entry) => entry.id === revision.entryId)?.title || revision.after.title} · ${revision.id}`}
+                time={new Date(revision.createdAt).toLocaleString()}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="subhead" style={{ padding: "0 21px 20px" }}>
+            No tracked changes yet.
+          </p>
+        )}
+      </section>
+    </div>
+  );
 }
 function Activity({
   icon,
