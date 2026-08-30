@@ -2339,6 +2339,7 @@ function Plugins({
   const [hookEvent, setHookEvent] = useState("content.changed");
   const [actionName, setActionName] = useState("");
   const [actionLabel, setActionLabel] = useState("");
+  const [registryNotice, setRegistryNotice] = useState("");
   const [pluginDraft, setPluginDraft] = useState({
     name: "",
     slug: "",
@@ -2435,6 +2436,14 @@ function Plugins({
     if (!window.confirm(`Remove action ${action.label}?`)) return;
     persistRegistry("actions", actions.filter((item) => item.id !== action.id));
   };
+  const testHook = (hook: Hook) => {
+    window.dispatchEvent(new CustomEvent("waypoint-hook", { detail: { hook, event: hook.event, payload: { source: "manual-test" }, emittedAt: new Date().toISOString() } }));
+    setRegistryNotice(`Hook ${hook.name} emitted successfully.`);
+  };
+  const runAction = (action: Action) => {
+    window.dispatchEvent(new CustomEvent("waypoint-action", { detail: { action, input: {}, runAt: new Date().toISOString() } }));
+    setRegistryNotice(`Action ${action.label} dispatched safely.`);
+  };
   const installPlugin = () => {
     const slug = pluginDraft.slug.trim().toLowerCase();
     if (
@@ -2484,6 +2493,7 @@ function Plugins({
           {plugins.filter((plugin) => plugin.status === "Active").length} active
         </span>
       </div>
+      {registryNotice && <p className="success-message" role="status">{registryNotice}</p>}
       <section className="card entries-card">
         <div className="card-heading">
           <div>
@@ -2550,6 +2560,7 @@ function Plugins({
                 >
                   {hook.enabled ? "Disable" : "Enable"}
                 </button>
+                <button className="text-button" disabled={!hook.enabled} onClick={() => testHook(hook)}>Test</button>
                 <button className="text-button" onClick={() => setEditingHook(hook)}>
                   Edit
                 </button>
@@ -2598,6 +2609,7 @@ function Plugins({
                 >
                   Remove
                 </button>
+                <button className="text-button" onClick={() => runAction(action)}>Run test</button>
               </div>
             ))
           ) : (
