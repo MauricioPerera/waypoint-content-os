@@ -1100,24 +1100,34 @@ function AuthScreen({
   setupRequired: boolean;
   onAuthenticated: (user: AuthUser) => void;
 }) {
-  const [register, setRegister] = useState(setupRequired);
+  const [mode, setMode] = useState<"login" | "register" | "request" | "reset">(setupRequired ? "register" : "login");
+  const [resetToken, setResetToken] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("reset");
+    if (token) { setResetToken(token); setMode("reset"); }
+  }, []);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy(true); setError("");
     try {
-      const response = await fetch(`/api/auth/${register ? "register" : "login"}`, {
+      const endpoint = mode === "register" ? "register" : mode === "request" ? "reset-request" : mode === "reset" ? "reset" : "login";
+      const body = mode === "request" ? { email } : mode === "reset" ? { token: resetToken, password } : { name, email, password };
+      const response = await fetch(`/api/auth/${endpoint}`, {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify(body),
       });
       const payload = (await response.json()) as { user?: AuthUser; error?: string };
-      if (!response.ok || !payload.user) throw new Error(payload.error || "No se pudo iniciar sesión");
+      if (!response.ok) throw new Error(payload.error || "No se pudo completar la solicitud");
+      if (mode === "request") { setError("Si el correo existe, recibirás un enlace de recuperación."); return; }
+      if (mode === "reset") { setMode("login"); setPassword(""); setError("Contraseña actualizada. Ya puedes iniciar sesión."); return; }
+      if (!payload.user) throw new Error("No se pudo iniciar sesión");
       onAuthenticated(payload.user);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "No se pudo iniciar sesión");
@@ -1127,14 +1137,15 @@ function AuthScreen({
     <div className="auth-shell">
       <form className="auth-card" onSubmit={submit}>
         <span className="brand-mark">W</span>
-        <h1>{register ? "Create your Waypoint workspace" : "Welcome back"}</h1>
-        <p>{register ? "Set up the administrator account to begin." : "Sign in to manage your content and agent tools."}</p>
-        {register && <input aria-label="Name" placeholder="Full name" value={name} onChange={(event) => setName(event.target.value)} required />}
-        <input aria-label="Email" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-        <input aria-label="Password" type="password" minLength={12} placeholder="Password (12+ characters)" value={password} onChange={(event) => setPassword(event.target.value)} required />
+        <h1>{mode === "register" ? "Create your Waypoint workspace" : mode === "request" ? "Recover your password" : mode === "reset" ? "Set a new password" : "Welcome back"}</h1>
+        <p>{mode === "register" ? "Set up the administrator account to begin." : "Sign in to manage your content and agent tools."}</p>
+        {mode === "register" && <input aria-label="Name" placeholder="Full name" value={name} onChange={(event) => setName(event.target.value)} required />}
+        {mode !== "reset" && <input aria-label="Email" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} required />}
+        {mode !== "request" && <input aria-label="Password" type="password" minLength={12} placeholder="Password (12+ characters)" value={password} onChange={(event) => setPassword(event.target.value)} required />}
         {error && <div className="auth-error">{error}</div>}
-        <button className="primary-button" type="submit" disabled={busy}>{busy ? "Working…" : register ? "Create account" : "Sign in"}</button>
-        {!setupRequired && <button className="ghost-button" type="button" onClick={() => setRegister((value) => !value)}>{register ? "Already have an account? Sign in" : "First-time setup"}</button>}
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? "Working…" : mode === "register" ? "Create account" : mode === "request" ? "Send recovery link" : mode === "reset" ? "Update password" : "Sign in"}</button>
+        {mode === "login" && <button className="ghost-button" type="button" onClick={() => setMode("request")}>Forgot password?</button>}
+        {!setupRequired && mode !== "reset" && <button className="ghost-button" type="button" onClick={() => setMode((value) => value === "register" ? "login" : "register")}>{mode === "register" ? "Already have an account? Sign in" : "First-time setup"}</button>}
       </form>
     </div>
   );

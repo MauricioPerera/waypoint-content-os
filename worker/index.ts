@@ -106,8 +106,55 @@ async function sendEmail(env: Env, to: string, subject: string, html: string) {
   if (!response.ok) console.error("resend_email_failed", response.status);
 }
 
+async function issuePasswordReset(request: Request, env: Env, ctx: ExecutionContext, email: string) {
+  const user = await env.DB.prepare("SELECT id, name, email FROM auth_users WHERE email = ?1").bind(email).first<{ id: string; name: string; email: string }>();
+  if (user) {
+    const token = randomToken();
+    const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    await env.DB.prepare("DELETE FROM auth_password_resets WHERE user_id = ?1 OR expires_at <= ?2").bind(user.id, new Date().toISOString()).run();
+    await env.DB.prepare("INSERT INTO auth_password_resets (id, user_id, token_hash, expires_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5)")
+      .bind(randomToken(16), user.id, await digest(token), expires, new Date().toISOString()).run();
+    const url = `${new URL(request.url).origin}/?reset=${encodeURIComponent(token)}`;
+    ctx.waitUntil(sendEmail(env, user.email, "Restablece tu contraseña de Waypoint", `<p>Hola ${user.name},</p><p>Restablece tu contraseña desde <a href="${url}">este enlace</a>. Expira en 30 minutos.</p>`));
+  }
+}
+
 async function auth(request: Request, env: Env, ctx: ExecutionContext, action: string) {
   if (request.method === "OPTIONS") return new Response(null, { headers: apiHeaders(request) });
+  if (action === "reset-request" && request.method === "POST") {
+    let body: { email?: string };
+    try { body = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400, request); }
+    const email = body.email?.trim().toLowerCase() || "";
+    if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: "Email inválido" }, 400, request);
+    await issuePasswordReset(request, env, ctx, email);
+    return json({ status: "sent" }, 200, request);
+  }
+  if (action === "reset" && request.method === "POST") {
+    let body: { token?: string; password?: string };
+    try { body = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400, request); }
+    if (!body.token || !body.password || body.password.length < 12) return json({ error: "Token o contraseña inválidos" }, 400, request);
+    const row = await env.DB.prepare("SELECT id, user_id FROM auth_password_resets WHERE token_hash = ?1 AND used_at IS NULL AND expires_at > ?2")
+      .bind(await digest(body.token), new Date().toISOString()).first<{ id: string; user_id: string }>();
+    if (!row) return json({ error: "El enlace es inválido o expiró" }, 400, request);
+    const salt = new Uint8Array(16); crypto.getRandomValues(salt);
+    await env.DB.prepare("UPDATE auth_users SET password_hash = ?1, password_salt = ?2 WHERE id = ?3")
+      .bind(await passwordHash(body.password, salt), bytesToBase64(salt), row.user_id).run();
+    await env.DB.prepare("UPDATE auth_password_resets SET used_at = ?1 WHERE id = ?2").bind(new Date().toISOString(), row.id).run();
+    await env.DB.prepare("DELETE FROM auth_sessions WHERE user_id = ?1").bind(row.user_id).run();
+    return json({ status: "password_reset" }, 200, request);
+  }
+  if (action === "password" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Unauthorized" }, 401, request);
+    let body: { currentPassword?: string; password?: string };
+    try { body = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400, request); }
+    if (!body.currentPassword || !body.password || body.password.length < 12) return json({ error: "Contraseña inválida" }, 400, request);
+    const row = await env.DB.prepare("SELECT password_hash, password_salt FROM auth_users WHERE id = ?1").bind(user.id).first<{ password_hash: string; password_salt: string }>();
+    if (!row || await passwordHash(body.currentPassword, base64ToBytes(row.password_salt)) !== row.password_hash) return json({ error: "Contraseña actual incorrecta" }, 401, request);
+    const salt = new Uint8Array(16); crypto.getRandomValues(salt);
+    await env.DB.prepare("UPDATE auth_users SET password_hash = ?1, password_salt = ?2 WHERE id = ?3").bind(await passwordHash(body.password, salt), bytesToBase64(salt), user.id).run();
+    return json({ status: "password_changed" }, 200, request);
+  }
   if (action === "status" && request.method === "GET") {
     const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM auth_users").first<{ count: number }>();
     return json({ setupRequired: !row?.count }, 200, request);
