@@ -6,6 +6,7 @@ import { WebmcpRegistrar } from "../src/mcp/register";
 
 type View =
   | "overview"
+  | "pages"
   | "entries"
   | "schema"
   | "taxonomies"
@@ -182,6 +183,32 @@ type SiteSettings = {
   timezone: string;
   options?: Record<string, unknown>;
 };
+type PageBlock = {
+  id: string;
+  type: "text" | "image" | "button" | "columns" | "divider" | "html";
+  content: string;
+  settings?: Record<string, unknown>;
+};
+type VisualPage = {
+  id: string;
+  title: string;
+  slug: string;
+  status: "Draft" | "Published" | "Archived";
+  templateId?: string;
+  blocks: PageBlock[];
+  metadata?: Record<string, unknown>;
+  updatedAt: string;
+};
+type PageTemplate = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  blocks: PageBlock[];
+  layoutId?: string;
+};
+type LayoutRule = { fontFamily: string; headingScale: string; accent: string; maxWidth: string; spacing: string; radius: string };
+type PageLayout = { id: string; name: string; slug: string; regions: string[]; rules: LayoutRule };
 
 const seedEntries: Entry[] = [
   {
@@ -386,6 +413,9 @@ const defaultSiteSettings: SiteSettings = {
   timezone: "America/Mexico_City",
   options: {},
 };
+const seedLayouts: PageLayout[] = [{ id: "layout_editorial", name: "Editorial canvas", slug: "editorial-canvas", regions: ["header", "main", "footer"], rules: { fontFamily: "Inter", headingScale: "1.2", accent: "#D7FF4F", maxWidth: "1180px", spacing: "24px", radius: "18px" } }];
+const seedTemplates: PageTemplate[] = [{ id: "tpl_landing", name: "Editorial landing", slug: "editorial-landing", description: "A clear hero, story and call to action.", layoutId: "layout_editorial", blocks: [{ id: "blk_hero", type: "text", content: "A thoughtful headline", settings: { variant: "hero" } }, { id: "blk_copy", type: "text", content: "Introduce the idea behind this page." }, { id: "blk_cta", type: "button", content: "Explore more", settings: { url: "/journal" } }] }];
+const seedPages: VisualPage[] = [{ id: "page_home", title: "Homepage", slug: "home", status: "Published", templateId: "tpl_landing", blocks: [{ id: "blk_home_hero", type: "text", content: "Make the next idea easier to find.", settings: { variant: "hero" } }, { id: "blk_home_copy", type: "text", content: "Northstar Journal is a calm space for design and culture." }, { id: "blk_home_cta", type: "button", content: "Read the journal", settings: { url: "/journal" } }], updatedAt: "2026-08-30T10:00:00.000Z" }];
 type PersistedModel = Partial<{
   entries: Entry[];
   types: ContentType[];
@@ -402,6 +432,9 @@ type PersistedModel = Partial<{
   menus: Menu[];
   activeType: string;
   activeStatus: string;
+  pages: VisualPage[];
+  templates: PageTemplate[];
+  layouts: PageLayout[];
 }>;
 
 function emitRegisteredHooks(event: string, payload: Record<string, unknown>) {
@@ -430,6 +463,9 @@ function emitRegisteredHooks(event: string, payload: Record<string, unknown>) {
 
 export default function Home() {
   const [view, setView] = useState<View>("overview"),
+    [pages, setPages] = useState(seedPages),
+    [templates, setTemplates] = useState(seedTemplates),
+    [layouts, setLayouts] = useState(seedLayouts),
     [entries, setEntries] = useState(seedEntries),
     [types, setTypes] = useState(seedTypes),
     [taxonomies, setTaxonomies] = useState(seedTaxonomies),
@@ -524,6 +560,9 @@ export default function Home() {
                   },
             ),
           );
+        if (data.pages) setPages(data.pages);
+        if (data.templates) setTemplates(data.templates);
+        if (data.layouts) setLayouts(data.layouts);
         if (data.types) setTypes(data.types);
         if (data.taxonomies) setTaxonomies(data.taxonomies);
         if (data.relations) setRelations(data.relations);
@@ -575,6 +614,9 @@ export default function Home() {
         const data = (payload as { state?: PersistedModel })?.state;
         if (!data || !mounted) return;
         if (data.entries) setEntries(data.entries);
+        if (data.pages) setPages(data.pages);
+        if (data.templates) setTemplates(data.templates);
+        if (data.layouts) setLayouts(data.layouts);
         if (data.types) setTypes(data.types);
         if (data.taxonomies) setTaxonomies(data.taxonomies);
         if (data.relations) setRelations(data.relations);
@@ -601,6 +643,9 @@ export default function Home() {
   useEffect(() => {
     if (!remoteReady || !authUser) return;
     const state = {
+      pages,
+      templates,
+      layouts,
       entries,
       types,
       taxonomies,
@@ -629,6 +674,9 @@ export default function Home() {
     }).catch(() => undefined);
     window.dispatchEvent(new Event("waypoint-model-updated"));
   }, [
+    pages,
+    templates,
+    layouts,
     entries,
     types,
     taxonomies,
@@ -690,6 +738,14 @@ export default function Home() {
     emitRegisteredHooks("entry.deleted", { entryId: entry.id });
     notify("Entry deleted");
   };
+  const createPage = (page: VisualPage) => { setPages((all) => [page, ...all]); emitRegisteredHooks("page.created", { page }); notify("Page created"); };
+  const updatePage = (page: VisualPage) => { setPages((all) => all.map((item) => item.id === page.id ? page : item)); emitRegisteredHooks("page.updated", { page }); notify("Page updated"); };
+  const removePage = (page: VisualPage) => { if (!window.confirm(`Delete page ${page.title}?`)) return; setPages((all) => all.filter((item) => item.id !== page.id)); emitRegisteredHooks("page.deleted", { pageId: page.id }); notify("Page deleted"); };
+  const createTemplate = (template: PageTemplate) => { setTemplates((all) => [template, ...all]); notify("Template created"); };
+  const updateTemplate = (template: PageTemplate) => { setTemplates((all) => all.map((item) => item.id === template.id ? template : item)); notify("Template updated"); };
+  const removeTemplate = (template: PageTemplate) => { if (!window.confirm(`Delete template ${template.name}?`)) return; setTemplates((all) => all.filter((item) => item.id !== template.id)); notify("Template deleted"); };
+  const createLayout = (layout: PageLayout) => { setLayouts((all) => [layout, ...all]); notify("Layout created"); };
+  const updateLayout = (layout: PageLayout) => { setLayouts((all) => all.map((item) => item.id === layout.id ? layout : item)); notify("Layout updated"); };
   const removeType = (type: ContentType) => {
     if (!window.confirm(`Delete content type ${type.name}?`)) return;
     setTypes((all) => all.filter((item) => item.slug !== type.slug));
@@ -797,6 +853,12 @@ export default function Home() {
     notify("Term created");
   };
   const state = {
+    pages,
+    setPages,
+    templates,
+    setTemplates,
+    layouts,
+    setLayouts,
     entries,
     setEntries,
     contentTypes: types,
@@ -1008,6 +1070,7 @@ export default function Home() {
               }}
             />
           )}
+          {view === "pages" && <PageBuilder pages={pages} templates={templates} layouts={layouts} createPage={createPage} updatePage={updatePage} removePage={removePage} createTemplate={createTemplate} updateTemplate={updateTemplate} removeTemplate={removeTemplate} createLayout={createLayout} updateLayout={updateLayout} />}
           {view === "plugins" && (
             <Plugins
               plugins={plugins}
@@ -1300,6 +1363,12 @@ function Sidebar({
           badge={String(entryCount)}
           active={view === "entries"}
           on={() => setView("entries")}
+        />
+        <Nav
+          icon="▥"
+          text="Pages"
+          active={view === "pages"}
+          on={() => setView("pages")}
         />
         <Nav
           icon="⌘"
@@ -2211,6 +2280,35 @@ function Menus({ menus, remove, create, update }: { menus: Menu[]; remove: (menu
       <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">NEW MENU</p><h2>Create navigation</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label>Slug<input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} /></label><label>Location<input value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" disabled={!draft.name.trim() || !draft.slug.trim()} onClick={() => { create({ id: "menu_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: draft.name.trim(), slug: draft.slug.trim(), location: draft.location.trim(), items: [] }); setDraft({ name: "", slug: "", location: "header" }); }}>Create menu</button></div></div></section>
     </div>
   );
+}
+function PageBuilder({
+  pages, templates, layouts, createPage, updatePage, removePage, createTemplate, updateTemplate, removeTemplate, createLayout, updateLayout,
+}: {
+  pages: VisualPage[]; templates: PageTemplate[]; layouts: PageLayout[];
+  createPage: (page: VisualPage) => void; updatePage: (page: VisualPage) => void; removePage: (page: VisualPage) => void;
+  createTemplate: (template: PageTemplate) => void; updateTemplate: (template: PageTemplate) => void; removeTemplate: (template: PageTemplate) => void;
+  createLayout: (layout: PageLayout) => void; updateLayout: (layout: PageLayout) => void;
+}) {
+  const [selectedId, setSelectedId] = useState(pages[0]?.id || "");
+  const [newBlock, setNewBlock] = useState<PageBlock["type"]>("text");
+  const [blockText, setBlockText] = useState("");
+  const [editingBlock, setEditingBlock] = useState<PageBlock>();
+  const [templateName, setTemplateName] = useState("");
+  const [layoutDraft, setLayoutDraft] = useState<PageLayout>(layouts[0] || { id: "", name: "", slug: "", regions: ["header", "main", "footer"], rules: { fontFamily: "Inter", headingScale: "1.2", accent: "#D7FF4F", maxWidth: "1180px", spacing: "24px", radius: "18px" } });
+  const page = pages.find((item) => item.id === selectedId) || pages[0];
+  const changePage = (next: VisualPage) => { updatePage({ ...next, updatedAt: new Date().toISOString() }); setSelectedId(next.id); };
+  const addBlock = () => { if (!page || !blockText.trim()) return; changePage({ ...page, blocks: [...page.blocks, { id: "blk_" + Math.random().toString(16).slice(2, 8).toUpperCase(), type: newBlock, content: blockText.trim(), settings: newBlock === "button" ? { url: "/" } : undefined }] }); setBlockText(""); };
+  const createBlankPage = () => { const now = new Date().toISOString(); const next: VisualPage = { id: "page_" + Math.random().toString(16).slice(2, 8).toUpperCase(), title: "Untitled page", slug: "untitled-page", status: "Draft", blocks: [], updatedAt: now }; createPage(next); setSelectedId(next.id); };
+  const createFromTemplate = (template: PageTemplate) => { const now = new Date().toISOString(); const next: VisualPage = { id: "page_" + Math.random().toString(16).slice(2, 8).toUpperCase(), title: template.name, slug: template.slug + "-page", status: "Draft", templateId: template.id, blocks: template.blocks.map((block) => ({ ...block, id: "blk_" + Math.random().toString(16).slice(2, 8).toUpperCase() })), updatedAt: now }; createPage(next); setSelectedId(next.id); };
+  const saveTemplate = () => { if (!page || !templateName.trim()) return; createTemplate({ id: "tpl_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: templateName.trim(), slug: templateName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), description: "Saved from the visual editor.", blocks: page.blocks, layoutId: layoutDraft.id || undefined }); setTemplateName(""); };
+  return <div className="page">
+    <div className="page-heading compact"><div><p className="kicker">VISUAL STUDIO</p><h1>Pages</h1><p className="subhead">Compose pages with reusable blocks, layouts and design rules.</p></div><button className="primary-button" onClick={createBlankPage}>＋ New page</button></div>
+    <div className="content-grid">
+      <section className="card entries-card"><div className="card-heading"><div><p className="eyebrow">PAGE LIBRARY</p><h2>{pages.length} pages</h2></div></div>{pages.map((item) => <div className="type-row" key={item.id} onClick={() => setSelectedId(item.id)} style={{ cursor: "pointer", outline: item.id === page?.id ? "2px solid #D7FF4F" : undefined }}><span className="entry-icon yellow">▥</span><span><b>{item.title}</b><small>/{item.slug} · {item.blocks.length} blocks</small></span><span className="status">{item.status}</span><button className="text-button" onClick={(event) => { event.stopPropagation(); removePage(item); }}>Delete</button></div>)}</section>
+      <section className="card entries-card"><div className="card-heading"><div><p className="eyebrow">CANVAS</p><h2>{page?.title || "Select a page"}</h2></div>{page && <select value={page.status} onChange={(event) => changePage({ ...page, status: event.target.value as VisualPage["status"] })}><option>Draft</option><option>Published</option><option>Archived</option></select>}</div>{page && <><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Page title<input value={page.title} onChange={(event) => changePage({ ...page, title: event.target.value })} /></label><label>Slug<input value={page.slug} onChange={(event) => changePage({ ...page, slug: event.target.value })} /></label></div><div className="terms-list">{page.blocks.map((block, index) => <div className="term-row" key={block.id}><span className="term-count">{index + 1}</span><span><b>{block.type}</b><small>{block.content}</small></span><button className="text-button" onClick={() => setEditingBlock(block)}>Edit</button><button className="text-button" onClick={() => changePage({ ...page, blocks: page.blocks.filter((item) => item.id !== block.id) })}>Delete</button></div>)}</div>{editingBlock && <div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Edit block content<textarea rows={4} value={editingBlock.content} onChange={(event) => setEditingBlock({ ...editingBlock, content: event.target.value })} /></label><div className="modal-actions"><button className="ghost-button" onClick={() => setEditingBlock(undefined)}>Cancel</button><button className="primary-button" onClick={() => { changePage({ ...page, blocks: page.blocks.map((item) => item.id === editingBlock.id ? editingBlock : item) }); setEditingBlock(undefined); }}>Save block</button></div></div>}<div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>New block<select value={newBlock} onChange={(event) => setNewBlock(event.target.value as PageBlock["type"])}><option value="text">Text</option><option value="image">Image</option><option value="button">Button</option><option value="columns">Columns</option><option value="divider">Divider</option><option value="html">Safe HTML</option></select></label><label>Content<input value={blockText} onChange={(event) => setBlockText(event.target.value)} placeholder="Write the block content…" /></label><button className="primary-button" disabled={!blockText.trim()} onClick={addBlock}>＋ Add block</button></div></>}</section>
+    </div>
+    <div className="lower-grid" style={{ marginTop: 16 }}><section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">TEMPLATES</p><h2>Reusable patterns</h2></div></div>{templates.map((template) => <div className="taxonomy-summary" key={template.id}><div><b>{template.name}</b><small>{template.blocks.length} blocks · {template.description}</small></div><button className="text-button" onClick={() => page && updateTemplate({ ...template, blocks: page.blocks })}>Update</button><button className="text-button" onClick={() => removeTemplate(template)}>Delete</button><button className="text-button" onClick={() => createFromTemplate(template)}>Use</button></div>)}<div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Save current page as template<input value={templateName} onChange={(event) => setTemplateName(event.target.value)} /></label><button className="primary-button" disabled={!page || !templateName.trim()} onClick={saveTemplate}>Save template</button></div></section><section className="card relation-card"><div className="card-heading"><div><p className="eyebrow">LAYOUT RULES</p><h2>{layoutDraft.name || "Design system"}</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Font<input value={layoutDraft.rules.fontFamily} onChange={(event) => setLayoutDraft({ ...layoutDraft, rules: { ...layoutDraft.rules, fontFamily: event.target.value } })} /></label><label>Accent color<input type="color" value={layoutDraft.rules.accent} onChange={(event) => setLayoutDraft({ ...layoutDraft, rules: { ...layoutDraft.rules, accent: event.target.value } })} /></label><label>Max width<input value={layoutDraft.rules.maxWidth} onChange={(event) => setLayoutDraft({ ...layoutDraft, rules: { ...layoutDraft.rules, maxWidth: event.target.value } })} /></label><label>Spacing<input value={layoutDraft.rules.spacing} onChange={(event) => setLayoutDraft({ ...layoutDraft, rules: { ...layoutDraft.rules, spacing: event.target.value } })} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { const next = { ...layoutDraft, id: layoutDraft.id || "layout_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: layoutDraft.name || "Custom layout", slug: layoutDraft.slug || "custom-layout" }; (layoutDraft.id ? updateLayout(next) : createLayout(next)); setLayoutDraft(next); }}>Save layout rules</button></div></div></section></div>
+  </div>;
 }
 function Plugins({
   plugins,
