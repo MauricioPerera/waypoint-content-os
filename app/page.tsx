@@ -1071,7 +1071,7 @@ export default function Home() {
               }}
             />
           )}
-          {view === "pages" && <VisualCanvas pages={pages} templates={templates} layouts={layouts} createPage={createPage} updatePage={updatePage} removePage={removePage} createTemplate={createTemplate} removeTemplate={removeTemplate} />}
+          {view === "pages" && <VisualCanvas pages={pages} templates={templates} layouts={layouts} createPage={createPage} updatePage={updatePage} removePage={removePage} createTemplate={createTemplate} removeTemplate={removeTemplate} updateLayout={updateLayout} />}
           {view === "plugins" && (
             <Plugins
               plugins={plugins}
