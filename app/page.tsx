@@ -724,8 +724,10 @@ export default function Home() {
   const removeComment = (comment: Comment) => { if (!window.confirm("Delete this comment?")) return; setComments((all) => all.filter((item) => item.id !== comment.id)); notify("Comment deleted"); };
   const removeMedia = (asset: MediaAsset) => { if (!window.confirm(`Delete ${asset.name}?`)) return; setMedia((all) => all.filter((item) => item.id !== asset.id)); notify("Media deleted"); };
   const createMedia = (asset: MediaAsset) => { setMedia((all) => [asset, ...all]); emitRegisteredHooks("media.created", { media: asset }); notify("Media registered"); };
+  const updateMedia = (asset: MediaAsset) => { setMedia((all) => all.map((item) => item.id === asset.id ? asset : item)); emitRegisteredHooks("media.updated", { media: asset }); notify("Media updated"); };
   const removeMenu = (menu: Menu) => { if (!window.confirm(`Delete menu ${menu.name}?`)) return; setMenus((all) => all.filter((item) => item.id !== menu.id)); notify("Menu deleted"); };
   const createMenu = (menu: Menu) => { setMenus((all) => [menu, ...all]); emitRegisteredHooks("menu.created", { menu }); notify("Menu created"); };
+  const updateMenu = (menu: Menu) => { setMenus((all) => all.map((item) => item.id === menu.id ? menu : item)); emitRegisteredHooks("menu.updated", { menu }); notify("Menu updated"); };
   const createContentType = (
     name: string,
     slug: string,
@@ -1045,11 +1047,11 @@ export default function Home() {
               }}
             />
           )}{" "}
-          {view === "media" && <Media media={media} remove={removeMedia} create={createMedia} />} {" "}
+          {view === "media" && <Media media={media} remove={removeMedia} create={createMedia} update={updateMedia} />} {" "}
           {view === "comments" && (
             <Comments comments={comments} entries={entries} update={updateComment} remove={removeComment} create={createComment} />
           )}{" "}
-          {view === "menus" && <Menus menus={menus} remove={removeMenu} create={createMenu} />}
+          {view === "menus" && <Menus menus={menus} remove={removeMenu} create={createMenu} update={updateMenu} />}
           {view === "settings" && (
             <Settings
               settings={settings}
@@ -2010,8 +2012,9 @@ function Users({
     </div>
   );
 }
-function Media({ media, remove, create }: { media: MediaAsset[]; remove: (asset: MediaAsset) => void; create: (asset: MediaAsset) => void }) {
+function Media({ media, remove, create, update }: { media: MediaAsset[]; remove: (asset: MediaAsset) => void; create: (asset: MediaAsset) => void; update: (asset: MediaAsset) => void }) {
   const [draft, setDraft] = useState({ name: "", url: "", alt: "" });
+  const [editing, setEditing] = useState<MediaAsset>();
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -2051,11 +2054,13 @@ function Media({ media, remove, create }: { media: MediaAsset[]; remove: (asset:
                 </small>
               </span>
               <strong>{asset.alt || "No alt text"}</strong>
+              <button className="text-button" onClick={() => setEditing(asset)}>Edit</button>
               <button className="text-button" onClick={() => remove(asset)}>Delete</button>
             </div>
           ))}
         </div>
       </section>
+      {editing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><h2>Edit media</h2><button className="text-button" onClick={() => setEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label>URL<input value={editing.url} onChange={(event) => setEditing({ ...editing, url: event.target.value })} /></label><label>Alt text<input value={editing.alt || ""} onChange={(event) => setEditing({ ...editing, alt: event.target.value })} /></label><label>Metadata (JSON)<textarea rows={4} value={JSON.stringify(editing.metadata || {}, null, 2)} onChange={(event) => { try { setEditing({ ...editing, metadata: JSON.parse(event.target.value) }); } catch {} }} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { update(editing); setEditing(undefined); }}>Save media</button></div></div></section>}
       <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">REGISTER ASSET</p><h2>Add media</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="cover.jpg" /></label><label>URL<input type="url" value={draft.url} onChange={(event) => setDraft({ ...draft, url: event.target.value })} placeholder="https://…" /></label><label>Alt text<input value={draft.alt} onChange={(event) => setDraft({ ...draft, alt: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" disabled={!draft.name.trim() || !draft.url.trim()} onClick={() => { create({ id: "med_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: draft.name.trim(), url: draft.url.trim(), mimeType: "application/octet-stream", size: 0, alt: draft.alt.trim(), attachedEntryIds: [], createdAt: new Date().toISOString() }); setDraft({ name: "", url: "", alt: "" }); }}>Register media</button></div></div></section>
     </div>
   );
@@ -2140,8 +2145,10 @@ function Comments({
     </div>
   );
 }
-function Menus({ menus, remove, create }: { menus: Menu[]; remove: (menu: Menu) => void; create: (menu: Menu) => void }) {
+function Menus({ menus, remove, create, update }: { menus: Menu[]; remove: (menu: Menu) => void; create: (menu: Menu) => void; update: (menu: Menu) => void }) {
   const [draft, setDraft] = useState({ name: "", slug: "", location: "header" });
+  const [itemDraft, setItemDraft] = useState({ menuId: menus[0]?.id || "", label: "", url: "" });
+  const [editingItem, setEditingItem] = useState<{ menu: Menu; item: MenuItem }>();
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -2183,15 +2190,19 @@ function Menus({ menus, remove, create }: { menus: Menu[]; remove: (menu: Menu) 
                     </span>
                     <span>
                       <b>{item.label}</b>
-                      <small>{item.entryId || item.url}</small>
-                    </span>
-                    <span className="term-count">#{item.order + 1}</span>
+                    <small>{item.entryId || item.url}</small>
+                  </span>
+                  <span className="term-count">#{item.order + 1}</span>
+                  <button className="text-button" onClick={() => setEditingItem({ menu, item })}>Edit</button>
+                  <button className="text-button" onClick={() => update({ ...menu, items: menu.items.filter((candidate) => candidate.id !== item.id) })}>Delete</button>
                   </div>
                 ))}
             </div>
           </section>
         ))}
       </div>
+      {editingItem && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><h2>Edit menu item</h2><button className="text-button" onClick={() => setEditingItem(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Label<input value={editingItem.item.label} onChange={(event) => setEditingItem({ ...editingItem, item: { ...editingItem.item, label: event.target.value } })} /></label><label>URL<input value={editingItem.item.url || ""} onChange={(event) => setEditingItem({ ...editingItem, item: { ...editingItem.item, url: event.target.value } })} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { update({ ...editingItem.menu, items: editingItem.menu.items.map((item) => item.id === editingItem.item.id ? editingItem.item : item) }); setEditingItem(undefined); }}>Save item</button></div></div></section>}
+      <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><h2>Add menu item</h2></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Menu<select value={itemDraft.menuId} onChange={(event) => setItemDraft({ ...itemDraft, menuId: event.target.value })}>{menus.map((menu) => <option key={menu.id} value={menu.id}>{menu.name}</option>)}</select></label><label>Label<input value={itemDraft.label} onChange={(event) => setItemDraft({ ...itemDraft, label: event.target.value })} /></label><label>URL<input value={itemDraft.url} onChange={(event) => setItemDraft({ ...itemDraft, url: event.target.value })} placeholder="/about" /></label><div className="modal-actions"><button className="primary-button" disabled={!itemDraft.menuId || !itemDraft.label.trim() || !itemDraft.url.trim()} onClick={() => { const menu = menus.find((candidate) => candidate.id === itemDraft.menuId); if (!menu) return; update({ ...menu, items: [...menu.items, { id: "mi_" + Math.random().toString(16).slice(2, 8).toUpperCase(), label: itemDraft.label.trim(), url: itemDraft.url.trim(), order: menu.items.length }] }); setItemDraft({ ...itemDraft, label: "", url: "" }); }}>Add item</button></div></div></section>
       <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">NEW MENU</p><h2>Create navigation</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label>Slug<input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value })} /></label><label>Location<input value={draft.location} onChange={(event) => setDraft({ ...draft, location: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" disabled={!draft.name.trim() || !draft.slug.trim()} onClick={() => { create({ id: "menu_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: draft.name.trim(), slug: draft.slug.trim(), location: draft.location.trim(), items: [] }); setDraft({ name: "", slug: "", location: "header" }); }}>Create menu</button></div></div></section>
     </div>
   );
@@ -3206,6 +3217,7 @@ function Schema({
   const primary = types[0];
   const [editing, setEditing] = useState<ContentType>();
   const [fieldsText, setFieldsText] = useState("");
+  const [newField, setNewField] = useState("");
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -3271,7 +3283,7 @@ function Schema({
               </div>
             );
           })}
-          <button className="add-field">＋ Add field</button>
+          <div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0, padding: "15px 21px" }}><label>Add field<input value={newField} onChange={(event) => setNewField(event.target.value)} placeholder="e.g. featured_image" /></label><button className="add-field" disabled={!newField.trim() || !primary} onClick={() => { if (!primary) return; update({ ...primary, fields: [...primary.fields, newField.trim()] }); setNewField(""); }}>＋ Add field</button></div>
         </section>
       </div>
       {editing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">CONTENT TYPE</p><h2>Edit {editing.name}</h2></div><button className="text-button" onClick={() => setEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label>Description<input value={editing.desc} onChange={(event) => setEditing({ ...editing, desc: event.target.value })} /></label><label>Fields (comma separated)<input value={fieldsText} onChange={(event) => setFieldsText(event.target.value)} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { update({ ...editing, fields: fieldsText.split(",").map((field) => field.trim()).filter(Boolean) }); setEditing(undefined); }}>Save type</button></div></div></section>}
