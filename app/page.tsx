@@ -506,7 +506,7 @@ export default function Home() {
     type: string,
     data: Record<string, unknown> = {},
   ): Entry => {
-    const entry: Entry = {
+  const entry: Entry = {
       id: "ent_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
       title,
       type,
@@ -517,6 +517,7 @@ export default function Home() {
       data,
     };
     setEntries((x) => [entry, ...x]);
+    emitRegisteredHooks("entry.created", { entry });
     setShowEntry(false);
     notify("Draft created");
     return entry;
@@ -546,6 +547,7 @@ export default function Home() {
       requiredFields,
     };
     setTypes((x) => [...x, created]);
+    emitRegisteredHooks("content_type.created", { contentType: created });
     notify("Content type created");
     return created;
   };
@@ -712,8 +714,8 @@ export default function Home() {
               create={() => setShowRelation(true)}
             />
           )}{" "}
-          {view === "users" && <Users users={users} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); notify("User updated"); }} />}{" "}
-          {view === "plugins" && <Plugins plugins={plugins} toggle={(plugin) => { const updated = { ...plugin, status: plugin.status === "Active" ? "Inactive" as const : "Active" as const }; setPlugins((all) => all.map((item) => item.id === plugin.id ? updated : item)); notify(updated.status === "Active" ? "Plugin enabled" : "Plugin disabled"); }} />}{" "}
+          {view === "users" && <Users users={users} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); emitRegisteredHooks("user.updated", { user: next }); notify("User updated"); }} />}{" "}
+          {view === "plugins" && <Plugins plugins={plugins} toggle={(plugin) => { const updated = { ...plugin, status: plugin.status === "Active" ? "Inactive" as const : "Active" as const }; setPlugins((all) => all.map((item) => item.id === plugin.id ? updated : item)); emitRegisteredHooks("plugin.status_changed", { plugin: updated }); notify(updated.status === "Active" ? "Plugin enabled" : "Plugin disabled"); }} />}{" "}
           {view === "media" && <Media media={media} />}{" "}
           {view === "comments" && (
             <Comments comments={comments} entries={entries} />
@@ -726,6 +728,7 @@ export default function Home() {
                 setSettings(next);
                 window.localStorage.setItem("waypoint.settings", JSON.stringify(next));
                 window.dispatchEvent(new Event("waypoint-settings-updated"));
+                emitRegisteredHooks("settings.updated", { settings: next });
                 notify("Settings saved");
               }}
             />
