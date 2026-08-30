@@ -697,7 +697,7 @@ export default function Home() {
             />
           )}{" "}
           {view === "users" && <Users users={users} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); notify("User updated"); }} />}{" "}
-          {view === "plugins" && <Plugins plugins={plugins} />}{" "}
+          {view === "plugins" && <Plugins plugins={plugins} toggle={(plugin) => { const updated = { ...plugin, status: plugin.status === "Active" ? "Inactive" as const : "Active" as const }; setPlugins((all) => all.map((item) => item.id === plugin.id ? updated : item)); notify(updated.status === "Active" ? "Plugin enabled" : "Plugin disabled"); }} />}{" "}
           {view === "media" && <Media media={media} />}{" "}
           {view === "comments" && (
             <Comments comments={comments} entries={entries} />
@@ -1218,7 +1218,7 @@ function Menus({ menus }: { menus: Menu[] }) {
     </div>
   );
 }
-function Plugins({ plugins }: { plugins: Plugin[] }) {
+function Plugins({ plugins, toggle }: { plugins: Plugin[]; toggle: (plugin: Plugin) => void }) {
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -1256,6 +1256,7 @@ function Plugins({ plugins }: { plugins: Plugin[] }) {
                 {plugin.status}
               </span>
               <strong>{plugin.capabilities.length} caps</strong>
+              <button className="text-button" onClick={() => toggle(plugin)}>{plugin.status === "Active" ? "Disable" : "Enable"}</button>
             </div>
           ))}
         </div>
