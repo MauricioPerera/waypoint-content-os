@@ -1,1 +1,176 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plugins y Webhooks — Waypoint Content OS</title><meta name="description" content="Guía de plugins, hooks, acciones y webhooks para Waypoint Content OS."><link rel="stylesheet" href="styles.css"></head><body><header class="wrap nav"><a class="brand" href="./"><span class="mark">W</span> Waypoint</a><nav class="nav-links"><a href="documentation.html">Documentación</a><a href="https://github.com/MauricioPerera/waypoint-content-os">GitHub</a><select class="lang" aria-label="Idioma"><option value="es">ES</option><option value="en">EN</option><option value="pt">PT</option></select><a class="btn" href="https://github.com/MauricioPerera/waypoint-content-os">Ver GitHub</a></nav></header><main><section class="wrap docs-hero"><div class="eyebrow">WAYPOINT / EXTENSIONS</div><h1>Plugins, hooks y webhooks</h1><p class="section-intro">Una guía práctica para extender el CMS y conectar automatizaciones sin romper el contrato de contenido.</p></section><div class="wrap docs-layout"><aside class="side"><a href="#plugin">Plugins</a><a href="#hooks">Hooks</a><a href="#actions">Acciones</a><a href="#webhooks">Webhooks</a><a href="#agents">Agentes</a><a href="#security">Seguridad</a></aside><article class="doc"><section id="plugin"><h2>1. Plugins declarativos</h2><p>Un plugin es una unidad de extensión con identidad, versión, descripción y estado. Su registro declara qué capacidades aporta sin ejecutar código arbitrario dentro del panel.</p><pre class="code">Plugin { name: "crm-sync", version: "1.0.0", enabled: true, hooks: [...], actions: [...] }</pre><p>El ciclo recomendado es: registrar, revisar permisos, activar, probar, observar y desactivar si es necesario. Un plugin desactivado conserva su definición para poder reactivarse sin perder configuración.</p></section><section id="hooks"><h2>2. Hooks: reaccionar a eventos</h2><p>Los hooks conectan un evento del CMS con una extensión. Son adecuados para reaccionar a cambios: crear una entrada, cambiar su estado, asignar un término, actualizar metadatos o modificar una plantilla.</p><pre class="code">Hook { name: "after_entry_publish", plugin: "crm-sync", priority: 20, enabled: true }</pre><h3>Buenas prácticas</h3><ul><li>Usa nombres de evento explícitos y payloads pequeños.</li><li>Haz los handlers idempotentes: el mismo evento no debe duplicar efectos.</li><li>Define una prioridad solo cuando exista una dependencia real.</li><li>Desactiva el hook antes de retirar o cambiar el plugin.</li></ul></section><section id="actions"><h2>3. Acciones: operaciones ejecutables</h2><p>Una acción representa una operación que un humano, un plugin o un agente puede invocar. Debe tener un nombre estable, una descripción clara y parámetros validables.</p><pre class="code">Action { name: "sync_entry_to_crm", plugin: "crm-sync", input: { entryId: "string" } }</pre><p>Las acciones son el punto de control para operaciones con efectos externos. Devuelve siempre un resultado estructurado con estado, identificador de ejecución y mensaje útil para auditoría.</p><div class="notice">Diferencia rápida: un hook escucha un evento; una acción se invoca para ejecutar una intención.</div></section><section id="webhooks"><h2>4. Webhooks e integraciones HTTP</h2><p>Los webhooks conectan Waypoint con servicios externos como CRM, analítica, automatización o colas. El patrón recomendado es que un hook detecte el evento y una acción prepare el payload para el webhook.</p><pre class="code">entry.published → hook → action → POST /webhooks/content-published</pre><h3>Contrato recomendado</h3><pre class="code">{ "event": "entry.published", "id": "evt_...", "occurredAt": "2026-08-30T...Z", "entry": { "id": "...", "type": "case_study" } }</pre><p>Para producción, firma el cuerpo con un secreto compartido, incluye un identificador único de evento y reintenta con backoff. El consumidor debe responder rápido y procesar de forma asíncrona cuando el trabajo sea pesado.</p><p>La interfaz actual documenta y registra hooks y acciones declarativas; la entrega HTTP de webhooks debe implementarse detrás de una acción o Worker de integración con sus propios secretos y límites.</p></section><section id="agents"><h2>5. Uso desde WebMCP</h2><p>Un agente puede descubrir el registro de plugins, hooks y acciones mediante WebMCP, inspeccionar su estado y ejecutar acciones permitidas. La operación pasa por las mismas validaciones que la UI humana.</p><pre class="code">await agent.call("run_extension_action", { name: "sync_entry_to_crm", input: { entryId } });</pre><p>Antes de ejecutar una acción con efectos externos, el agente debe confirmar el alcance, el recurso afectado y si la operación es reversible.</p></section><section id="security"><h2>6. Seguridad y operación</h2><ul><li>No guardes API keys en la definición pública del plugin; usa secretos de Cloudflare.</li><li>Aplica mínimo privilegio y separa acciones de lectura de acciones con efectos.</li><li>Registra actor, plugin, hook, acción, recurso, resultado y timestamp.</li><li>Usa límites, timeouts y deduplicación para evitar tormentas de eventos.</li><li>Prueba primero en un entorno controlado y desactiva extensiones fallidas sin borrar su historial.</li></ul><a class="btn" href="documentation.html">Volver a la documentación</a></section></article></div></main><footer class="wrap footer"><span>Waypoint Content OS · CMS agent-first</span><span>Cloudflare Workers · WebMCP · Open source</span></footer><script src="site.js?v=fad74f1"></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Plugins y Webhooks — Waypoint Content OS</title>
+  <meta name="description" content="Guía práctica para construir plugins, hooks, acciones y webhooks para Waypoint Content OS.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="wrap nav">
+    <a class="brand" href="./"><span class="mark">W</span> Waypoint</a>
+    <nav class="nav-links">
+      <a href="documentation.html">Documentación</a>
+      <a href="https://github.com/MauricioPerera/waypoint-content-os">GitHub</a>
+      <select class="lang" aria-label="Idioma"><option value="es">ES</option><option value="en">EN</option><option value="pt">PT</option></select>
+    </nav>
+  </header>
+  <main>
+    <section class="wrap docs-hero">
+      <div class="eyebrow">WAYPOINT / EXTENSIONS</div>
+      <h1>Plugins, hooks y webhooks</h1>
+      <p class="section-intro">Tutorial práctico: crea una extensión, regístrala en Waypoint, conecta eventos y ejecuta una integración externa de forma segura.</p>
+    </section>
+    <div class="wrap docs-layout">
+      <aside class="side">
+        <a href="#what">Qué vas a construir</a>
+        <a href="#structure">Estructura</a>
+        <a href="#manifest">Manifest</a>
+        <a href="#install">Instalar</a>
+        <a href="#hooks">Hooks</a>
+        <a href="#actions">Acciones</a>
+        <a href="#webhooks">Webhooks</a>
+        <a href="#test">Probar</a>
+        <a href="#security">Seguridad</a>
+      </aside>
+      <article class="doc">
+        <section id="what">
+          <h2>1. Qué vas a construir</h2>
+          <p>Un plugin de Waypoint tiene dos partes. El <strong>manifest</strong> declara la identidad, capacidades y dependencias. El runtime del plugin vive en tu Worker o servicio de integración y reacciona a hooks o acciones.</p>
+          <div class="notice"><strong>Importante:</strong> el CMS registra y persiste el manifest, hooks y acciones; no carga ni ejecuta JavaScript arbitrario subido desde el panel. Esa separación es intencional.</div>
+        </section>
+        <section id="structure">
+          <h2>2. Estructura recomendada</h2>
+          <p>Crea un repositorio independiente para la extensión. Mantén el contrato declarativo separado del código que habla con CRM, analítica o cualquier API externa.</p>
+          <pre class="code">crm-sync/
+├─ waypoint.plugin.json   # contrato que se registra en el CMS
+├─ src/
+│  ├─ handler.ts          # lógica de integración
+│  └─ webhook.ts          # validación de firma y reintentos
+├─ tests/
+│  └─ handler.test.ts
+└─ README.md</pre>
+          <p>Usa un <code>slug</code> estable en minúsculas con letras, números y guiones. El slug identifica la extensión y no debe cambiar entre versiones.</p>
+        </section>
+        <section id="manifest">
+          <h2>3. Escribe el manifest</h2>
+          <p>Este es un ejemplo completo para sincronizar entradas publicadas con un CRM. Los nombres de capacidades son etiquetas explícitas; no conceden por sí solos permisos de servidor.</p>
+          <pre class="code">{
+  "name": "CRM Sync",
+  "slug": "crm-sync",
+  "version": "1.0.0",
+  "author": "Acme Team",
+  "description": "Sincroniza entradas publicadas con el CRM",
+  "capabilities": [
+    "content.read",
+    "webhook.send"
+  ],
+  "dependencies": [],
+  "status": "Inactive"
+}</pre>
+          <p>En el CMS, <code>name</code>, <code>slug</code>, <code>version</code> y <code>author</code> son obligatorios. <code>description</code>, <code>capabilities</code> y <code>dependencies</code> documentan el alcance. Un plugin nuevo comienza inactivo para permitir una revisión.</p>
+        </section>
+        <section id="install">
+          <h2>4. Instálalo desde la UI o WebMCP</h2>
+          <h3>Desde la interfaz humana</h3>
+          <p>Abre <strong>Plugins</strong> en el CMS y completa <strong>Install declarative plugin</strong>: Name, Slug, Version, Author y Capabilities separadas por comas. Pulsa <strong>Install plugin</strong>. El registro queda persistido y aparece en Installed manifests.</p>
+          <h3>Desde un agente</h3>
+          <p>Un agente puede registrar el mismo manifest mediante la herramienta <code>install_plugin</code>:</p>
+          <pre class="code">await agent.call("install_plugin", {
+  name: "CRM Sync",
+  slug: "crm-sync",
+  version: "1.0.0",
+  author: "Acme Team",
+  description: "Sincroniza entradas publicadas con el CRM",
+  capabilities: ["content.read", "webhook.send"],
+  dependencies: [],
+  status: "Inactive"
+});</pre>
+          <p>La respuesta devuelve <code>status: "registered"</code> y el plugin creado. Si el slug ya existe, tiene un formato inválido o falta una dependencia, la operación se rechaza.</p>
+        </section>
+        <section id="hooks">
+          <h2>5. Registra un hook</h2>
+          <p>Un hook escucha un evento del CMS. Asócialo al plugin con <code>pluginSlug</code> y usa una prioridad solo cuando necesites ordenar consumidores.</p>
+          <pre class="code">await agent.call("register_hook", {
+  name: "crm_sync_after_publish",
+  event: "entry.published",
+  priority: 20,
+  enabled: true,
+  pluginSlug: "crm-sync",
+  description: "Envía al CRM cada entrada publicada"
+});</pre>
+          <p>Para consultar el registro: <code>list_hooks({ pluginSlug: "crm-sync" })</code>. Para desactivar temporalmente: <code>toggleHook</code> en la UI o actualiza el registro sin borrar su definición.</p>
+        </section>
+        <section id="actions">
+          <h2>6. Registra una acción</h2>
+          <p>Una acción representa una intención ejecutable. Declara un nombre estable, una etiqueta humana, una descripción y las capacidades que requiere.</p>
+          <pre class="code">await agent.call("register_action", {
+  name: "sync_entry_to_crm",
+  label: "Sincronizar entrada con CRM",
+  description: "Envía una entrada concreta al CRM externo",
+  pluginSlug: "crm-sync",
+  capabilities: ["content.read", "webhook.send"]
+});</pre>
+          <p>Puedes probarla desde <strong>Actions → Run test</strong>. El CMS emite un evento seguro; no evalúa funciones recibidas ni ejecuta código externo dentro del navegador.</p>
+          <pre class="code">await agent.call("dispatch_action", {
+  action: "sync_entry_to_crm",
+  payload: { entryId: "entry_123" }
+});</pre>
+        </section>
+        <section id="webhooks">
+          <h2>7. Conecta el webhook en tu Worker</h2>
+          <p>La entrega HTTP real debe vivir detrás de una acción o Worker de integración. El handler recibe un evento normalizado, valida la firma y delega el trabajo pesado a una cola o proceso asíncrono.</p>
+          <pre class="code">export default {
+  async fetch(request, env) {
+    if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+    const raw = await request.text();
+    const signature = request.headers.get("x-waypoint-signature");
+    await verifyHmac(raw, signature, env.WAYPOINT_WEBHOOK_SECRET);
+    const event = JSON.parse(raw);
+    await env.SYNC_QUEUE.send({ event, receivedAt: new Date().toISOString() });
+    return Response.json({ accepted: true });
+  }
+};</pre>
+          <p>Payload recomendado:</p>
+          <pre class="code">{
+  "event": "entry.published",
+  "id": "evt_01J...",
+  "occurredAt": "2026-08-30T12:00:00Z",
+  "entry": { "id": "entry_123", "type": "case_study" }
+}</pre>
+          <p>Firma el cuerpo sin modificarlo, usa el identificador de evento para deduplicar y responde rápido. Reintenta errores transitorios con backoff; no reintentes respuestas 4xx sin corregir primero el payload.</p>
+        </section>
+        <section id="test">
+          <h2>8. Prueba la extensión</h2>
+          <ol>
+            <li>Registra el manifest con estado <code>Inactive</code>.</li>
+            <li>Comprueba que aparece con <code>list_plugins</code> y lee su contrato con <code>get_plugin</code>.</li>
+            <li>Registra el hook y la acción con el mismo <code>pluginSlug</code>.</li>
+            <li>Usa <strong>Test</strong> en Hooks y <strong>Run test</strong> en Actions.</li>
+            <li>Verifica en tu Worker la firma, la deduplicación y el payload.</li>
+            <li>Activa el plugin solo después de revisar permisos, dependencias y logs.</li>
+          </ol>
+          <pre class="code">npm test
+# La suite del proyecto valida el registro WebMCP,
+# los bindings persistentes y la superficie de extensiones.</pre>
+        </section>
+        <section id="security">
+          <h2>9. Seguridad y límites actuales</h2>
+          <ul>
+            <li>No guardes API keys en el manifest; usa secretos del Worker.</li>
+            <li>El manifest no ejecuta código ni concede permisos de servidor automáticamente.</li>
+            <li>Aplica mínimo privilegio: separa lectura, escritura y envío externo.</li>
+            <li>Registra actor, plugin, hook, acción, recurso, resultado y timestamp.</li>
+            <li>Desactiva antes de retirar una integración y conserva el historial.</li>
+            <li>La plataforma actual ofrece registro declarativo y eventos seguros; la lógica HTTP debe implementarse en tu integración Worker.</li>
+          </ul>
+          <div class="notice">Resumen: manifest → install_plugin → register_hook/register_action → Worker de integración → webhook firmado.</div>
+        </section>
+      </article>
+    </div>
+  </main>
+  <footer class="wrap footer"><span>Waypoint Content OS · CMS agent-first</span><span>Cloudflare Workers · WebMCP · Open source</span></footer>
+  <script src="site.js?v=f4545cd"></script>
+</body>
+</html>
