@@ -716,7 +716,7 @@ export default function Home() {
             />
           )}{" "}
           {view === "users" && <Users roles={roles} create={(user) => { if (users.some((item) => item.email.toLowerCase() === user.email.toLowerCase())) return; setUsers((all) => [user, ...all]); emitRegisteredHooks("user.created", { user }); notify("User created"); }} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); emitRegisteredHooks("user.updated", { user: next }); notify("User updated"); }} remove={(user) => { if (!window.confirm(`Delete user ${user.name}?`)) return; setUsers((all) => all.filter((item) => item.id !== user.id)); setEntries((all) => all.map((entry) => entry.authorUserId === user.id ? { ...entry, authorUserId: undefined } : entry)); emitRegisteredHooks("user.deleted", { userId: user.id }); notify("User deleted"); }} />}{" "}
-          {view === "plugins" && <Plugins plugins={plugins} install={(plugin) => { if (plugins.some((item) => item.slug === plugin.slug)) return; setPlugins((all) => [plugin, ...all]); emitRegisteredHooks("plugin.installed", { plugin }); notify("Plugin installed"); }} toggle={(plugin) => { const updated = { ...plugin, status: plugin.status === "Active" ? "Inactive" as const : "Active" as const }; setPlugins((all) => all.map((item) => item.id === plugin.id ? updated : item)); emitRegisteredHooks("plugin.status_changed", { plugin: updated }); notify(updated.status === "Active" ? "Plugin enabled" : "Plugin disabled"); }} />}{" "}
+          {view === "plugins" && <Plugins plugins={plugins} install={(plugin) => { if (plugins.some((item) => item.slug === plugin.slug)) return; setPlugins((all) => [plugin, ...all]); emitRegisteredHooks("plugin.installed", { plugin }); notify("Plugin installed"); }} remove={(plugin) => { if (!window.confirm(`Uninstall plugin ${plugin.name}?`)) return; setPlugins((all) => all.filter((item) => item.id !== plugin.id)); emitRegisteredHooks("plugin.uninstalled", { plugin }); notify("Plugin uninstalled"); }} toggle={(plugin) => { const updated = { ...plugin, status: plugin.status === "Active" ? "Inactive" as const : "Active" as const }; setPlugins((all) => all.map((item) => item.id === plugin.id ? updated : item)); emitRegisteredHooks("plugin.status_changed", { plugin: updated }); notify(updated.status === "Active" ? "Plugin enabled" : "Plugin disabled"); }} />}{" "}
           {view === "media" && <Media media={media} />}{" "}
           {view === "comments" && (
             <Comments comments={comments} entries={entries} />
@@ -1243,7 +1243,7 @@ function Menus({ menus }: { menus: Menu[] }) {
     </div>
   );
 }
-function Plugins({ plugins, install, toggle }: { plugins: Plugin[]; install: (plugin: Plugin) => void; toggle: (plugin: Plugin) => void }) {
+function Plugins({ plugins, install, remove, toggle }: { plugins: Plugin[]; install: (plugin: Plugin) => void; remove: (plugin: Plugin) => void; toggle: (plugin: Plugin) => void }) {
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
   const [hookName, setHookName] = useState("");
@@ -1296,6 +1296,7 @@ function Plugins({ plugins, install, toggle }: { plugins: Plugin[]; install: (pl
               </span>
               <strong>{plugin.capabilities.length} caps</strong>
               <button className="text-button" onClick={() => toggle(plugin)}>{plugin.status === "Active" ? "Disable" : "Enable"}</button>
+              <button className="text-button" onClick={() => remove(plugin)}>Uninstall</button>
             </div>
           ))}
         </div>
