@@ -499,6 +499,14 @@ export default function Home() {
         }
     };
     syncSettings();
+    fetch("/api/registry/settings")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        const remote = payload as { data?: Partial<SiteSettings> } | null;
+        if (remote?.data)
+          setSettings({ ...defaultSiteSettings, ...remote.data });
+      })
+      .catch(() => undefined);
     window.addEventListener("waypoint-settings-updated", syncSettings);
     return () =>
       window.removeEventListener("waypoint-settings-updated", syncSettings);
@@ -927,6 +935,11 @@ export default function Home() {
                   JSON.stringify(next),
                 );
                 window.dispatchEvent(new Event("waypoint-settings-updated"));
+                fetch("/api/registry/settings", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(next),
+                }).catch(() => undefined);
                 emitRegisteredHooks("settings.updated", { settings: next });
                 notify("Settings saved");
               }}
@@ -1960,6 +1973,15 @@ function Plugins({
     author: "",
     capabilities: "",
   });
+  const persistRegistry = (kind: "hooks" | "actions", value: Hook[] | Action[]) => {
+    window.localStorage.setItem(`waypoint.${kind}`, JSON.stringify(value));
+    fetch(`/api/registry/${kind}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(value),
+    }).catch(() => undefined);
+    window.dispatchEvent(new Event("waypoint-model-updated"));
+  };
   useEffect(() => {
     const sync = () => {
       try {
@@ -1975,6 +1997,20 @@ function Plugins({
       }
     };
     sync();
+    fetch("/api/registry/hooks")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        const remote = payload as { data?: Hook[] } | null;
+        if (Array.isArray(remote?.data)) setHooks(remote.data);
+      })
+      .catch(() => undefined);
+    fetch("/api/registry/actions")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        const remote = payload as { data?: Action[] } | null;
+        if (Array.isArray(remote?.data)) setActions(remote.data);
+      })
+      .catch(() => undefined);
     window.addEventListener("waypoint-model-updated", sync);
     return () => window.removeEventListener("waypoint-model-updated", sync);
   }, []);
@@ -1988,11 +2024,7 @@ function Plugins({
       priority: 10,
       enabled: true,
     };
-    window.localStorage.setItem(
-      "waypoint.hooks",
-      JSON.stringify([...hooks, hook]),
-    );
-    window.dispatchEvent(new Event("waypoint-model-updated"));
+    persistRegistry("hooks", [...hooks, hook]);
     setHookName("");
   };
   const registerAction = () => {
@@ -2009,40 +2041,25 @@ function Plugins({
       description: actionLabel.trim(),
       capabilities: [],
     };
-    window.localStorage.setItem(
-      "waypoint.actions",
-      JSON.stringify([...actions, action]),
-    );
-    window.dispatchEvent(new Event("waypoint-model-updated"));
+    persistRegistry("actions", [...actions, action]);
     setActionName("");
     setActionLabel("");
   };
   const toggleHook = (hook: Hook) => {
-    window.localStorage.setItem(
-      "waypoint.hooks",
-      JSON.stringify(
-        hooks.map((item) =>
-          item.id === hook.id ? { ...item, enabled: !item.enabled } : item,
-        ),
+    persistRegistry(
+      "hooks",
+      hooks.map((item) =>
+        item.id === hook.id ? { ...item, enabled: !item.enabled } : item,
       ),
     );
-    window.dispatchEvent(new Event("waypoint-model-updated"));
   };
   const removeHook = (hook: Hook) => {
     if (!window.confirm(`Remove hook ${hook.name}?`)) return;
-    window.localStorage.setItem(
-      "waypoint.hooks",
-      JSON.stringify(hooks.filter((item) => item.id !== hook.id)),
-    );
-    window.dispatchEvent(new Event("waypoint-model-updated"));
+    persistRegistry("hooks", hooks.filter((item) => item.id !== hook.id));
   };
   const removeAction = (action: Action) => {
     if (!window.confirm(`Remove action ${action.label}?`)) return;
-    window.localStorage.setItem(
-      "waypoint.actions",
-      JSON.stringify(actions.filter((item) => item.id !== action.id)),
-    );
-    window.dispatchEvent(new Event("waypoint-model-updated"));
+    persistRegistry("actions", actions.filter((item) => item.id !== action.id));
   };
   const installPlugin = () => {
     const slug = pluginDraft.slug.trim().toLowerCase();
