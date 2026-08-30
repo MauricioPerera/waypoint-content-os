@@ -849,6 +849,11 @@ export function createTools(s: State) {
           metadata: metadata || {},
         };
         s.setUsers((all) => [user, ...all]);
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "user.created", user },
+          }),
+        );
         return { status: "created", user, ui_effect: "user_created" };
       },
     }),
@@ -923,6 +928,11 @@ export function createTools(s: State) {
         s.setUsers((all) =>
           all.map((item) => (item.id === userId ? user : item)),
         );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "user.updated", user },
+          }),
+        );
         return { status: "updated", user, ui_effect: "user_updated" };
       },
     }),
@@ -968,6 +978,11 @@ export function createTools(s: State) {
               ? { ...entry, authorUserId: undefined }
               : entry,
           ),
+        );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "user.deleted", userId },
+          }),
         );
         return {
           status: "deleted",
@@ -1326,6 +1341,11 @@ export function createTools(s: State) {
           dependencies: normalizedDependencies,
         };
         s.setPlugins((all) => [item, ...all]);
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "plugin.installed", plugin: item },
+          }),
+        );
         return {
           status: "registered",
           plugin: item,
@@ -1364,6 +1384,11 @@ export function createTools(s: State) {
         const updated = { ...current, status };
         s.setPlugins((all) =>
           all.map((item) => (item.id === current.id ? updated : item)),
+        );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "plugin.status_changed", plugin: updated },
+          }),
         );
         return {
           status: "updated",
@@ -6066,6 +6091,11 @@ export function createTools(s: State) {
             note: "Repite con confirm:true para eliminar el manifiesto",
           };
         s.setPlugins((all) => all.filter((item) => item.id !== current.id));
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "plugin.uninstalled", plugin: current },
+          }),
+        );
         return {
           status: "uninstalled",
           plugin: current.slug,
