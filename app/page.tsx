@@ -1045,6 +1045,11 @@ export default function Home() {
                     : "Plugin disabled",
                 );
               }}
+              update={(plugin) => {
+                setPlugins((all) => all.map((item) => item.id === plugin.id ? plugin : item));
+                emitRegisteredHooks("plugin.updated", { plugin });
+                notify("Plugin updated");
+              }}
             />
           )}{" "}
           {view === "media" && <Media media={media} remove={removeMedia} create={createMedia} update={updateMedia} />} {" "}
@@ -2212,14 +2217,19 @@ function Plugins({
   install,
   remove,
   toggle,
+  update,
 }: {
   plugins: Plugin[];
   install: (plugin: Plugin) => void;
   remove: (plugin: Plugin) => void;
   toggle: (plugin: Plugin) => void;
+  update: (plugin: Plugin) => void;
 }) {
   const [hooks, setHooks] = useState<Hook[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
+  const [editingPlugin, setEditingPlugin] = useState<Plugin>();
+  const [editingHook, setEditingHook] = useState<Hook>();
+  const [editingAction, setEditingAction] = useState<Action>();
   const [hookName, setHookName] = useState("");
   const [hookEvent, setHookEvent] = useState("content.changed");
   const [actionName, setActionName] = useState("");
@@ -2391,6 +2401,9 @@ function Plugins({
                 {plugin.status}
               </span>
               <strong>{plugin.capabilities.length} caps</strong>
+              <button className="text-button" onClick={() => setEditingPlugin(plugin)}>
+                Edit
+              </button>
               <button className="text-button" onClick={() => toggle(plugin)}>
                 {plugin.status === "Active" ? "Disable" : "Enable"}
               </button>
@@ -2432,6 +2445,9 @@ function Plugins({
                 >
                   {hook.enabled ? "Disable" : "Enable"}
                 </button>
+                <button className="text-button" onClick={() => setEditingHook(hook)}>
+                  Edit
+                </button>
                 <button
                   className="text-button"
                   onClick={() => removeHook(hook)}
@@ -2468,6 +2484,9 @@ function Plugins({
                     capabilities
                   </small>
                 </div>
+                <button className="text-button" onClick={() => setEditingAction(action)}>
+                  Edit
+                </button>
                 <button
                   className="text-button"
                   onClick={() => removeAction(action)}
@@ -2483,6 +2502,9 @@ function Plugins({
           )}
         </section>
       </div>
+      {editingPlugin && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">PLUGIN MANIFEST</p><h2>Edit {editingPlugin.name}</h2></div><button className="text-button" onClick={() => setEditingPlugin(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editingPlugin.name} onChange={(event) => setEditingPlugin({ ...editingPlugin, name: event.target.value })} /></label><label>Version<input value={editingPlugin.version} onChange={(event) => setEditingPlugin({ ...editingPlugin, version: event.target.value })} /></label><label>Author<input value={editingPlugin.author} onChange={(event) => setEditingPlugin({ ...editingPlugin, author: event.target.value })} /></label><label>Description<textarea rows={3} value={editingPlugin.description} onChange={(event) => setEditingPlugin({ ...editingPlugin, description: event.target.value })} /></label><label>Capabilities<input value={editingPlugin.capabilities.join(", ")} onChange={(event) => setEditingPlugin({ ...editingPlugin, capabilities: [...new Set(event.target.value.split(",").map((value) => value.trim()).filter(Boolean))] })} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { update(editingPlugin); setEditingPlugin(undefined); }}>Save plugin</button></div></div></section>}
+      {editingHook && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><h2>Edit hook</h2><button className="text-button" onClick={() => setEditingHook(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editingHook.name} onChange={(event) => setEditingHook({ ...editingHook, name: event.target.value })} /></label><label>Event<input value={editingHook.event} onChange={(event) => setEditingHook({ ...editingHook, event: event.target.value })} /></label><label>Priority<input type="number" value={editingHook.priority} onChange={(event) => setEditingHook({ ...editingHook, priority: Number(event.target.value) || 0 })} /></label><label>Description<textarea rows={3} value={editingHook.description || ""} onChange={(event) => setEditingHook({ ...editingHook, description: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { persistRegistry("hooks", hooks.map((item) => item.id === editingHook.id ? editingHook : item)); setEditingHook(undefined); }}>Save hook</button></div></div></section>}
+      {editingAction && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><h2>Edit action</h2><button className="text-button" onClick={() => setEditingAction(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Label<input value={editingAction.label} onChange={(event) => setEditingAction({ ...editingAction, label: event.target.value })} /></label><label>Description<textarea rows={3} value={editingAction.description} onChange={(event) => setEditingAction({ ...editingAction, description: event.target.value })} /></label><label>Capabilities<input value={(editingAction.capabilities || []).join(", ")} onChange={(event) => setEditingAction({ ...editingAction, capabilities: [...new Set(event.target.value.split(",").map((value) => value.trim()).filter(Boolean))] })} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { persistRegistry("actions", actions.map((item) => item.id === editingAction.id ? editingAction : item)); setEditingAction(undefined); }}>Save action</button></div></div></section>}
       <section className="card entries-card" style={{ marginTop: 16 }}>
         <div className="card-heading">
           <div>
