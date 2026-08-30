@@ -1,83 +1,2398 @@
-'use client';
+"use client";
 /* The app hydrates persisted local workspace state and synchronizes UI filters through effects. */
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useState } from 'react';
-import { WebmcpRegistrar } from '../src/mcp/register';
+import { useEffect, useState } from "react";
+import { WebmcpRegistrar } from "../src/mcp/register";
 
-type View = 'overview' | 'entries' | 'schema' | 'taxonomies' | 'relations' | 'users' | 'plugins' | 'media' | 'comments' | 'menus';
-type Entry = { id:string; title:string; slug?:string; type:string; status:'Published'|'Draft'; updated:string; updatedAt?:string; relation:string; authorUserId?:string; scheduledAt?:string; deletedAt?:string; metadata?:Record<string,unknown>; data?:Record<string,unknown> };
-type ContentType = { icon:string; name:string; count:number; tone:string; desc:string; slug:string; fields:string[]; fieldTypes?:Record<string,'text'|'number'|'boolean'|'url'|'date'|'json'>; requiredFields?:string[] };
-type Term = { id:string; name:string; slug:string; parent:string|null; description?:string };
-type Taxonomy = { name:string; slug:string; hierarchical:boolean; terms:Term[] };
-type Relation = { id:string; name:string; slug:string; fromType:string; toType:string; cardinality:'one'|'many' };
-type Connection = { id:string; relation:string; fromEntryId:string; toEntryId:string; createdAt:string };
-type TermAssignment = { entryId:string; taxonomy:string; termIds:string[]; updatedAt:string };
-type Revision = { id:string; entryId:string; createdAt:string; action:string; before:Entry; after:Entry };
-type User = { id:string; name:string; email:string; role:string; status:'Active'|'Invited'; metadata?:Record<string,unknown>; capabilities:string[] };
-type Role = { id:string; name:string; slug:string; description:string; capabilities:string[]; system?:boolean };
-type Plugin = { id:string; name:string; slug:string; version:string; author:string; description:string; status:'Active'|'Inactive'; capabilities:string[] };
-type MediaAsset = { id:string; name:string; url:string; mimeType:string; size:number; width?:number; height?:number; alt?:string; metadata?:Record<string,unknown>; attachedEntryIds:string[]; createdAt:string };
-type Comment = { id:string; entryId:string; authorUserId?:string; authorName:string; authorEmail?:string; content:string; status:'Pending'|'Approved'|'Spam'; metadata?:Record<string,unknown>; createdAt:string; updatedAt:string };
-type MenuItem = { id:string; label:string; url?:string; entryId?:string; parentId?:string; order:number; openInNewTab?:boolean };
-type Menu = { id:string; name:string; slug:string; location?:string; items:MenuItem[] };
-type SiteSettings = { siteName:string; description:string; url:string; timezone:string; options?:Record<string,unknown> };
+type View =
+  | "overview"
+  | "entries"
+  | "schema"
+  | "taxonomies"
+  | "relations"
+  | "users"
+  | "plugins"
+  | "media"
+  | "comments"
+  | "menus"
+  | "settings";
+type Entry = {
+  id: string;
+  title: string;
+  slug?: string;
+  type: string;
+  status: "Published" | "Draft";
+  updated: string;
+  updatedAt?: string;
+  relation: string;
+  authorUserId?: string;
+  scheduledAt?: string;
+  deletedAt?: string;
+  metadata?: Record<string, unknown>;
+  data?: Record<string, unknown>;
+};
+type ContentType = {
+  icon: string;
+  name: string;
+  count: number;
+  tone: string;
+  desc: string;
+  slug: string;
+  fields: string[];
+  fieldTypes?: Record<
+    string,
+    "text" | "number" | "boolean" | "url" | "date" | "json"
+  >;
+  requiredFields?: string[];
+};
+type Term = {
+  id: string;
+  name: string;
+  slug: string;
+  parent: string | null;
+  description?: string;
+};
+type Taxonomy = {
+  name: string;
+  slug: string;
+  hierarchical: boolean;
+  terms: Term[];
+};
+type Relation = {
+  id: string;
+  name: string;
+  slug: string;
+  fromType: string;
+  toType: string;
+  cardinality: "one" | "many";
+};
+type Connection = {
+  id: string;
+  relation: string;
+  fromEntryId: string;
+  toEntryId: string;
+  createdAt: string;
+};
+type TermAssignment = {
+  entryId: string;
+  taxonomy: string;
+  termIds: string[];
+  updatedAt: string;
+};
+type Revision = {
+  id: string;
+  entryId: string;
+  createdAt: string;
+  action: string;
+  before: Entry;
+  after: Entry;
+};
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: "Active" | "Invited";
+  metadata?: Record<string, unknown>;
+  capabilities: string[];
+};
+type Role = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  capabilities: string[];
+  system?: boolean;
+};
+type Plugin = {
+  id: string;
+  name: string;
+  slug: string;
+  version: string;
+  author: string;
+  description: string;
+  status: "Active" | "Inactive";
+  capabilities: string[];
+};
+type MediaAsset = {
+  id: string;
+  name: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  width?: number;
+  height?: number;
+  alt?: string;
+  metadata?: Record<string, unknown>;
+  attachedEntryIds: string[];
+  createdAt: string;
+};
+type Comment = {
+  id: string;
+  entryId: string;
+  authorUserId?: string;
+  authorName: string;
+  authorEmail?: string;
+  content: string;
+  status: "Pending" | "Approved" | "Spam";
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+type MenuItem = {
+  id: string;
+  label: string;
+  url?: string;
+  entryId?: string;
+  parentId?: string;
+  order: number;
+  openInNewTab?: boolean;
+};
+type Menu = {
+  id: string;
+  name: string;
+  slug: string;
+  location?: string;
+  items: MenuItem[];
+};
+type SiteSettings = {
+  siteName: string;
+  description: string;
+  url: string;
+  timezone: string;
+  options?: Record<string, unknown>;
+};
 
-const seedEntries:Entry[]=[
- {id:'ent_01H8',title:'The quiet architecture of everyday tools',type:'Article',status:'Published',updated:'',updatedAt:'2026-08-30T08:18:00.000Z',relation:'Design / Essay',authorUserId:'usr_editor'},
- {id:'ent_01G4',title:'Mara Hoffmann',type:'Author',status:'Published',updated:'',updatedAt:'2026-08-30T06:30:00.000Z',relation:'3 articles'},
- {id:'ent_019D',title:'Field Notes — Issue 04',type:'Article',status:'Draft',updated:'',updatedAt:'2026-08-29T10:00:00.000Z',relation:'Culture / Field Notes'},
+const seedEntries: Entry[] = [
+  {
+    id: "ent_01H8",
+    title: "The quiet architecture of everyday tools",
+    type: "Article",
+    status: "Published",
+    updated: "",
+    updatedAt: "2026-08-30T08:18:00.000Z",
+    relation: "Design / Essay",
+    authorUserId: "usr_editor",
+  },
+  {
+    id: "ent_01G4",
+    title: "Mara Hoffmann",
+    type: "Author",
+    status: "Published",
+    updated: "",
+    updatedAt: "2026-08-30T06:30:00.000Z",
+    relation: "3 articles",
+  },
+  {
+    id: "ent_019D",
+    title: "Field Notes — Issue 04",
+    type: "Article",
+    status: "Draft",
+    updated: "",
+    updatedAt: "2026-08-29T10:00:00.000Z",
+    relation: "Culture / Field Notes",
+  },
 ];
-const seedTypes:ContentType[]=[
- {icon:'Aa',name:'Article',count:128,tone:'yellow',desc:'Long-form editorial content',slug:'article',fields:['title','slug','body','reading_time','authors','topics']},
- {icon:'◎',name:'Author',count:24,tone:'green',desc:'People behind the work',slug:'author',fields:['name','bio','avatar']},
- {icon:'▦',name:'Project',count:36,tone:'lavender',desc:'Selected work and case studies',slug:'project',fields:['title','summary','url']},
+const seedTypes: ContentType[] = [
+  {
+    icon: "Aa",
+    name: "Article",
+    count: 128,
+    tone: "yellow",
+    desc: "Long-form editorial content",
+    slug: "article",
+    fields: ["title", "slug", "body", "reading_time", "authors", "topics"],
+  },
+  {
+    icon: "◎",
+    name: "Author",
+    count: 24,
+    tone: "green",
+    desc: "People behind the work",
+    slug: "author",
+    fields: ["name", "bio", "avatar"],
+  },
+  {
+    icon: "▦",
+    name: "Project",
+    count: 36,
+    tone: "lavender",
+    desc: "Selected work and case studies",
+    slug: "project",
+    fields: ["title", "summary", "url"],
+  },
 ];
-const seedTaxonomies:Taxonomy[]=[{name:'Topics',slug:'topics',hierarchical:true,terms:[{id:'term_design',name:'Design',slug:'design',parent:null},{id:'term_architecture',name:'Architecture',slug:'architecture',parent:'term_design'}]}];
-const seedRelations:Relation[]=[{id:'rel_authored',name:'Authored by',slug:'authored-by',fromType:'Article',toType:'Author',cardinality:'one'},{id:'rel_featured',name:'Featured in',slug:'featured-in',fromType:'Article',toType:'Project',cardinality:'many'}];
-const seedUsers:User[]=[{id:'usr_owner',name:'Ana García',email:'ana@northstar.example',role:'Owner',status:'Active',capabilities:['content.manage','schema.manage','users.manage'],metadata:{timezone:'America/Mexico_City'}},{id:'usr_editor',name:'Luis Ortega',email:'luis@northstar.example',role:'Editor',status:'Active',capabilities:['content.manage'],metadata:{specialty:'Culture'}}];
-const seedPlugins:Plugin[]=[{id:'plg_webmcp',name:'WebMCP Core',slug:'webmcp-core',version:'0.5.0',author:'Waypoint',description:'Agent tool registration and content operations.',status:'Active',capabilities:['tools.register','content.extend']}];
-const seedRoles:Role[]=[{id:'role_owner',name:'Owner',slug:'owner',description:'Full workspace control.',capabilities:['content.manage','schema.manage','users.manage','plugins.manage'],system:true},{id:'role_editor',name:'Editor',slug:'editor',description:'Manage editorial content.',capabilities:['content.manage'],system:true},{id:'role_author',name:'Author',slug:'author',description:'Create and edit own content.',capabilities:['content.create','content.edit_own'],system:true}];
-const seedMedia:MediaAsset[]=[{id:'med_cover',name:'quiet-tools-cover.jpg',url:'https://images.example/quiet-tools-cover.jpg',mimeType:'image/jpeg',size:248000,width:1600,height:900,alt:'Abstract architecture detail',metadata:{credit:'Northstar Studio'},attachedEntryIds:['ent_01H8'],createdAt:'2026-08-29T10:00:00.000Z'}];
-const seedComments:Comment[]=[{id:'cmt_01',entryId:'ent_01H8',authorUserId:'usr_editor',authorName:'Luis Ortega',authorEmail:'luis@northstar.example',content:'Una lectura muy sugerente sobre diseño cotidiano.',status:'Approved',createdAt:'2026-08-29T11:00:00.000Z',updatedAt:'2026-08-29T11:00:00.000Z'}];
-const seedMenus:Menu[]=[{id:'menu_main',name:'Main navigation',slug:'main-navigation',location:'header',items:[{id:'mi_home',label:'Home',url:'/',order:0},{id:'mi_journal',label:'Journal',url:'/journal',order:1}]}];
-const defaultSiteSettings:SiteSettings={siteName:'Northstar Journal',description:'A publication about design and culture.',url:'http://localhost:3001',timezone:'America/Mexico_City',options:{}};
+const seedTaxonomies: Taxonomy[] = [
+  {
+    name: "Topics",
+    slug: "topics",
+    hierarchical: true,
+    terms: [
+      { id: "term_design", name: "Design", slug: "design", parent: null },
+      {
+        id: "term_architecture",
+        name: "Architecture",
+        slug: "architecture",
+        parent: "term_design",
+      },
+    ],
+  },
+];
+const seedRelations: Relation[] = [
+  {
+    id: "rel_authored",
+    name: "Authored by",
+    slug: "authored-by",
+    fromType: "Article",
+    toType: "Author",
+    cardinality: "one",
+  },
+  {
+    id: "rel_featured",
+    name: "Featured in",
+    slug: "featured-in",
+    fromType: "Article",
+    toType: "Project",
+    cardinality: "many",
+  },
+];
+const seedUsers: User[] = [
+  {
+    id: "usr_owner",
+    name: "Ana García",
+    email: "ana@northstar.example",
+    role: "Owner",
+    status: "Active",
+    capabilities: ["content.manage", "schema.manage", "users.manage"],
+    metadata: { timezone: "America/Mexico_City" },
+  },
+  {
+    id: "usr_editor",
+    name: "Luis Ortega",
+    email: "luis@northstar.example",
+    role: "Editor",
+    status: "Active",
+    capabilities: ["content.manage"],
+    metadata: { specialty: "Culture" },
+  },
+];
+const seedPlugins: Plugin[] = [
+  {
+    id: "plg_webmcp",
+    name: "WebMCP Core",
+    slug: "webmcp-core",
+    version: "0.5.0",
+    author: "Waypoint",
+    description: "Agent tool registration and content operations.",
+    status: "Active",
+    capabilities: ["tools.register", "content.extend"],
+  },
+];
+const seedRoles: Role[] = [
+  {
+    id: "role_owner",
+    name: "Owner",
+    slug: "owner",
+    description: "Full workspace control.",
+    capabilities: [
+      "content.manage",
+      "schema.manage",
+      "users.manage",
+      "plugins.manage",
+    ],
+    system: true,
+  },
+  {
+    id: "role_editor",
+    name: "Editor",
+    slug: "editor",
+    description: "Manage editorial content.",
+    capabilities: ["content.manage"],
+    system: true,
+  },
+  {
+    id: "role_author",
+    name: "Author",
+    slug: "author",
+    description: "Create and edit own content.",
+    capabilities: ["content.create", "content.edit_own"],
+    system: true,
+  },
+];
+const seedMedia: MediaAsset[] = [
+  {
+    id: "med_cover",
+    name: "quiet-tools-cover.jpg",
+    url: "https://images.example/quiet-tools-cover.jpg",
+    mimeType: "image/jpeg",
+    size: 248000,
+    width: 1600,
+    height: 900,
+    alt: "Abstract architecture detail",
+    metadata: { credit: "Northstar Studio" },
+    attachedEntryIds: ["ent_01H8"],
+    createdAt: "2026-08-29T10:00:00.000Z",
+  },
+];
+const seedComments: Comment[] = [
+  {
+    id: "cmt_01",
+    entryId: "ent_01H8",
+    authorUserId: "usr_editor",
+    authorName: "Luis Ortega",
+    authorEmail: "luis@northstar.example",
+    content: "Una lectura muy sugerente sobre diseño cotidiano.",
+    status: "Approved",
+    createdAt: "2026-08-29T11:00:00.000Z",
+    updatedAt: "2026-08-29T11:00:00.000Z",
+  },
+];
+const seedMenus: Menu[] = [
+  {
+    id: "menu_main",
+    name: "Main navigation",
+    slug: "main-navigation",
+    location: "header",
+    items: [
+      { id: "mi_home", label: "Home", url: "/", order: 0 },
+      { id: "mi_journal", label: "Journal", url: "/journal", order: 1 },
+    ],
+  },
+];
+const defaultSiteSettings: SiteSettings = {
+  siteName: "Northstar Journal",
+  description: "A publication about design and culture.",
+  url: "http://localhost:3001",
+  timezone: "America/Mexico_City",
+  options: {},
+};
 
-export default function Home(){
- const [view,setView]=useState<View>('overview'),[entries,setEntries]=useState(seedEntries),[types,setTypes]=useState(seedTypes),[taxonomies,setTaxonomies]=useState(seedTaxonomies),[relations,setRelations]=useState(seedRelations),[connections,setConnections]=useState<Connection[]>([]),[termAssignments,setTermAssignments]=useState<TermAssignment[]>([]),[revisions,setRevisions]=useState<Revision[]>([]),[users,setUsers]=useState(seedUsers),[roles,setRoles]=useState(seedRoles),[plugins,setPlugins]=useState(seedPlugins),[media,setMedia]=useState(seedMedia),[comments,setComments]=useState(seedComments),[menus,setMenus]=useState(seedMenus),[settings,setSettings]=useState(defaultSiteSettings),[activeType,setActiveType]=useState('All content'),[activeStatus,setActiveStatus]=useState('All statuses'),[toast,setToast]=useState('');
- const [showEntry,setShowEntry]=useState(false),[showTaxonomy,setShowTaxonomy]=useState(false),[showTerm,setShowTerm]=useState(false),[showType,setShowType]=useState(false),[showRelation,setShowRelation]=useState(false),[termTaxonomy,setTermTaxonomy]=useState('');
- useEffect(()=>{const raw=window.localStorage.getItem('waypoint.model');if(raw)try{const data=JSON.parse(raw);if(data.entries)setEntries(data.entries.map((entry:Entry)=>entry.updatedAt?entry:{...entry,updated:'',updatedAt:new Date().toISOString()}));if(data.types)setTypes(data.types);if(data.taxonomies)setTaxonomies(data.taxonomies);if(data.relations)setRelations(data.relations);if(data.connections)setConnections(data.connections);if(data.termAssignments)setTermAssignments(data.termAssignments);if(data.revisions)setRevisions(data.revisions);if(data.users)setUsers(data.users);if(data.roles)setRoles(data.roles);if(data.plugins)setPlugins(data.plugins);if(data.media)setMedia(data.media);if(data.comments)setComments(data.comments);if(data.menus)setMenus(data.menus);if(data.activeType)setActiveType(data.activeType);if(data.activeStatus)setActiveStatus(data.activeStatus)}catch{/* keep seed */}},[]);
- useEffect(()=>{const syncSettings=()=>{const raw=window.localStorage.getItem('waypoint.settings');if(raw)try{setSettings({...defaultSiteSettings,...JSON.parse(raw)})}catch{/* keep defaults */}};syncSettings();window.addEventListener('waypoint-settings-updated',syncSettings);return()=>window.removeEventListener('waypoint-settings-updated',syncSettings)},[]);
- useEffect(()=>{window.localStorage.setItem('waypoint.model',JSON.stringify({entries,types,taxonomies,relations,connections,termAssignments,revisions,users,roles,plugins,media,comments,menus,activeType,activeStatus}));window.dispatchEvent(new Event('waypoint-model-updated'))},[entries,types,taxonomies,relations,connections,termAssignments,revisions,users,roles,plugins,media,comments,menus,activeType,activeStatus]);
- const notify=(message:string)=>{setToast(message);window.setTimeout(()=>setToast(''),2600)};
- const createEntry=(title:string,type:string,data:Record<string,unknown>={}):Entry=>{const entry:Entry={id:'ent_'+Math.random().toString(16).slice(2,8).toUpperCase(),title,type,status:'Draft',updated:'',updatedAt:new Date().toISOString(),relation:'No relations yet',data};setEntries(x=>[entry,...x]);setShowEntry(false);notify('Draft created');return entry};
- const createContentType=(name:string,slug:string,fields:string[],fieldTypes:Record<string,'text'|'number'|'boolean'|'url'|'date'|'json'>={},requiredFields:string[]=[] ):ContentType=>{const s=slug.trim().toLowerCase();if(!/^[a-z0-9-]+$/.test(s)||types.some(t=>t.slug===s))throw Error('Slug inválido o duplicado');const created:ContentType={icon:'◇',name:name.trim(),count:0,tone:'lavender',desc:'Agent-created content type',slug:s,fields,fieldTypes,requiredFields};setTypes(x=>[...x,created]);notify('Content type created');return created};
- const createTerm=(taxonomy:string,name:string,slug:string,parent:string|null,description:string)=>{const s=slug.trim().toLowerCase();if(!/^[a-z0-9-]+$/.test(s))throw Error('Slug inválido');if(taxonomies.find(t=>t.slug===taxonomy)?.terms.some(term=>term.slug===s))throw Error('El término ya existe');setTaxonomies(x=>x.map(t=>t.slug===taxonomy?{...t,terms:[...t.terms,{id:'term_'+Math.random().toString(16).slice(2,8).toUpperCase(),name:name.trim(),slug:s,parent,description}]}:t));setShowTerm(false);notify('Term created')};
- const state={entries,setEntries,contentTypes:types,setContentTypes:setTypes,taxonomies,setTaxonomies,relations,setRelations,connections,setConnections,termAssignments,setTermAssignments,revisions,setRevisions,users,setUsers,roles,setRoles,plugins,setPlugins,media,setMedia,comments,setComments,menus,setMenus,activeType,setActiveType:(value:string)=>{setActiveType(value);window.dispatchEvent(new CustomEvent('waypoint-type-filter',{detail:value}))},activeStatus,setActiveStatus:(value:string)=>{setActiveStatus(value);window.dispatchEvent(new CustomEvent('waypoint-status-filter',{detail:value}))},createEntry,createContentType,notify};
- return <><WebmcpRegistrar state={state}/><div className="app-shell"><Sidebar view={view} setView={setView} siteName={settings.siteName} entryCount={entries.length} currentUser={users[0]}/><main className="main-content"><header className="topbar"><div className="breadcrumbs"><span>{settings.siteName}</span><b>/</b><strong>{label(view)}</strong></div><div className="topbar-actions"><button className="icon-button">⌕</button><button className="icon-button">♧<i/></button><button className="help-button">? <span>Help</span></button><button className="primary-button" onClick={()=>setShowEntry(true)}>＋ New entry</button></div></header>{view==='overview'&&<Overview types={types} entries={entries} relations={relations} taxonomies={taxonomies} revisions={revisions} currentUser={users[0]} go={setView} create={()=>setShowEntry(true)}/>} {view==='entries'&&<Entries entries={entries} types={types} create={()=>setShowEntry(true)}/>} {view==='schema'&&<Schema types={types} entries={entries} create={()=>setShowType(true)}/>} {view==='taxonomies'&&<Taxonomies taxonomies={taxonomies} create={()=>setShowTaxonomy(true)} addTerm={(taxonomy)=>{setTermTaxonomy(taxonomy);setShowTerm(true)}}/>} {view==='relations'&&<Relations siteName={settings.siteName} types={types} entries={entries} relations={relations} create={()=>setShowRelation(true)}/>} {view==='users'&&<Users users={users}/>} {view==='plugins'&&<Plugins plugins={plugins}/>} {view==='media'&&<Media media={media}/>} {view==='comments'&&<Comments comments={comments} entries={entries}/>} {view==='menus'&&<Menus menus={menus}/>}</main>{showEntry&&<EntryModal types={types} close={()=>setShowEntry(false)} create={createEntry}/>} {showTaxonomy&&<TaxonomyModal close={()=>setShowTaxonomy(false)} create={(name,slug,hierarchical)=>{const s=slug.trim().toLowerCase();if(!/^[a-z0-9-]+$/.test(s)||taxonomies.some(t=>t.slug===s))throw Error('Slug inválido o duplicado');setTaxonomies(x=>[...x,{name,slug:s,hierarchical,terms:[]}]);setShowTaxonomy(false);notify('Taxonomy created')}}/>} {showTerm&&<TermModal taxonomy={taxonomies.find(t=>t.slug===termTaxonomy)} close={()=>setShowTerm(false)} create={(name,slug,parent,description)=>createTerm(termTaxonomy,name,slug,parent,description)}/>} {showType&&<TypeModal close={()=>setShowType(false)} create={(name,slug,fields)=>{createContentType(name,slug,fields);setShowType(false)}}/>} {showRelation&&<RelationModal types={types} close={()=>setShowRelation(false)} create={(name,slug,fromType,toType,cardinality)=>{setRelations(x=>[...x,{id:'rel_'+Math.random().toString(16).slice(2,8).toUpperCase(),name,slug,fromType,toType,cardinality}]);setShowRelation(false);notify('Relation created')}}/>} {toast&&<div className="toast"><span>✓</span>{toast}</div>}</div></>;
+export default function Home() {
+  const [view, setView] = useState<View>("overview"),
+    [entries, setEntries] = useState(seedEntries),
+    [types, setTypes] = useState(seedTypes),
+    [taxonomies, setTaxonomies] = useState(seedTaxonomies),
+    [relations, setRelations] = useState(seedRelations),
+    [connections, setConnections] = useState<Connection[]>([]),
+    [termAssignments, setTermAssignments] = useState<TermAssignment[]>([]),
+    [revisions, setRevisions] = useState<Revision[]>([]),
+    [users, setUsers] = useState(seedUsers),
+    [roles, setRoles] = useState(seedRoles),
+    [plugins, setPlugins] = useState(seedPlugins),
+    [media, setMedia] = useState(seedMedia),
+    [comments, setComments] = useState(seedComments),
+    [menus, setMenus] = useState(seedMenus),
+    [settings, setSettings] = useState(defaultSiteSettings),
+    [activeType, setActiveType] = useState("All content"),
+    [activeStatus, setActiveStatus] = useState("All statuses"),
+    [toast, setToast] = useState("");
+  const [showEntry, setShowEntry] = useState(false),
+    [showTaxonomy, setShowTaxonomy] = useState(false),
+    [showTerm, setShowTerm] = useState(false),
+    [showType, setShowType] = useState(false),
+    [showRelation, setShowRelation] = useState(false),
+    [termTaxonomy, setTermTaxonomy] = useState("");
+  useEffect(() => {
+    const raw = window.localStorage.getItem("waypoint.model");
+    if (raw)
+      try {
+        const data = JSON.parse(raw);
+        if (data.entries)
+          setEntries(
+            data.entries.map((entry: Entry) =>
+              entry.updatedAt
+                ? entry
+                : {
+                    ...entry,
+                    updated: "",
+                    updatedAt: new Date().toISOString(),
+                  },
+            ),
+          );
+        if (data.types) setTypes(data.types);
+        if (data.taxonomies) setTaxonomies(data.taxonomies);
+        if (data.relations) setRelations(data.relations);
+        if (data.connections) setConnections(data.connections);
+        if (data.termAssignments) setTermAssignments(data.termAssignments);
+        if (data.revisions) setRevisions(data.revisions);
+        if (data.users) setUsers(data.users);
+        if (data.roles) setRoles(data.roles);
+        if (data.plugins) setPlugins(data.plugins);
+        if (data.media) setMedia(data.media);
+        if (data.comments) setComments(data.comments);
+        if (data.menus) setMenus(data.menus);
+        if (data.activeType) setActiveType(data.activeType);
+        if (data.activeStatus) setActiveStatus(data.activeStatus);
+      } catch {
+        /* keep seed */
+      }
+  }, []);
+  useEffect(() => {
+    const syncSettings = () => {
+      const raw = window.localStorage.getItem("waypoint.settings");
+      if (raw)
+        try {
+          setSettings({ ...defaultSiteSettings, ...JSON.parse(raw) });
+        } catch {
+          /* keep defaults */
+        }
+    };
+    syncSettings();
+    window.addEventListener("waypoint-settings-updated", syncSettings);
+    return () =>
+      window.removeEventListener("waypoint-settings-updated", syncSettings);
+  }, []);
+  useEffect(() => {
+    window.localStorage.setItem(
+      "waypoint.model",
+      JSON.stringify({
+        entries,
+        types,
+        taxonomies,
+        relations,
+        connections,
+        termAssignments,
+        revisions,
+        users,
+        roles,
+        plugins,
+        media,
+        comments,
+        menus,
+        activeType,
+        activeStatus,
+      }),
+    );
+    window.dispatchEvent(new Event("waypoint-model-updated"));
+  }, [
+    entries,
+    types,
+    taxonomies,
+    relations,
+    connections,
+    termAssignments,
+    revisions,
+    users,
+    roles,
+    plugins,
+    media,
+    comments,
+    menus,
+    activeType,
+    activeStatus,
+  ]);
+  const notify = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 2600);
+  };
+  const createEntry = (
+    title: string,
+    type: string,
+    data: Record<string, unknown> = {},
+  ): Entry => {
+    const entry: Entry = {
+      id: "ent_" + Math.random().toString(16).slice(2, 8).toUpperCase(),
+      title,
+      type,
+      status: "Draft",
+      updated: "",
+      updatedAt: new Date().toISOString(),
+      relation: "No relations yet",
+      data,
+    };
+    setEntries((x) => [entry, ...x]);
+    setShowEntry(false);
+    notify("Draft created");
+    return entry;
+  };
+  const createContentType = (
+    name: string,
+    slug: string,
+    fields: string[],
+    fieldTypes: Record<
+      string,
+      "text" | "number" | "boolean" | "url" | "date" | "json"
+    > = {},
+    requiredFields: string[] = [],
+  ): ContentType => {
+    const s = slug.trim().toLowerCase();
+    if (!/^[a-z0-9-]+$/.test(s) || types.some((t) => t.slug === s))
+      throw Error("Slug inválido o duplicado");
+    const created: ContentType = {
+      icon: "◇",
+      name: name.trim(),
+      count: 0,
+      tone: "lavender",
+      desc: "Agent-created content type",
+      slug: s,
+      fields,
+      fieldTypes,
+      requiredFields,
+    };
+    setTypes((x) => [...x, created]);
+    notify("Content type created");
+    return created;
+  };
+  const createTerm = (
+    taxonomy: string,
+    name: string,
+    slug: string,
+    parent: string | null,
+    description: string,
+  ) => {
+    const s = slug.trim().toLowerCase();
+    if (!/^[a-z0-9-]+$/.test(s)) throw Error("Slug inválido");
+    if (
+      taxonomies
+        .find((t) => t.slug === taxonomy)
+        ?.terms.some((term) => term.slug === s)
+    )
+      throw Error("El término ya existe");
+    setTaxonomies((x) =>
+      x.map((t) =>
+        t.slug === taxonomy
+          ? {
+              ...t,
+              terms: [
+                ...t.terms,
+                {
+                  id:
+                    "term_" +
+                    Math.random().toString(16).slice(2, 8).toUpperCase(),
+                  name: name.trim(),
+                  slug: s,
+                  parent,
+                  description,
+                },
+              ],
+            }
+          : t,
+      ),
+    );
+    setShowTerm(false);
+    notify("Term created");
+  };
+  const state = {
+    entries,
+    setEntries,
+    contentTypes: types,
+    setContentTypes: setTypes,
+    taxonomies,
+    setTaxonomies,
+    relations,
+    setRelations,
+    connections,
+    setConnections,
+    termAssignments,
+    setTermAssignments,
+    revisions,
+    setRevisions,
+    users,
+    setUsers,
+    roles,
+    setRoles,
+    plugins,
+    setPlugins,
+    media,
+    setMedia,
+    comments,
+    setComments,
+    menus,
+    setMenus,
+    activeType,
+    setActiveType: (value: string) => {
+      setActiveType(value);
+      window.dispatchEvent(
+        new CustomEvent("waypoint-type-filter", { detail: value }),
+      );
+    },
+    activeStatus,
+    setActiveStatus: (value: string) => {
+      setActiveStatus(value);
+      window.dispatchEvent(
+        new CustomEvent("waypoint-status-filter", { detail: value }),
+      );
+    },
+    createEntry,
+    createContentType,
+    notify,
+  };
+  return (
+    <>
+      <WebmcpRegistrar state={state} />
+      <div className="app-shell">
+        <Sidebar
+          view={view}
+          setView={setView}
+          siteName={settings.siteName}
+          entryCount={entries.length}
+          currentUser={users[0]}
+        />
+        <main className="main-content">
+          <header className="topbar">
+            <div className="breadcrumbs">
+              <span>{settings.siteName}</span>
+              <b>/</b>
+              <strong>{label(view)}</strong>
+            </div>
+            <div className="topbar-actions">
+              <button className="icon-button">⌕</button>
+              <button className="icon-button">
+                ♧<i />
+              </button>
+              <button className="help-button">
+                ? <span>Help</span>
+              </button>
+              <button
+                className="primary-button"
+                onClick={() => setShowEntry(true)}
+              >
+                ＋ New entry
+              </button>
+            </div>
+          </header>
+          {view === "overview" && (
+            <Overview
+              types={types}
+              entries={entries}
+              relations={relations}
+              taxonomies={taxonomies}
+              revisions={revisions}
+              currentUser={users[0]}
+              go={setView}
+              create={() => setShowEntry(true)}
+            />
+          )}{" "}
+          {view === "entries" && (
+            <Entries
+              entries={entries}
+              types={types}
+              create={() => setShowEntry(true)}
+            />
+          )}{" "}
+          {view === "schema" && (
+            <Schema
+              types={types}
+              entries={entries}
+              create={() => setShowType(true)}
+            />
+          )}{" "}
+          {view === "taxonomies" && (
+            <Taxonomies
+              taxonomies={taxonomies}
+              create={() => setShowTaxonomy(true)}
+              addTerm={(taxonomy) => {
+                setTermTaxonomy(taxonomy);
+                setShowTerm(true);
+              }}
+            />
+          )}{" "}
+          {view === "relations" && (
+            <Relations
+              siteName={settings.siteName}
+              types={types}
+              entries={entries}
+              relations={relations}
+              create={() => setShowRelation(true)}
+            />
+          )}{" "}
+          {view === "users" && <Users users={users} />}{" "}
+          {view === "plugins" && <Plugins plugins={plugins} />}{" "}
+          {view === "media" && <Media media={media} />}{" "}
+          {view === "comments" && (
+            <Comments comments={comments} entries={entries} />
+          )}{" "}
+          {view === "menus" && <Menus menus={menus} />}
+          {view === "settings" && (
+            <Settings
+              settings={settings}
+              save={(next) => {
+                setSettings(next);
+                window.localStorage.setItem("waypoint.settings", JSON.stringify(next));
+                window.dispatchEvent(new Event("waypoint-settings-updated"));
+                notify("Settings saved");
+              }}
+            />
+          )}
+        </main>
+        {showEntry && (
+          <EntryModal
+            types={types}
+            close={() => setShowEntry(false)}
+            create={createEntry}
+          />
+        )}{" "}
+        {showTaxonomy && (
+          <TaxonomyModal
+            close={() => setShowTaxonomy(false)}
+            create={(name, slug, hierarchical) => {
+              const s = slug.trim().toLowerCase();
+              if (
+                !/^[a-z0-9-]+$/.test(s) ||
+                taxonomies.some((t) => t.slug === s)
+              )
+                throw Error("Slug inválido o duplicado");
+              setTaxonomies((x) => [
+                ...x,
+                { name, slug: s, hierarchical, terms: [] },
+              ]);
+              setShowTaxonomy(false);
+              notify("Taxonomy created");
+            }}
+          />
+        )}{" "}
+        {showTerm && (
+          <TermModal
+            taxonomy={taxonomies.find((t) => t.slug === termTaxonomy)}
+            close={() => setShowTerm(false)}
+            create={(name, slug, parent, description) =>
+              createTerm(termTaxonomy, name, slug, parent, description)
+            }
+          />
+        )}{" "}
+        {showType && (
+          <TypeModal
+            close={() => setShowType(false)}
+            create={(name, slug, fields) => {
+              createContentType(name, slug, fields);
+              setShowType(false);
+            }}
+          />
+        )}{" "}
+        {showRelation && (
+          <RelationModal
+            types={types}
+            close={() => setShowRelation(false)}
+            create={(name, slug, fromType, toType, cardinality) => {
+              setRelations((x) => [
+                ...x,
+                {
+                  id:
+                    "rel_" +
+                    Math.random().toString(16).slice(2, 8).toUpperCase(),
+                  name,
+                  slug,
+                  fromType,
+                  toType,
+                  cardinality,
+                },
+              ]);
+              setShowRelation(false);
+              notify("Relation created");
+            }}
+          />
+        )}{" "}
+        {toast && (
+          <div className="toast">
+            <span>✓</span>
+            {toast}
+          </div>
+        )}
+      </div>
+    </>
+  );
 }
-const label=(v:View)=>v==='overview'?'Overview':v[0].toUpperCase()+v.slice(1);
-function Sidebar({view,setView,siteName,entryCount,currentUser}:{view:View;setView:(v:View)=>void;siteName:string;entryCount:number;currentUser?:User}){const initials=(currentUser?.name||'WS').split(' ').map(part=>part[0]).join('').slice(0,2).toUpperCase();return <aside className="sidebar"><div className="brand"><span className="brand-mark">W</span><span>waypoint<small>content OS</small></span></div><div className="workspace-switch"><span className="workspace-avatar">{siteName.slice(0,1).toUpperCase()}</span><span><b>{siteName}</b><small>Personal workspace</small></span><span className="chevron">⌄</span></div><nav><p className="nav-label">Workspace</p><Nav icon="⌂" text="Overview" active={view==='overview'} on={()=>setView('overview')}/><Nav icon="▤" text="Entries" badge={String(entryCount)} active={view==='entries'} on={()=>setView('entries')}/><Nav icon="⌘" text="Schema" active={view==='schema'} on={()=>setView('schema')}/><Nav icon="⊞" text="Taxonomies" active={view==='taxonomies'} on={()=>setView('taxonomies')}/><Nav icon="↗" text="Relations" active={view==='relations'} on={()=>setView('relations')}/><Nav icon="▧" text="Media" active={view==='media'} on={()=>setView('media')}/><Nav icon="♧" text="Comments" active={view==='comments'} on={()=>setView('comments')}/><Nav icon="☰" text="Menus" active={view==='menus'} on={()=>setView('menus')}/><p className="nav-label nav-label-spaced">System</p><Nav icon="♙" text="Users" active={view==='users'} on={()=>setView('users')}/><Nav icon="▣" text="Plugins" active={view==='plugins'} on={()=>setView('plugins')}/><Nav icon="✦" text="Agent activity"/><Nav icon="⚙" text="Settings"/></nav><div className="sidebar-bottom"><div className="agent-status"><span className="pulse"/><span><b>Agent-ready</b><small>WebMCP connected</small></span></div><div className="user-row"><span className="user-avatar">{initials}</span><span><b>{currentUser?.name||"Workspace owner"}</b><small>{currentUser?.role||"Owner"}</small></span></div></div></aside>}
-function Nav({icon,text,badge,active,on}:{icon:string;text:string;badge?:string;active?:boolean;on?:()=>void}){return <button className={'nav-item '+(active?'active':'')} onClick={on}><span>{icon}</span>{text}{badge&&<em>{badge}</em>}</button>}
-function Users({users}:{users:User[]}){return <div className="page"><div className="page-heading compact"><div><p className="kicker">WORKSPACE ACCESS</p><h1>Users</h1><p className="subhead">People, roles and capabilities available to your content agent.</p></div><span className="live-chip"><i/>{users.length} members</span></div><section className="card entries-card"><div className="card-heading"><div><p className="eyebrow">DIRECTORY</p><h2>Workspace members</h2></div></div><div className="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Capabilities</th><th>Metadata</th></tr></thead><tbody>{users.map(user=><tr key={user.id}><td><span className="user-avatar">{user.name.split(' ').map(part=>part[0]).join('').slice(0,2)}</span><span className="entry-name"><b>{user.name}</b><small>{user.email}</small></span></td><td>{user.role}</td><td><Status label={user.status}/></td><td>{user.capabilities.length} granted</td><td>{Object.keys(user.metadata||{}).length} keys</td></tr>)}</tbody></table></div></section></div>}
-function Media({media}:{media:MediaAsset[]}){return <div className="page"><div className="page-heading compact"><div><p className="kicker">CONTENT ASSETS</p><h1>Media library</h1><p className="subhead">Reusable files and media metadata available to your agent.</p></div><span className="live-chip"><i/>{media.length} assets</span></div><section className="card entries-card"><div className="card-heading"><div><p className="eyebrow">LIBRARY</p><h2>Registered assets</h2></div></div><div className="type-list">{media.map(asset=><div className="type-row" key={asset.id}><span className="entry-icon green">{asset.mimeType.startsWith('image/')?'▧':'◫'}</span><span><b>{asset.name}</b><small>{asset.mimeType} · {asset.width&&asset.height?`${asset.width} × ${asset.height} · `:''}{asset.attachedEntryIds.length} linked entries</small></span><strong>{asset.alt||'No alt text'}</strong></div>)}</div></section></div>}
-function Comments({comments,entries}:{comments:Comment[];entries:Entry[]}){return <div className="page"><div className="page-heading compact"><div><p className="kicker">COMMUNITY</p><h1>Comments</h1><p className="subhead">Review and moderate feedback before it reaches your content.</p></div><span className="live-chip"><i/>{comments.filter(comment=>comment.status==='Pending').length} pending</span></div><section className="card entries-card"><div className="card-heading"><div><p className="eyebrow">MODERATION QUEUE</p><h2>Recent comments</h2></div></div><div className="table-wrap"><table><thead><tr><th>Comment</th><th>Entry</th><th>Author</th><th>Status</th></tr></thead><tbody>{comments.map(comment=><tr key={comment.id}><td><span className="entry-name"><b>{comment.content}</b><small>{comment.id}</small></span></td><td>{entries.find(entry=>entry.id===comment.entryId)?.title||comment.entryId}</td><td>{comment.authorName}</td><td><Status label={comment.status}/></td></tr>)}</tbody></table></div></section></div>}
-function Menus({menus}:{menus:Menu[]}){return <div className="page"><div className="page-heading compact"><div><p className="kicker">SITE NAVIGATION</p><h1>Menus</h1><p className="subhead">Build ordered navigation structures your agent can maintain.</p></div><span className="live-chip"><i/>{menus.length} menus</span></div><div className="taxonomy-grid">{menus.map(menu=><section className="card taxonomy-card" key={menu.id}><div className="taxonomy-card-head"><span className="taxonomy-symbol">☰</span><div><h2>{menu.name}</h2><small>menu.{menu.slug} · {menu.location||'unassigned'}</small></div></div><div className="terms-list">{menu.items.sort((a,b)=>a.order-b.order).map(item=><div className={'term-row '+(item.parentId?'child':'')} key={item.id}><span className="term-branch">{item.parentId?'└':'•'}</span><span><b>{item.label}</b><small>{item.entryId||item.url}</small></span><span className="term-count">#{item.order+1}</span></div>)}</div></section>)}</div></div>}
-function Plugins({plugins}:{plugins:Plugin[]}){return <div className="page"><div className="page-heading compact"><div><p className="kicker">EXTENSIONS</p><h1>Plugins</h1><p className="subhead">Declarative capabilities that extend the content model safely.</p></div><span className="live-chip"><i/>{plugins.filter(plugin=>plugin.status==='Active').length} active</span></div><section className="card entries-card"><div className="card-heading"><div><p className="eyebrow">PLUGIN REGISTRY</p><h2>Installed manifests</h2></div></div><div className="type-list">{plugins.map(plugin=><div className="type-row" key={plugin.id}><span className="entry-icon lavender">✦</span><span><b>{plugin.name}</b><small>{plugin.slug} · v{plugin.version} · {plugin.author}</small></span><span className={'status '+plugin.status.toLowerCase()}><i/>{plugin.status}</span><strong>{plugin.capabilities.length} caps</strong></div>)}</div></section><div className="health-note"><span>ⓘ</span><p><b>Safe registry mode</b><small>Plugins declare capabilities here; external code is never executed by the browser.</small></p></div></div>}
-function Icon({type}:{type:ContentType}){return <span className={'entry-icon '+type.tone}>{type.icon}</span>}
-function Overview({types,entries,relations,taxonomies,revisions,currentUser,go,create}:{types:ContentType[];entries:Entry[];relations:Relation[];taxonomies:Taxonomy[];revisions:Revision[];currentUser?:User;go:(v:View)=>void;create:()=>void}){const recent=revisions.slice(-3).reverse();const today=new Intl.DateTimeFormat('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}).format(new Date()).toUpperCase();return <div className="page"><div className="page-heading"><div><p className="kicker">{today}</p><h1>Good morning, {currentUser?.name||'there'} <span>✦</span></h1><p className="subhead">Your content model is healthy. Here’s what’s happening across the workspace.</p></div><button className="ghost-button" onClick={create}>＋ Create entry</button></div><div className="stat-grid"><Stat value={String(entries.length)} label="Loaded entries" trend="Persisted locally" icon="▤"/><Stat value={String(types.length)} label="Content types" trend="All healthy" icon="⌘"/><Stat value={String(relations.length)} label="Relations" trend="Live model" icon="↗"/></div><div className="content-grid"><section className="card"><CardHead eyebrow="RECENTLY UPDATED" title="Keep the story moving" action="View all ↗" onClick={()=>go('entries')}/><Table entries={entries.slice(0,3)} types={types}/></section><section className="card activity-card"><CardHead eyebrow="AGENT ACTIVITY" title="Recent changes"/><div className="activity-list">{recent.length?recent.map(revision=><Activity key={revision.id} icon="✦" title={revision.action.replaceAll("_"," ")} detail={revision.after.title} time={new Date(revision.createdAt).toLocaleString()}/>):<p className="subhead">No tracked changes yet.</p>}</div><button className="activity-footer" onClick={()=>go("entries")}>Open entries <span>↗</span></button></section></div><div className="lower-grid"><section className="card"><CardHead eyebrow="CONTENT MODEL" title="Your building blocks" action="Manage schema ↗" onClick={()=>go('schema')}/><div className="type-list">{types.map(t=><button className="type-row" key={t.slug} onClick={()=>go('schema')}><Icon type={t}/><span><b>{t.name}</b><small>{t.desc}</small></span><strong>{entries.filter(entry=>entry.type===t.name&&!entry.deletedAt).length}</strong><span className="row-arrow">→</span></button>)}</div></section><section className="card relation-card"><CardHead eyebrow="TAXONOMIES" title="Organize meaning" action="Explore ↗" onClick={()=>go('taxonomies')}/>{taxonomies.length?taxonomies.slice(0,2).map((taxonomy,index)=><div className="taxonomy-summary" key={taxonomy.slug}><span className="taxonomy-symbol">{index?'#':'⊞'}</span><div><b>{taxonomy.name}</b><small>{taxonomy.terms.length} terms · {taxonomy.hierarchical?'hierarchical':'flat'}</small></div><span className="live-chip"><i/>Synced</span></div>):<div className="taxonomy-summary"><span className="taxonomy-symbol">⊞</span><div><b>No taxonomies</b><small>Create one for agent classification</small></div></div>}</section></div></div>}
-function CardHead({eyebrow,title,action,onClick}:{eyebrow:string;title:string;action?:string;onClick?:()=>void}){return <div className="card-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div>{action&&<button className="text-button" onClick={onClick}>{action}</button>}</div>}
-function Stat({value,label,trend,icon,warn}:{value:string;label:string;trend:string;icon:string;warn?:boolean}){return <div className="stat card"><span className="stat-icon">{icon}</span><div><strong>{value}</strong><p>{label}</p><small className={warn?'warning':''}>{warn?'● ':'↗ '}{trend}</small></div></div>}
- function relativeTime(value?:string){if(!value)return '—';const timestamp=Date.parse(value);if(!Number.isFinite(timestamp))return value;const seconds=Math.round((timestamp-Date.now())/1000);const divisions:[number,Intl.RelativeTimeFormatUnit][]=[[60,'second'],[60,'minute'],[24,'hour'],[7,'day'],[4.34524,'week'],[12,'month']];let amount=seconds;let unit:Intl.RelativeTimeFormatUnit='second';for(const [threshold,nextUnit] of divisions){if(Math.abs(amount)<threshold)break;amount=Math.round(amount/threshold);unit=nextUnit}return new Intl.RelativeTimeFormat('en',{numeric:'auto'}).format(amount,unit)}
- function Table({entries,types,onSelect}:{entries:Entry[];types:ContentType[];onSelect?:(entry:Entry)=>void}){return <div className="table-wrap"><table><thead><tr><th>Entry</th><th>Type</th><th>Status</th><th>Updated</th></tr></thead><tbody>{entries.map(e=>{const slug=e.slug||e.title.toLowerCase().replaceAll(' ','-');return <tr key={e.id} onClick={()=>onSelect?.(e)}><td><Icon type={types.find(t=>t.name===e.type)||types[0]}/><span className="entry-name"><b>{e.title}</b><small>{e.id} · /{e.type.toLowerCase()}/{slug}</small></span></td><td>{e.type}</td><td><Status label={e.status}/></td><td>{relativeTime(e.updatedAt||e.updated)}</td></tr>})}</tbody></table></div>}
-function Status({label}:{label:string}){return <span className={'status '+label.toLowerCase()}><i/>{label}</span>}
-function Activity({icon,title,detail,time}:{icon:string;title:string;detail:string;time:string}){return <div className="activity-row"><span className="activity-icon">{icon}</span><span><b>{title}</b><small>{detail}</small></span><time>{time}</time></div>}
-function Entries({entries,types,create}:{entries:Entry[];types:ContentType[];create:()=>void}){const [q,setQ]=useState('');const [visibleType,setVisibleType]=useState('All content');const [visibleStatus,setVisibleStatus]=useState('All statuses');const [selected,setSelected]=useState<Entry>();useEffect(()=>{const raw=window.localStorage.getItem('waypoint.model');if(raw)try{const data=JSON.parse(raw);if(data.activeType)setVisibleType(data.activeType);if(data.activeStatus)setVisibleStatus(data.activeStatus)}catch{}const handleType=(event:Event)=>setVisibleType((event as CustomEvent<string>).detail);const handleStatus=(event:Event)=>setVisibleStatus((event as CustomEvent<string>).detail);window.addEventListener('waypoint-type-filter',handleType);window.addEventListener('waypoint-status-filter',handleStatus);return()=>{window.removeEventListener('waypoint-type-filter',handleType);window.removeEventListener('waypoint-status-filter',handleStatus)}},[]);const typeNames=Array.from(new Set(entries.map(entry=>entry.type)));const shown=entries.filter(e=>(visibleType==='All content'||e.type===visibleType)&&(visibleStatus==='All statuses'||e.status===visibleStatus)&&JSON.stringify({title:e.title,type:e.type,relation:e.relation,data:e.data||{},metadata:e.metadata||{}}).toLowerCase().includes(q.toLowerCase()));return <div className="page"><div className="page-heading compact"><div><p className="kicker">CONTENT WORKSPACE</p><h1>Entries</h1><p className="subhead">Every piece of content, structured and ready for your agent.</p></div><button className="primary-button" onClick={create}>＋ New entry</button></div><section className="card entries-card"><div className="entries-toolbar"><div className="search-box">⌕<input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search entries, fields, relations..."/></div><select className="filter-button" value={visibleType} onChange={e=>{setVisibleType(e.target.value);window.dispatchEvent(new CustomEvent('waypoint-type-filter',{detail:e.target.value}))}}><option>All content</option>{typeNames.map(type=><option key={type}>{type}</option>)}</select><select className="filter-button" value={visibleStatus} onChange={e=>{setVisibleStatus(e.target.value);window.dispatchEvent(new CustomEvent('waypoint-status-filter',{detail:e.target.value}))}}><option>All statuses</option><option>Published</option><option>Draft</option></select></div><Table entries={shown} types={types} onSelect={setSelected}/></section>{selected&&<EntryInspector entry={selected} close={()=>setSelected(undefined)}/>}</div>}
-function EntryInspector({entry,close}:{entry:Entry;close:()=>void}){return <div className="modal-backdrop" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modal-top"><div><p className="eyebrow">ENTRY CONTEXT</p><h2>{entry.title}</h2></div><button onClick={close}>×</button></div><p className="subhead">{entry.type} · {entry.status} · {entry.id}</p><label>Structured fields<pre>{JSON.stringify(entry.data||{},null,2)}</pre></label><label>Metadata<pre>{JSON.stringify(entry.metadata||{},null,2)}</pre></label><div className="modal-hint">✦ Use WebMCP <code>get_entry_context</code> for terms, connections and revisions.</div><div className="modal-actions"><button className="primary-button" onClick={close}>Done</button></div></div></div>}
- function Schema({types,entries,create}:{types:ContentType[];entries:Entry[];create:()=>void}){const primary=types[0];return <div className="page"><div className="page-heading compact"><div><p className="kicker">CONTENT MODEL</p><h1>Schema</h1><p className="subhead">Define the nouns, fields, and rules your agent can work with.</p></div><button className="primary-button" onClick={create}>＋ New content type</button></div><div className="schema-layout"><section className="card schema-list"><CardHead eyebrow="CONTENT TYPES" title={types.length+' active types'}/>{types.map(t=><div className="schema-row" key={t.slug}><Icon type={t}/><span><b>{t.name}</b><small>{t.desc}</small></span><strong>{entries.filter(entry=>entry.type===t.name&&!entry.deletedAt).length} entries</strong></div>)}</section><section className="card field-card"><div className="field-header"><div><p className="eyebrow">{primary?.name.toUpperCase()||'CONTENT'} · SCHEMA</p><h2>Fields & validation</h2></div></div><p className="field-intro">Exposed to WebMCP as <code>content.{primary?.slug||'type'}</code></p>{(primary?.fields||[]).map((field,i)=>{const kind=primary?.fieldTypes?.[field]||'text';const required=primary?.requiredFields?.includes(field);return <div className="field-row" key={field}><span className="field-number">0{i+1}</span><b>{field}</b><span>{kind} · {required?'required':'optional'}</span><span className="field-check">{required?'✓':'◇'}</span></div>})}<button className="add-field">＋ Add field</button></section></div></div>}
-function Taxonomies({taxonomies,create,addTerm}:{taxonomies:Taxonomy[];create:()=>void;addTerm:(slug:string)=>void}){const [assignments,setAssignments]=useState<TermAssignment[]>([]);useEffect(()=>{const raw=window.localStorage.getItem('waypoint.model');if(raw)try{const data=JSON.parse(raw);if(data.termAssignments)setAssignments(data.termAssignments)}catch{}},[taxonomies]);return <div className="page"><div className="page-heading compact"><div><p className="kicker">CONTENT MODEL</p><h1>Taxonomies</h1><p className="subhead">Give your content a vocabulary agents can understand and reuse.</p></div><button className="primary-button" onClick={create}>＋ New taxonomy</button></div><div className="taxonomy-grid">{taxonomies.map(t=><section className="card taxonomy-card" key={t.slug}><div className="taxonomy-card-head"><span className="taxonomy-symbol">⊞</span><div><h2>{t.name}</h2><small>taxonomy.{t.slug} · {t.hierarchical?'Hierarchical':'Flat'}</small></div><button className="dots">•••</button></div><div className="terms-list">{t.terms.map(term=><div className={'term-row '+(term.parent?'child':'')} key={term.id}><span className="term-branch">{term.parent?'└':'•'}</span><span><b>{term.name}</b><small>{term.slug}</small></span><span className="term-count">{assignments.filter(assignment=>assignment.taxonomy===t.slug&&assignment.termIds.includes(term.id)).length} entries</span></div>)}</div><button className="add-field" onClick={()=>addTerm(t.slug)}>＋ Add term</button></section>)}<section className="card empty-taxonomy" onClick={create}><span>＋</span><b>Create another taxonomy</b><small>Categories, tags, collections or any vocabulary.</small></section></div></div>}
-function Relations({siteName,types,entries,relations,create}:{siteName:string;types:ContentType[];entries:Entry[];relations:Relation[];create:()=>void}){return <div className="page"><div className="page-heading compact"><div><p className="kicker">CONTENT MODEL</p><h1>Relations</h1><p className="subhead">A readable graph of how your content connects.</p></div><button className="ghost-button" onClick={create}>＋ New relation</button></div><section className="card graph-card"><CardHead eyebrow="RELATIONSHIP GRAPH" title={`${siteName} model`}/><div className="big-graph">{types.slice(0,3).map((type,index)=><div className={'big-node '+(index===0?'article-node':index===1?'author-node':'project-node')} key={type.slug}><span className="entry-icon yellow">{index===0?'Aa':index===1?'◎':'▦'}</span><b>{type.name}</b><small>{entries.filter(entry=>entry.type===type.name&&!entry.deletedAt).length} entries</small></div>)}{relations.slice(0,3).map((relation,index)=><div className={'graph-link link-'+(index===0?'a':index===1?'b':'c')} key={relation.id}><span>{relation.name}</span></div>)}</div><div className="graph-footer"><span>{types.length} content types</span><span>{relations.length} relations</span><span className="graph-health">✓ All healthy</span></div><div className="relation-list">{relations.map(relation=><div className="relation-summary" key={relation.id}><b>{relation.name}</b><span>{relation.fromType} → {relation.toType}</span><small>{relation.cardinality === 'one' ? 'One' : 'Many'}</small></div>)}</div></section></div>}
-function EntryModal({types,close,create}:{types:ContentType[];close:()=>void;create:(title:string,type:string,data:Record<string,unknown>)=>void}){const [title,setTitle]=useState('');const [type,setType]=useState(types[0]?.name||'Article');const [data,setData]=useState<Record<string,unknown>>({});const selected=types.find(t=>t.name===type)||types[0];return <div className="modal-backdrop" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modal-top"><div><p className="eyebrow">NEW ENTRY</p><h2>Create a content entry</h2></div><button onClick={close}>×</button></div><label>Content type<select value={type} onChange={e=>{setType(e.target.value);setData({})}}>{types.map(t=><option key={t.name}>{t.name}</option>)}</select></label><label>Title<input autoFocus value={title} onChange={e=>setTitle(e.target.value)} placeholder="Give this entry a name..."/></label>{selected.fields.filter(field=>field!=='title'&&field!=='slug').slice(0,4).map(field=><label key={field}>{field}<input value={String(data[field]||'')} onChange={e=>setData({...data,[field]:e.target.value})} placeholder={'Add '+field+'...'}/></label>)}<div className="modal-hint">✦ These fields come directly from the selected content schema.</div><div className="modal-actions"><button className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={!title.trim()} onClick={()=>create(title.trim(),type,data)}>Create draft</button></div></div></div>}
-function TaxonomyModal({close,create}:{close:()=>void;create:(name:string,slug:string,hierarchical:boolean)=>void}){const [name,setName]=useState('');const [slug,setSlug]=useState('');const [hierarchical,setHierarchical]=useState(true);return <div className="modal-backdrop" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modal-top"><div><p className="eyebrow">NEW TAXONOMY</p><h2>Create a vocabulary</h2></div><button onClick={close}>×</button></div><label>Name<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Topics"/></label><label>Slug<input value={slug} onChange={e=>setSlug(e.target.value)} placeholder="topics"/></label><label className="checkbox-label"><input type="checkbox" checked={hierarchical} onChange={e=>setHierarchical(e.target.checked)}/> Allow parent / child terms</label><div className="modal-hint">✦ Agents can use this vocabulary to classify and query entries.</div><div className="modal-actions"><button className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={!name.trim()||!slug.trim()} onClick={()=>create(name.trim(),slug.trim(),hierarchical)}>Create taxonomy</button></div></div></div>}
-function TermModal({taxonomy,close,create}:{taxonomy?:Taxonomy;close:()=>void;create:(name:string,slug:string,parent:string|null,description:string)=>void}){const [name,setName]=useState('');const [slug,setSlug]=useState('');const [parent,setParent]=useState('');const [description,setDescription]=useState('');return <div className="modal-backdrop" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modal-top"><div><p className="eyebrow">NEW TERM · {taxonomy?.name.toUpperCase()}</p><h2>Add a vocabulary term</h2></div><button onClick={close}>×</button></div><label>Name<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Editorial"/></label><label>Slug<input value={slug} onChange={e=>setSlug(e.target.value)} placeholder="editorial"/></label>{taxonomy?.hierarchical&&<label>Parent term<select value={parent} onChange={e=>setParent(e.target.value)}><option value="">No parent (top level)</option>{taxonomy.terms.map(term=><option key={term.id} value={term.id}>{term.name}</option>)}</select></label>}<label>Description<input value={description} onChange={e=>setDescription(e.target.value)} placeholder="Optional context for agents..."/></label><div className="modal-hint">✦ This term will be immediately available for classification.</div><div className="modal-actions"><button className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={!name.trim()||!slug.trim()} onClick={()=>create(name.trim(),slug.trim(),parent||null,description.trim())}>Create term</button></div></div></div>}
-function TypeModal({close,create}:{close:()=>void;create:(name:string,slug:string,fields:string[])=>void}){const [name,setName]=useState('');const [slug,setSlug]=useState('');const [fields,setFields]=useState('title');return <div className="modal-backdrop" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modal-top"><div><p className="eyebrow">NEW CONTENT TYPE</p><h2>Define a new building block</h2></div><button onClick={close}>×</button></div><label>Name<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Product"/></label><label>Slug<input value={slug} onChange={e=>setSlug(e.target.value)} placeholder="product"/></label><label>Fields <small className="field-help">separate with commas</small><input value={fields} onChange={e=>setFields(e.target.value)} placeholder="title, price, description"/></label><div className="modal-hint">✦ The agent will be able to create entries of this type immediately.</div><div className="modal-actions"><button className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={!name.trim()||!slug.trim()} onClick={()=>create(name.trim(),slug.trim(),fields.split(',').map(field=>field.trim()).filter(Boolean))}>Create type</button></div></div></div>}
-function RelationModal({types,close,create}:{types:ContentType[];close:()=>void;create:(name:string,slug:string,fromType:string,toType:string,cardinality:'one'|'many')=>void}){const [name,setName]=useState('');const [slug,setSlug]=useState('');const [fromType,setFromType]=useState(types[0]?.name||'');const [toType,setToType]=useState(types[1]?.name||types[0]?.name||'');const [cardinality,setCardinality]=useState<'one'|'many'>('many');return <div className="modal-backdrop" onClick={close}><div className="modal" onClick={e=>e.stopPropagation()}><div className="modal-top"><div><p className="eyebrow">NEW RELATION</p><h2>Connect two content types</h2></div><button onClick={close}>×</button></div><label>Name<input autoFocus value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Authored by"/></label><label>Slug<input value={slug} onChange={e=>setSlug(e.target.value)} placeholder="authored-by"/></label><div className="relation-form-grid"><label>From<select value={fromType} onChange={e=>setFromType(e.target.value)}>{types.map(type=><option key={type.slug}>{type.name}</option>)}</select></label><label>To<select value={toType} onChange={e=>setToType(e.target.value)}>{types.map(type=><option key={type.slug}>{type.name}</option>)}</select></label></div><label>Cardinality<select value={cardinality} onChange={e=>setCardinality(e.target.value as 'one'|'many')}><option value="many">Many</option><option value="one">One</option></select></label><div className="modal-hint">✦ Agents can resolve this connection from either content type.</div><div className="modal-actions"><button className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={!name.trim()||!slug.trim()} onClick={()=>create(name.trim(),slug.trim(),fromType,toType,cardinality)}>Create relation</button></div></div></div>}
+const label = (v: View) =>
+  v === "overview" ? "Overview" : v[0].toUpperCase() + v.slice(1);
+function Sidebar({
+  view,
+  setView,
+  siteName,
+  entryCount,
+  currentUser,
+}: {
+  view: View;
+  setView: (v: View) => void;
+  siteName: string;
+  entryCount: number;
+  currentUser?: User;
+}) {
+  const initials = (currentUser?.name || "WS")
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <aside className="sidebar">
+      <div className="brand">
+        <span className="brand-mark">W</span>
+        <span>
+          waypoint<small>content OS</small>
+        </span>
+      </div>
+      <div className="workspace-switch">
+        <span className="workspace-avatar">
+          {siteName.slice(0, 1).toUpperCase()}
+        </span>
+        <span>
+          <b>{siteName}</b>
+          <small>Personal workspace</small>
+        </span>
+        <span className="chevron">⌄</span>
+      </div>
+      <nav>
+        <p className="nav-label">Workspace</p>
+        <Nav
+          icon="⌂"
+          text="Overview"
+          active={view === "overview"}
+          on={() => setView("overview")}
+        />
+        <Nav
+          icon="▤"
+          text="Entries"
+          badge={String(entryCount)}
+          active={view === "entries"}
+          on={() => setView("entries")}
+        />
+        <Nav
+          icon="⌘"
+          text="Schema"
+          active={view === "schema"}
+          on={() => setView("schema")}
+        />
+        <Nav
+          icon="⊞"
+          text="Taxonomies"
+          active={view === "taxonomies"}
+          on={() => setView("taxonomies")}
+        />
+        <Nav
+          icon="↗"
+          text="Relations"
+          active={view === "relations"}
+          on={() => setView("relations")}
+        />
+        <Nav
+          icon="▧"
+          text="Media"
+          active={view === "media"}
+          on={() => setView("media")}
+        />
+        <Nav
+          icon="♧"
+          text="Comments"
+          active={view === "comments"}
+          on={() => setView("comments")}
+        />
+        <Nav
+          icon="☰"
+          text="Menus"
+          active={view === "menus"}
+          on={() => setView("menus")}
+        />
+        <p className="nav-label nav-label-spaced">System</p>
+        <Nav
+          icon="♙"
+          text="Users"
+          active={view === "users"}
+          on={() => setView("users")}
+        />
+        <Nav
+          icon="▣"
+          text="Plugins"
+          active={view === "plugins"}
+          on={() => setView("plugins")}
+        />
+        <Nav icon="✦" text="Agent activity" on={() => setView("overview")} />
+        <Nav icon="⚙" text="Settings" active={view === "settings"} on={() => setView("settings")} />
+      </nav>
+      <div className="sidebar-bottom">
+        <div className="agent-status">
+          <span className="pulse" />
+          <span>
+            <b>Agent-ready</b>
+            <small>WebMCP connected</small>
+          </span>
+        </div>
+        <div className="user-row">
+          <span className="user-avatar">{initials}</span>
+          <span>
+            <b>{currentUser?.name || "Workspace owner"}</b>
+            <small>{currentUser?.role || "Owner"}</small>
+          </span>
+        </div>
+      </div>
+    </aside>
+  );
+}
+function Nav({
+  icon,
+  text,
+  badge,
+  active,
+  on,
+}: {
+  icon: string;
+  text: string;
+  badge?: string;
+  active?: boolean;
+  on?: () => void;
+}) {
+  return (
+    <button className={"nav-item " + (active ? "active" : "")} onClick={on}>
+      <span>{icon}</span>
+      {text}
+      {badge && <em>{badge}</em>}
+    </button>
+  );
+}
+function Settings({
+  settings,
+  save,
+}: {
+  settings: SiteSettings;
+  save: (settings: SiteSettings) => void;
+}) {
+  const [draft, setDraft] = useState(settings);
+  useEffect(() => setDraft(settings), [settings]);
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">WORKSPACE CONFIGURATION</p>
+          <h1>Settings</h1>
+          <p className="subhead">
+            Control the public identity and runtime context available to your content agent.
+          </p>
+        </div>
+      </div>
+      <section className="card entries-card">
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">SITE IDENTITY</p>
+            <h2>Public settings</h2>
+          </div>
+        </div>
+        <div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}>
+          <label>Site name<input value={draft.siteName} onChange={(event) => setDraft({ ...draft, siteName: event.target.value })} /></label>
+          <label>Description<input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
+          <label>URL<input type="url" value={draft.url} onChange={(event) => setDraft({ ...draft, url: event.target.value })} /></label>
+          <label>Timezone<input value={draft.timezone} onChange={(event) => setDraft({ ...draft, timezone: event.target.value })} /></label>
+          <div className="modal-actions">
+            <button className="primary-button" disabled={!draft.siteName.trim() || !draft.url.trim()} onClick={() => save({ ...draft, siteName: draft.siteName.trim(), description: draft.description.trim(), url: draft.url.trim().replace(/\/$/, ""), timezone: draft.timezone.trim() })}>Save settings</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+function Users({ users }: { users: User[] }) {
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">WORKSPACE ACCESS</p>
+          <h1>Users</h1>
+          <p className="subhead">
+            People, roles and capabilities available to your content agent.
+          </p>
+        </div>
+        <span className="live-chip">
+          <i />
+          {users.length} members
+        </span>
+      </div>
+      <section className="card entries-card">
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">DIRECTORY</p>
+            <h2>Workspace members</h2>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Capabilities</th>
+                <th>Metadata</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => (
+                <tr key={user.id}>
+                  <td>
+                    <span className="user-avatar">
+                      {user.name
+                        .split(" ")
+                        .map((part) => part[0])
+                        .join("")
+                        .slice(0, 2)}
+                    </span>
+                    <span className="entry-name">
+                      <b>{user.name}</b>
+                      <small>{user.email}</small>
+                    </span>
+                  </td>
+                  <td>{user.role}</td>
+                  <td>
+                    <Status label={user.status} />
+                  </td>
+                  <td>{user.capabilities.length} granted</td>
+                  <td>{Object.keys(user.metadata || {}).length} keys</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+function Media({ media }: { media: MediaAsset[] }) {
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">CONTENT ASSETS</p>
+          <h1>Media library</h1>
+          <p className="subhead">
+            Reusable files and media metadata available to your agent.
+          </p>
+        </div>
+        <span className="live-chip">
+          <i />
+          {media.length} assets
+        </span>
+      </div>
+      <section className="card entries-card">
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">LIBRARY</p>
+            <h2>Registered assets</h2>
+          </div>
+        </div>
+        <div className="type-list">
+          {media.map((asset) => (
+            <div className="type-row" key={asset.id}>
+              <span className="entry-icon green">
+                {asset.mimeType.startsWith("image/") ? "▧" : "◫"}
+              </span>
+              <span>
+                <b>{asset.name}</b>
+                <small>
+                  {asset.mimeType} ·{" "}
+                  {asset.width && asset.height
+                    ? `${asset.width} × ${asset.height} · `
+                    : ""}
+                  {asset.attachedEntryIds.length} linked entries
+                </small>
+              </span>
+              <strong>{asset.alt || "No alt text"}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+function Comments({
+  comments,
+  entries,
+}: {
+  comments: Comment[];
+  entries: Entry[];
+}) {
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">COMMUNITY</p>
+          <h1>Comments</h1>
+          <p className="subhead">
+            Review and moderate feedback before it reaches your content.
+          </p>
+        </div>
+        <span className="live-chip">
+          <i />
+          {
+            comments.filter((comment) => comment.status === "Pending").length
+          }{" "}
+          pending
+        </span>
+      </div>
+      <section className="card entries-card">
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">MODERATION QUEUE</p>
+            <h2>Recent comments</h2>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Comment</th>
+                <th>Entry</th>
+                <th>Author</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {comments.map((comment) => (
+                <tr key={comment.id}>
+                  <td>
+                    <span className="entry-name">
+                      <b>{comment.content}</b>
+                      <small>{comment.id}</small>
+                    </span>
+                  </td>
+                  <td>
+                    {entries.find((entry) => entry.id === comment.entryId)
+                      ?.title || comment.entryId}
+                  </td>
+                  <td>{comment.authorName}</td>
+                  <td>
+                    <Status label={comment.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+function Menus({ menus }: { menus: Menu[] }) {
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">SITE NAVIGATION</p>
+          <h1>Menus</h1>
+          <p className="subhead">
+            Build ordered navigation structures your agent can maintain.
+          </p>
+        </div>
+        <span className="live-chip">
+          <i />
+          {menus.length} menus
+        </span>
+      </div>
+      <div className="taxonomy-grid">
+        {menus.map((menu) => (
+          <section className="card taxonomy-card" key={menu.id}>
+            <div className="taxonomy-card-head">
+              <span className="taxonomy-symbol">☰</span>
+              <div>
+                <h2>{menu.name}</h2>
+                <small>
+                  menu.{menu.slug} · {menu.location || "unassigned"}
+                </small>
+              </div>
+            </div>
+            <div className="terms-list">
+              {menu.items
+                .sort((a, b) => a.order - b.order)
+                .map((item) => (
+                  <div
+                    className={"term-row " + (item.parentId ? "child" : "")}
+                    key={item.id}
+                  >
+                    <span className="term-branch">
+                      {item.parentId ? "└" : "•"}
+                    </span>
+                    <span>
+                      <b>{item.label}</b>
+                      <small>{item.entryId || item.url}</small>
+                    </span>
+                    <span className="term-count">#{item.order + 1}</span>
+                  </div>
+                ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+function Plugins({ plugins }: { plugins: Plugin[] }) {
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">EXTENSIONS</p>
+          <h1>Plugins</h1>
+          <p className="subhead">
+            Declarative capabilities that extend the content model safely.
+          </p>
+        </div>
+        <span className="live-chip">
+          <i />
+          {plugins.filter((plugin) => plugin.status === "Active").length} active
+        </span>
+      </div>
+      <section className="card entries-card">
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">PLUGIN REGISTRY</p>
+            <h2>Installed manifests</h2>
+          </div>
+        </div>
+        <div className="type-list">
+          {plugins.map((plugin) => (
+            <div className="type-row" key={plugin.id}>
+              <span className="entry-icon lavender">✦</span>
+              <span>
+                <b>{plugin.name}</b>
+                <small>
+                  {plugin.slug} · v{plugin.version} · {plugin.author}
+                </small>
+              </span>
+              <span className={"status " + plugin.status.toLowerCase()}>
+                <i />
+                {plugin.status}
+              </span>
+              <strong>{plugin.capabilities.length} caps</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+      <div className="health-note">
+        <span>ⓘ</span>
+        <p>
+          <b>Safe registry mode</b>
+          <small>
+            Plugins declare capabilities here; external code is never executed
+            by the browser.
+          </small>
+        </p>
+      </div>
+    </div>
+  );
+}
+function Icon({ type }: { type: ContentType }) {
+  return <span className={"entry-icon " + type.tone}>{type.icon}</span>;
+}
+function Overview({
+  types,
+  entries,
+  relations,
+  taxonomies,
+  revisions,
+  currentUser,
+  go,
+  create,
+}: {
+  types: ContentType[];
+  entries: Entry[];
+  relations: Relation[];
+  taxonomies: Taxonomy[];
+  revisions: Revision[];
+  currentUser?: User;
+  go: (v: View) => void;
+  create: () => void;
+}) {
+  const recent = revisions.slice(-3).reverse();
+  const today = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })
+    .format(new Date())
+    .toUpperCase();
+  return (
+    <div className="page">
+      <div className="page-heading">
+        <div>
+          <p className="kicker">{today}</p>
+          <h1>
+            Good morning, {currentUser?.name || "there"} <span>✦</span>
+          </h1>
+          <p className="subhead">
+            Your content model is healthy. Here’s what’s happening across the
+            workspace.
+          </p>
+        </div>
+        <button className="ghost-button" onClick={create}>
+          ＋ Create entry
+        </button>
+      </div>
+      <div className="stat-grid">
+        <Stat
+          value={String(entries.length)}
+          label="Loaded entries"
+          trend="Persisted locally"
+          icon="▤"
+        />
+        <Stat
+          value={String(types.length)}
+          label="Content types"
+          trend="All healthy"
+          icon="⌘"
+        />
+        <Stat
+          value={String(relations.length)}
+          label="Relations"
+          trend="Live model"
+          icon="↗"
+        />
+      </div>
+      <div className="content-grid">
+        <section className="card">
+          <CardHead
+            eyebrow="RECENTLY UPDATED"
+            title="Keep the story moving"
+            action="View all ↗"
+            onClick={() => go("entries")}
+          />
+          <Table entries={entries.slice(0, 3)} types={types} />
+        </section>
+        <section className="card activity-card">
+          <CardHead eyebrow="AGENT ACTIVITY" title="Recent changes" />
+          <div className="activity-list">
+            {recent.length ? (
+              recent.map((revision) => (
+                <Activity
+                  key={revision.id}
+                  icon="✦"
+                  title={revision.action.replaceAll("_", " ")}
+                  detail={revision.after.title}
+                  time={new Date(revision.createdAt).toLocaleString()}
+                />
+              ))
+            ) : (
+              <p className="subhead">No tracked changes yet.</p>
+            )}
+          </div>
+          <button className="activity-footer" onClick={() => go("entries")}>
+            Open entries <span>↗</span>
+          </button>
+        </section>
+      </div>
+      <div className="lower-grid">
+        <section className="card">
+          <CardHead
+            eyebrow="CONTENT MODEL"
+            title="Your building blocks"
+            action="Manage schema ↗"
+            onClick={() => go("schema")}
+          />
+          <div className="type-list">
+            {types.map((t) => (
+              <button
+                className="type-row"
+                key={t.slug}
+                onClick={() => go("schema")}
+              >
+                <Icon type={t} />
+                <span>
+                  <b>{t.name}</b>
+                  <small>{t.desc}</small>
+                </span>
+                <strong>
+                  {
+                    entries.filter(
+                      (entry) => entry.type === t.name && !entry.deletedAt,
+                    ).length
+                  }
+                </strong>
+                <span className="row-arrow">→</span>
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="card relation-card">
+          <CardHead
+            eyebrow="TAXONOMIES"
+            title="Organize meaning"
+            action="Explore ↗"
+            onClick={() => go("taxonomies")}
+          />
+          {taxonomies.length ? (
+            taxonomies.slice(0, 2).map((taxonomy, index) => (
+              <div className="taxonomy-summary" key={taxonomy.slug}>
+                <span className="taxonomy-symbol">{index ? "#" : "⊞"}</span>
+                <div>
+                  <b>{taxonomy.name}</b>
+                  <small>
+                    {taxonomy.terms.length} terms ·{" "}
+                    {taxonomy.hierarchical ? "hierarchical" : "flat"}
+                  </small>
+                </div>
+                <span className="live-chip">
+                  <i />
+                  Synced
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="taxonomy-summary">
+              <span className="taxonomy-symbol">⊞</span>
+              <div>
+                <b>No taxonomies</b>
+                <small>Create one for agent classification</small>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+function CardHead({
+  eyebrow,
+  title,
+  action,
+  onClick,
+}: {
+  eyebrow: string;
+  title: string;
+  action?: string;
+  onClick?: () => void;
+}) {
+  return (
+    <div className="card-heading">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h2>{title}</h2>
+      </div>
+      {action && (
+        <button className="text-button" onClick={onClick}>
+          {action}
+        </button>
+      )}
+    </div>
+  );
+}
+function Stat({
+  value,
+  label,
+  trend,
+  icon,
+  warn,
+}: {
+  value: string;
+  label: string;
+  trend: string;
+  icon: string;
+  warn?: boolean;
+}) {
+  return (
+    <div className="stat card">
+      <span className="stat-icon">{icon}</span>
+      <div>
+        <strong>{value}</strong>
+        <p>{label}</p>
+        <small className={warn ? "warning" : ""}>
+          {warn ? "● " : "↗ "}
+          {trend}
+        </small>
+      </div>
+    </div>
+  );
+}
+function relativeTime(value?: string) {
+  if (!value) return "—";
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  const seconds = Math.round((timestamp - Date.now()) / 1000);
+  const divisions: [number, Intl.RelativeTimeFormatUnit][] = [
+    [60, "second"],
+    [60, "minute"],
+    [24, "hour"],
+    [7, "day"],
+    [4.34524, "week"],
+    [12, "month"],
+  ];
+  let amount = seconds;
+  let unit: Intl.RelativeTimeFormatUnit = "second";
+  for (const [threshold, nextUnit] of divisions) {
+    if (Math.abs(amount) < threshold) break;
+    amount = Math.round(amount / threshold);
+    unit = nextUnit;
+  }
+  return new Intl.RelativeTimeFormat("en", { numeric: "auto" }).format(
+    amount,
+    unit,
+  );
+}
+function Table({
+  entries,
+  types,
+  onSelect,
+}: {
+  entries: Entry[];
+  types: ContentType[];
+  onSelect?: (entry: Entry) => void;
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Entry</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((e) => {
+            const slug = e.slug || e.title.toLowerCase().replaceAll(" ", "-");
+            return (
+              <tr key={e.id} onClick={() => onSelect?.(e)}>
+                <td>
+                  <Icon
+                    type={types.find((t) => t.name === e.type) || types[0]}
+                  />
+                  <span className="entry-name">
+                    <b>{e.title}</b>
+                    <small>
+                      {e.id} · /{e.type.toLowerCase()}/{slug}
+                    </small>
+                  </span>
+                </td>
+                <td>{e.type}</td>
+                <td>
+                  <Status label={e.status} />
+                </td>
+                <td>{relativeTime(e.updatedAt || e.updated)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+function Status({ label }: { label: string }) {
+  return (
+    <span className={"status " + label.toLowerCase()}>
+      <i />
+      {label}
+    </span>
+  );
+}
+function Activity({
+  icon,
+  title,
+  detail,
+  time,
+}: {
+  icon: string;
+  title: string;
+  detail: string;
+  time: string;
+}) {
+  return (
+    <div className="activity-row">
+      <span className="activity-icon">{icon}</span>
+      <span>
+        <b>{title}</b>
+        <small>{detail}</small>
+      </span>
+      <time>{time}</time>
+    </div>
+  );
+}
+function Entries({
+  entries,
+  types,
+  create,
+}: {
+  entries: Entry[];
+  types: ContentType[];
+  create: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [visibleType, setVisibleType] = useState("All content");
+  const [visibleStatus, setVisibleStatus] = useState("All statuses");
+  const [selected, setSelected] = useState<Entry>();
+  useEffect(() => {
+    const raw = window.localStorage.getItem("waypoint.model");
+    if (raw)
+      try {
+        const data = JSON.parse(raw);
+        if (data.activeType) setVisibleType(data.activeType);
+        if (data.activeStatus) setVisibleStatus(data.activeStatus);
+      } catch {}
+    const handleType = (event: Event) =>
+      setVisibleType((event as CustomEvent<string>).detail);
+    const handleStatus = (event: Event) =>
+      setVisibleStatus((event as CustomEvent<string>).detail);
+    window.addEventListener("waypoint-type-filter", handleType);
+    window.addEventListener("waypoint-status-filter", handleStatus);
+    return () => {
+      window.removeEventListener("waypoint-type-filter", handleType);
+      window.removeEventListener("waypoint-status-filter", handleStatus);
+    };
+  }, []);
+  const typeNames = Array.from(new Set(entries.map((entry) => entry.type)));
+  const shown = entries.filter(
+    (e) =>
+      (visibleType === "All content" || e.type === visibleType) &&
+      (visibleStatus === "All statuses" || e.status === visibleStatus) &&
+      JSON.stringify({
+        title: e.title,
+        type: e.type,
+        relation: e.relation,
+        data: e.data || {},
+        metadata: e.metadata || {},
+      })
+        .toLowerCase()
+        .includes(q.toLowerCase()),
+  );
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">CONTENT WORKSPACE</p>
+          <h1>Entries</h1>
+          <p className="subhead">
+            Every piece of content, structured and ready for your agent.
+          </p>
+        </div>
+        <button className="primary-button" onClick={create}>
+          ＋ New entry
+        </button>
+      </div>
+      <section className="card entries-card">
+        <div className="entries-toolbar">
+          <div className="search-box">
+            ⌕
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search entries, fields, relations..."
+            />
+          </div>
+          <select
+            className="filter-button"
+            value={visibleType}
+            onChange={(e) => {
+              setVisibleType(e.target.value);
+              window.dispatchEvent(
+                new CustomEvent("waypoint-type-filter", {
+                  detail: e.target.value,
+                }),
+              );
+            }}
+          >
+            <option>All content</option>
+            {typeNames.map((type) => (
+              <option key={type}>{type}</option>
+            ))}
+          </select>
+          <select
+            className="filter-button"
+            value={visibleStatus}
+            onChange={(e) => {
+              setVisibleStatus(e.target.value);
+              window.dispatchEvent(
+                new CustomEvent("waypoint-status-filter", {
+                  detail: e.target.value,
+                }),
+              );
+            }}
+          >
+            <option>All statuses</option>
+            <option>Published</option>
+            <option>Draft</option>
+          </select>
+        </div>
+        <Table entries={shown} types={types} onSelect={setSelected} />
+      </section>
+      {selected && (
+        <EntryInspector entry={selected} close={() => setSelected(undefined)} />
+      )}
+    </div>
+  );
+}
+function EntryInspector({ entry, close }: { entry: Entry; close: () => void }) {
+  return (
+    <div className="modal-backdrop" onClick={close}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-top">
+          <div>
+            <p className="eyebrow">ENTRY CONTEXT</p>
+            <h2>{entry.title}</h2>
+          </div>
+          <button onClick={close}>×</button>
+        </div>
+        <p className="subhead">
+          {entry.type} · {entry.status} · {entry.id}
+        </p>
+        <label>
+          Structured fields
+          <pre>{JSON.stringify(entry.data || {}, null, 2)}</pre>
+        </label>
+        <label>
+          Metadata<pre>{JSON.stringify(entry.metadata || {}, null, 2)}</pre>
+        </label>
+        <div className="modal-hint">
+          ✦ Use WebMCP <code>get_entry_context</code> for terms, connections and
+          revisions.
+        </div>
+        <div className="modal-actions">
+          <button className="primary-button" onClick={close}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function Schema({
+  types,
+  entries,
+  create,
+}: {
+  types: ContentType[];
+  entries: Entry[];
+  create: () => void;
+}) {
+  const primary = types[0];
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">CONTENT MODEL</p>
+          <h1>Schema</h1>
+          <p className="subhead">
+            Define the nouns, fields, and rules your agent can work with.
+          </p>
+        </div>
+        <button className="primary-button" onClick={create}>
+          ＋ New content type
+        </button>
+      </div>
+      <div className="schema-layout">
+        <section className="card schema-list">
+          <CardHead
+            eyebrow="CONTENT TYPES"
+            title={types.length + " active types"}
+          />
+          {types.map((t) => (
+            <div className="schema-row" key={t.slug}>
+              <Icon type={t} />
+              <span>
+                <b>{t.name}</b>
+                <small>{t.desc}</small>
+              </span>
+              <strong>
+                {
+                  entries.filter(
+                    (entry) => entry.type === t.name && !entry.deletedAt,
+                  ).length
+                }{" "}
+                entries
+              </strong>
+            </div>
+          ))}
+        </section>
+        <section className="card field-card">
+          <div className="field-header">
+            <div>
+              <p className="eyebrow">
+                {primary?.name.toUpperCase() || "CONTENT"} · SCHEMA
+              </p>
+              <h2>Fields & validation</h2>
+            </div>
+          </div>
+          <p className="field-intro">
+            Exposed to WebMCP as <code>content.{primary?.slug || "type"}</code>
+          </p>
+          {(primary?.fields || []).map((field, i) => {
+            const kind = primary?.fieldTypes?.[field] || "text";
+            const required = primary?.requiredFields?.includes(field);
+            return (
+              <div className="field-row" key={field}>
+                <span className="field-number">0{i + 1}</span>
+                <b>{field}</b>
+                <span>
+                  {kind} · {required ? "required" : "optional"}
+                </span>
+                <span className="field-check">{required ? "✓" : "◇"}</span>
+              </div>
+            );
+          })}
+          <button className="add-field">＋ Add field</button>
+        </section>
+      </div>
+    </div>
+  );
+}
+function Taxonomies({
+  taxonomies,
+  create,
+  addTerm,
+}: {
+  taxonomies: Taxonomy[];
+  create: () => void;
+  addTerm: (slug: string) => void;
+}) {
+  const [assignments, setAssignments] = useState<TermAssignment[]>([]);
+  useEffect(() => {
+    const raw = window.localStorage.getItem("waypoint.model");
+    if (raw)
+      try {
+        const data = JSON.parse(raw);
+        if (data.termAssignments) setAssignments(data.termAssignments);
+      } catch {}
+  }, [taxonomies]);
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">CONTENT MODEL</p>
+          <h1>Taxonomies</h1>
+          <p className="subhead">
+            Give your content a vocabulary agents can understand and reuse.
+          </p>
+        </div>
+        <button className="primary-button" onClick={create}>
+          ＋ New taxonomy
+        </button>
+      </div>
+      <div className="taxonomy-grid">
+        {taxonomies.map((t) => (
+          <section className="card taxonomy-card" key={t.slug}>
+            <div className="taxonomy-card-head">
+              <span className="taxonomy-symbol">⊞</span>
+              <div>
+                <h2>{t.name}</h2>
+                <small>
+                  taxonomy.{t.slug} · {t.hierarchical ? "Hierarchical" : "Flat"}
+                </small>
+              </div>
+              <button className="dots">•••</button>
+            </div>
+            <div className="terms-list">
+              {t.terms.map((term) => (
+                <div
+                  className={"term-row " + (term.parent ? "child" : "")}
+                  key={term.id}
+                >
+                  <span className="term-branch">{term.parent ? "└" : "•"}</span>
+                  <span>
+                    <b>{term.name}</b>
+                    <small>{term.slug}</small>
+                  </span>
+                  <span className="term-count">
+                    {
+                      assignments.filter(
+                        (assignment) =>
+                          assignment.taxonomy === t.slug &&
+                          assignment.termIds.includes(term.id),
+                      ).length
+                    }{" "}
+                    entries
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button className="add-field" onClick={() => addTerm(t.slug)}>
+              ＋ Add term
+            </button>
+          </section>
+        ))}
+        <section className="card empty-taxonomy" onClick={create}>
+          <span>＋</span>
+          <b>Create another taxonomy</b>
+          <small>Categories, tags, collections or any vocabulary.</small>
+        </section>
+      </div>
+    </div>
+  );
+}
+function Relations({
+  siteName,
+  types,
+  entries,
+  relations,
+  create,
+}: {
+  siteName: string;
+  types: ContentType[];
+  entries: Entry[];
+  relations: Relation[];
+  create: () => void;
+}) {
+  return (
+    <div className="page">
+      <div className="page-heading compact">
+        <div>
+          <p className="kicker">CONTENT MODEL</p>
+          <h1>Relations</h1>
+          <p className="subhead">
+            A readable graph of how your content connects.
+          </p>
+        </div>
+        <button className="ghost-button" onClick={create}>
+          ＋ New relation
+        </button>
+      </div>
+      <section className="card graph-card">
+        <CardHead eyebrow="RELATIONSHIP GRAPH" title={`${siteName} model`} />
+        <div className="big-graph">
+          {types.slice(0, 3).map((type, index) => (
+            <div
+              className={
+                "big-node " +
+                (index === 0
+                  ? "article-node"
+                  : index === 1
+                    ? "author-node"
+                    : "project-node")
+              }
+              key={type.slug}
+            >
+              <span className="entry-icon yellow">
+                {index === 0 ? "Aa" : index === 1 ? "◎" : "▦"}
+              </span>
+              <b>{type.name}</b>
+              <small>
+                {
+                  entries.filter(
+                    (entry) => entry.type === type.name && !entry.deletedAt,
+                  ).length
+                }{" "}
+                entries
+              </small>
+            </div>
+          ))}
+          {relations.slice(0, 3).map((relation, index) => (
+            <div
+              className={
+                "graph-link link-" +
+                (index === 0 ? "a" : index === 1 ? "b" : "c")
+              }
+              key={relation.id}
+            >
+              <span>{relation.name}</span>
+            </div>
+          ))}
+        </div>
+        <div className="graph-footer">
+          <span>{types.length} content types</span>
+          <span>{relations.length} relations</span>
+          <span className="graph-health">✓ All healthy</span>
+        </div>
+        <div className="relation-list">
+          {relations.map((relation) => (
+            <div className="relation-summary" key={relation.id}>
+              <b>{relation.name}</b>
+              <span>
+                {relation.fromType} → {relation.toType}
+              </span>
+              <small>{relation.cardinality === "one" ? "One" : "Many"}</small>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+function EntryModal({
+  types,
+  close,
+  create,
+}: {
+  types: ContentType[];
+  close: () => void;
+  create: (title: string, type: string, data: Record<string, unknown>) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState(types[0]?.name || "Article");
+  const [data, setData] = useState<Record<string, unknown>>({});
+  const selected = types.find((t) => t.name === type) || types[0];
+  return (
+    <div className="modal-backdrop" onClick={close}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-top">
+          <div>
+            <p className="eyebrow">NEW ENTRY</p>
+            <h2>Create a content entry</h2>
+          </div>
+          <button onClick={close}>×</button>
+        </div>
+        <label>
+          Content type
+          <select
+            value={type}
+            onChange={(e) => {
+              setType(e.target.value);
+              setData({});
+            }}
+          >
+            {types.map((t) => (
+              <option key={t.name}>{t.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Title
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Give this entry a name..."
+          />
+        </label>
+        {selected.fields
+          .filter((field) => field !== "title" && field !== "slug")
+          .slice(0, 4)
+          .map((field) => (
+            <label key={field}>
+              {field}
+              <input
+                value={String(data[field] || "")}
+                onChange={(e) => setData({ ...data, [field]: e.target.value })}
+                placeholder={"Add " + field + "..."}
+              />
+            </label>
+          ))}
+        <div className="modal-hint">
+          ✦ These fields come directly from the selected content schema.
+        </div>
+        <div className="modal-actions">
+          <button className="ghost-button" onClick={close}>
+            Cancel
+          </button>
+          <button
+            className="primary-button"
+            disabled={!title.trim()}
+            onClick={() => create(title.trim(), type, data)}
+          >
+            Create draft
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function TaxonomyModal({
+  close,
+  create,
+}: {
+  close: () => void;
+  create: (name: string, slug: string, hierarchical: boolean) => void;
+}) {
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [hierarchical, setHierarchical] = useState(true);
+  return (
+    <div className="modal-backdrop" onClick={close}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-top">
+          <div>
+            <p className="eyebrow">NEW TAXONOMY</p>
+            <h2>Create a vocabulary</h2>
+          </div>
+          <button onClick={close}>×</button>
+        </div>
+        <label>
+          Name
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Topics"
+          />
+        </label>
+        <label>
+          Slug
+          <input
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            placeholder="topics"
+          />
+        </label>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={hierarchical}
+            onChange={(e) => setHierarchical(e.target.checked)}
+          />{" "}
+          Allow parent / child terms
+        </label>
+        <div className="modal-hint">
+          ✦ Agents can use this vocabulary to classify and query entries.
+        </div>
+        <div className="modal-actions">
+          <button className="ghost-button" onClick={close}>
+            Cancel
+          </button>
+          <button
+            className="primary-button"
+            disabled={!name.trim() || !slug.trim()}
+            onClick={() => create(name.trim(), slug.trim(), hierarchical)}
+          >
+            Create taxonomy
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function TermModal({
+  taxonomy,
+  close,
+  create,
+}: {
+  taxonomy?: Taxonomy;
+  close: () => void;
+  create: (
+    name: string,
+    slug: string,
+    parent: string | null,
+    description: string,
+  ) => void;
+}) {
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [parent, setParent] = useState("");
+  const [description, setDescription] = useState("");
+  return (
+    <div className="modal-backdrop" onClick={close}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-top">
+          <div>
+            <p className="eyebrow">NEW TERM · {taxonomy?.name.toUpperCase()}</p>
+            <h2>Add a vocabulary term</h2>
+          </div>
+          <button onClick={close}>×</button>
+        </div>
+        <label>
+          Name
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Editorial"
+          />
+        </label>
+        <label>
+          Slug
+          <input
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            placeholder="editorial"
+          />
+        </label>
+        {taxonomy?.hierarchical && (
+          <label>
+            Parent term
+            <select value={parent} onChange={(e) => setParent(e.target.value)}>
+              <option value="">No parent (top level)</option>
+              {taxonomy.terms.map((term) => (
+                <option key={term.id} value={term.id}>
+                  {term.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Description
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional context for agents..."
+          />
+        </label>
+        <div className="modal-hint">
+          ✦ This term will be immediately available for classification.
+        </div>
+        <div className="modal-actions">
+          <button className="ghost-button" onClick={close}>
+            Cancel
+          </button>
+          <button
+            className="primary-button"
+            disabled={!name.trim() || !slug.trim()}
+            onClick={() =>
+              create(
+                name.trim(),
+                slug.trim(),
+                parent || null,
+                description.trim(),
+              )
+            }
+          >
+            Create term
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function TypeModal({
+  close,
+  create,
+}: {
+  close: () => void;
+  create: (name: string, slug: string, fields: string[]) => void;
+}) {
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [fields, setFields] = useState("title");
+  return (
+    <div className="modal-backdrop" onClick={close}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-top">
+          <div>
+            <p className="eyebrow">NEW CONTENT TYPE</p>
+            <h2>Define a new building block</h2>
+          </div>
+          <button onClick={close}>×</button>
+        </div>
+        <label>
+          Name
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Product"
+          />
+        </label>
+        <label>
+          Slug
+          <input
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            placeholder="product"
+          />
+        </label>
+        <label>
+          Fields <small className="field-help">separate with commas</small>
+          <input
+            value={fields}
+            onChange={(e) => setFields(e.target.value)}
+            placeholder="title, price, description"
+          />
+        </label>
+        <div className="modal-hint">
+          ✦ The agent will be able to create entries of this type immediately.
+        </div>
+        <div className="modal-actions">
+          <button className="ghost-button" onClick={close}>
+            Cancel
+          </button>
+          <button
+            className="primary-button"
+            disabled={!name.trim() || !slug.trim()}
+            onClick={() =>
+              create(
+                name.trim(),
+                slug.trim(),
+                fields
+                  .split(",")
+                  .map((field) => field.trim())
+                  .filter(Boolean),
+              )
+            }
+          >
+            Create type
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function RelationModal({
+  types,
+  close,
+  create,
+}: {
+  types: ContentType[];
+  close: () => void;
+  create: (
+    name: string,
+    slug: string,
+    fromType: string,
+    toType: string,
+    cardinality: "one" | "many",
+  ) => void;
+}) {
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [fromType, setFromType] = useState(types[0]?.name || "");
+  const [toType, setToType] = useState(types[1]?.name || types[0]?.name || "");
+  const [cardinality, setCardinality] = useState<"one" | "many">("many");
+  return (
+    <div className="modal-backdrop" onClick={close}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-top">
+          <div>
+            <p className="eyebrow">NEW RELATION</p>
+            <h2>Connect two content types</h2>
+          </div>
+          <button onClick={close}>×</button>
+        </div>
+        <label>
+          Name
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Authored by"
+          />
+        </label>
+        <label>
+          Slug
+          <input
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            placeholder="authored-by"
+          />
+        </label>
+        <div className="relation-form-grid">
+          <label>
+            From
+            <select
+              value={fromType}
+              onChange={(e) => setFromType(e.target.value)}
+            >
+              {types.map((type) => (
+                <option key={type.slug}>{type.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            To
+            <select value={toType} onChange={(e) => setToType(e.target.value)}>
+              {types.map((type) => (
+                <option key={type.slug}>{type.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label>
+          Cardinality
+          <select
+            value={cardinality}
+            onChange={(e) => setCardinality(e.target.value as "one" | "many")}
+          >
+            <option value="many">Many</option>
+            <option value="one">One</option>
+          </select>
+        </label>
+        <div className="modal-hint">
+          ✦ Agents can resolve this connection from either content type.
+        </div>
+        <div className="modal-actions">
+          <button className="ghost-button" onClick={close}>
+            Cancel
+          </button>
+          <button
+            className="primary-button"
+            disabled={!name.trim() || !slug.trim()}
+            onClick={() =>
+              create(name.trim(), slug.trim(), fromType, toType, cardinality)
+            }
+          >
+            Create relation
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
