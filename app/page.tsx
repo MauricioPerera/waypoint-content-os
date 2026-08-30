@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { WebmcpRegistrar } from '../src/mcp/register';
 
 type View = 'overview' | 'entries' | 'schema' | 'taxonomies' | 'relations' | 'users' | 'plugins' | 'media';
-type Entry = { id:string; title:string; type:string; status:'Published'|'Draft'; updated:string; relation:string; metadata?:Record<string,unknown>; data?:Record<string,unknown> };
+type Entry = { id:string; title:string; type:string; status:'Published'|'Draft'; updated:string; relation:string; authorUserId?:string; scheduledAt?:string; deletedAt?:string; metadata?:Record<string,unknown>; data?:Record<string,unknown> };
 type ContentType = { icon:string; name:string; count:number; tone:string; desc:string; slug:string; fields:string[] };
 type Term = { id:string; name:string; slug:string; parent:string|null; description?:string };
 type Taxonomy = { name:string; slug:string; hierarchical:boolean; terms:Term[] };
@@ -18,7 +18,7 @@ type MediaAsset = { id:string; name:string; url:string; mimeType:string; size:nu
 type Comment = { id:string; entryId:string; authorUserId?:string; authorName:string; authorEmail?:string; content:string; status:'Pending'|'Approved'|'Spam'; metadata?:Record<string,unknown>; createdAt:string; updatedAt:string };
 
 const seedEntries:Entry[]=[
- {id:'ent_01H8',title:'The quiet architecture of everyday tools',type:'Article',status:'Published',updated:'12 min ago',relation:'Design / Essay'},
+ {id:'ent_01H8',title:'The quiet architecture of everyday tools',type:'Article',status:'Published',updated:'12 min ago',relation:'Design / Essay',authorUserId:'usr_editor'},
  {id:'ent_01G4',title:'Mara Hoffmann',type:'Author',status:'Published',updated:'2 hours ago',relation:'3 articles'},
  {id:'ent_019D',title:'Field Notes — Issue 04',type:'Article',status:'Draft',updated:'Yesterday',relation:'Culture / Field Notes'},
 ];
