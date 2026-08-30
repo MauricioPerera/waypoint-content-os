@@ -392,6 +392,19 @@ export function createTools(s: State) {
       },
     }),
     defineTool({
+      stableKey: "page.duplicate_visual_page",
+      name: "duplicate_visual_page",
+      title: "Duplicar página visual",
+      description: "Duplica una página visual con sus bloques y metadatos; úsala para crear una variante segura sin modificar el original y devuelve la nueva página en borrador.",
+      inputSchema: { type: "object", properties: { pageId: { type: "string" }, title: { type: "string" }, slug: { type: "string" } }, required: ["pageId", "title", "slug"], additionalProperties: false },
+      async execute({ pageId, title, slug }: { pageId: string; title: string; slug: string }) {
+        const source = s.pages.find((page) => page.id === pageId || page.slug === pageId); if (!source) throw Error("Página visual no encontrada");
+        const normalized = slug.trim().toLowerCase(); if (!title.trim() || !/^[a-z0-9-]+$/.test(normalized)) throw Error("Título o slug inválido"); if (s.pages.some((page) => page.slug === normalized)) throw Error("El slug de la página ya existe");
+        const copy: VisualPage = { ...source, id: "page_" + Math.random().toString(16).slice(2, 8).toUpperCase(), title: title.trim(), slug: normalized, status: "Draft", blocks: source.blocks.map((block) => ({ ...block, id: "blk_" + Math.random().toString(16).slice(2, 8).toUpperCase() })), updatedAt: new Date().toISOString() };
+        s.setPages((all) => [copy, ...all]); return { status: "duplicated", page: copy, sourcePageId: source.id, ui_effect: "visual_page_duplicated" };
+      },
+    }),
+    defineTool({
       stableKey: "page.apply_template",
       name: "apply_page_template",
       title: "Aplicar plantilla de página",
@@ -403,6 +416,19 @@ export function createTools(s: State) {
         const next = { ...page, templateId: template.id, status: "Draft" as const, blocks: template.blocks.map((block) => ({ ...block, id: "blk_" + Math.random().toString(16).slice(2, 8).toUpperCase() })), updatedAt: new Date().toISOString() };
         s.setPages((all) => all.map((item) => item.id === page.id ? next : item));
         return { status: "applied", page: next, template: { id: template.id, name: template.name }, ui_effect: "page_template_applied" };
+      },
+    }),
+    defineTool({
+      stableKey: "page.duplicate_template",
+      name: "duplicate_page_template",
+      title: "Duplicar plantilla visual",
+      description: "Duplica una plantilla visual con sus bloques y layout asociado; úsala para crear una variante de diseño sin modificar la plantilla original.",
+      inputSchema: { type: "object", properties: { templateId: { type: "string" }, name: { type: "string" }, slug: { type: "string" } }, required: ["templateId", "name", "slug"], additionalProperties: false },
+      async execute({ templateId, name, slug }: { templateId: string; name: string; slug: string }) {
+        const source = s.templates.find((template) => template.id === templateId || template.slug === templateId); if (!source) throw Error("Plantilla no encontrada");
+        const normalized = slug.trim().toLowerCase(); if (!name.trim() || !/^[a-z0-9-]+$/.test(normalized)) throw Error("Nombre o slug inválido"); if (s.templates.some((template) => template.slug === normalized)) throw Error("El slug de plantilla ya existe");
+        const copy: PageTemplate = { ...source, id: "tpl_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: name.trim(), slug: normalized, blocks: source.blocks.map((block) => ({ ...block, id: "blk_" + Math.random().toString(16).slice(2, 8).toUpperCase() })) };
+        s.setTemplates((all) => [copy, ...all]); return { status: "duplicated", template: copy, sourceTemplateId: source.id, ui_effect: "page_template_duplicated" };
       },
     }),
     defineTool({
