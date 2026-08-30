@@ -368,6 +368,15 @@ const defaultSiteSettings: SiteSettings = {
   timezone: "America/Mexico_City",
   options: {},
 };
+function emitRegisteredHooks(event: string, payload: Record<string, unknown>) {
+  try {
+    const raw = window.localStorage.getItem("waypoint.hooks");
+    const hooks = raw ? JSON.parse(raw) as Hook[] : [];
+    hooks.filter((hook) => hook.enabled && hook.event === event).sort((a, b) => a.priority - b.priority).forEach((hook) => window.dispatchEvent(new CustomEvent("waypoint-hook", { detail: { hook, event, payload, emittedAt: new Date().toISOString() } })));
+  } catch {
+    // Invalid registry data must never interrupt content persistence.
+  }
+}
 
 export default function Home() {
   const [view, setView] = useState<View>("overview"),
@@ -483,6 +492,11 @@ export default function Home() {
     activeType,
     activeStatus,
   ]);
+  useEffect(() => {
+    const onModelUpdated = () => emitRegisteredHooks("content.changed", { source: "workspace-model" });
+    window.addEventListener("waypoint-model-updated", onModelUpdated);
+    return () => window.removeEventListener("waypoint-model-updated", onModelUpdated);
+  }, []);
   const notify = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
