@@ -116,6 +116,11 @@ async function auth(request: Request, env: Env, ctx: ExecutionContext, action: s
     const user = await currentUser(request, env);
     return user ? json({ user }, 200, request) : json({ error: "Unauthorized" }, 401, request);
   }
+  if (action === "users" && request.method === "GET") {
+    if (!await currentUser(request, env)) return json({ error: "Unauthorized" }, 401, request);
+    const result = await env.DB.prepare("SELECT id, name, email, role, created_at FROM auth_users ORDER BY created_at ASC").all<AuthUser & { created_at: string }>();
+    return json({ users: result.results.map((user) => ({ ...user, status: "Active", capabilities: [] })) }, 200, request);
+  }
   if (action === "logout" && request.method === "POST") {
     const token = parseCookies(request)[SESSION_COOKIE];
     if (token) await env.DB.prepare("DELETE FROM auth_sessions WHERE token_hash = ?1").bind(await digest(token)).run();

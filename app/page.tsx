@@ -475,6 +475,27 @@ export default function Home() {
           const payload = (await statusResponse.json()) as { setupRequired?: boolean };
           setSetupRequired(Boolean(payload.setupRequired));
         }
+        if (meResponse.ok)
+          fetch("/api/auth/users", { credentials: "same-origin" })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((payload) => {
+              const remote = (payload as { users?: Array<Partial<User> & { id: string; email: string; name: string; role: string }> } | null)?.users;
+              if (!remote?.length) return;
+              setUsers((current) => {
+                const remoteEmails = new Set(remote.map((user) => user.email.toLowerCase()));
+                const mapped = remote.map((user) => ({
+                  id: user.id,
+                  name: user.name,
+                  email: user.email,
+                  role: user.role,
+                  status: "Active" as const,
+                  capabilities: user.capabilities || [],
+                  metadata: user.metadata,
+                }));
+                return [...mapped, ...current.filter((user) => !remoteEmails.has(user.email.toLowerCase()))];
+              });
+            })
+            .catch(() => undefined);
       })
       .catch(() => {
         if (window.location.hostname === "localhost")
