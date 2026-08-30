@@ -240,6 +240,10 @@ async function media(request: Request, env: Env, key: string) {
     headers.set("Cache-Control", "private, max-age=3600");
     return new Response(object.body, { headers });
   }
+  if (request.method === "DELETE") {
+    await env.MEDIA_BUCKET.delete(key);
+    return json({ status: "deleted", key }, 200, request);
+  }
   return json({ error: "Method not allowed" }, 405, request);
 }
 

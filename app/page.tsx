@@ -780,7 +780,7 @@ export default function Home() {
   const updateComment = (comment: Comment) => { setComments((all) => all.map((item) => item.id === comment.id ? { ...comment, updatedAt: new Date().toISOString() } : item)); notify("Comment updated"); };
   const createComment = (comment: Comment) => { setComments((all) => [comment, ...all]); emitRegisteredHooks("comment.created", { comment }); notify("Comment created"); };
   const removeComment = (comment: Comment) => { if (!window.confirm("Delete this comment?")) return; setComments((all) => all.filter((item) => item.id !== comment.id)); notify("Comment deleted"); };
-  const removeMedia = (asset: MediaAsset) => { if (!window.confirm(`Delete ${asset.name}?`)) return; setMedia((all) => all.filter((item) => item.id !== asset.id)); notify("Media deleted"); };
+  const removeMedia = async (asset: MediaAsset) => { if (!window.confirm(`Delete ${asset.name}?`)) return; if (asset.url.includes("/media/")) { const key = decodeURIComponent(new URL(asset.url, window.location.origin).pathname.split("/media/")[1] || ""); const response = await fetch(`/media/${encodeURIComponent(key)}`, { method: "DELETE", credentials: "same-origin" }); if (!response.ok) { notify("Media storage deletion failed"); return; } } setMedia((all) => all.filter((item) => item.id !== asset.id)); notify("Media deleted"); };
   const createMedia = (asset: MediaAsset) => { setMedia((all) => [asset, ...all]); emitRegisteredHooks("media.created", { media: asset }); notify("Media registered"); };
   const uploadMedia = async (file: File, alt: string) => {
     const form = new FormData();
