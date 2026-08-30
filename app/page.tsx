@@ -2133,9 +2133,7 @@ function Media({ media, remove, create, update, upload }: { media: MediaAsset[];
         <div className="type-list">
           {media.map((asset) => (
             <div className="type-row" key={asset.id}>
-              <span className="entry-icon green">
-                {asset.mimeType.startsWith("image/") ? "▧" : "◫"}
-              </span>
+              {asset.mimeType.startsWith("image/") ? <span className="media-thumb" role="img" aria-label={asset.alt || asset.name} style={{ backgroundImage: "url(" + asset.url + ")" }} /> : <span className="entry-icon green">◫</span>}
               <span>
                 <b>{asset.name}</b>
                 <small>
