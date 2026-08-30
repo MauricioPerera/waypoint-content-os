@@ -2522,6 +2522,11 @@ export function createTools(s: State) {
           terms: [],
         };
         s.setTaxonomies((current) => [...current, next]);
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "taxonomy.created", taxonomy: next },
+          }),
+        );
         return {
           status: "created",
           name: next.name,
@@ -2713,6 +2718,11 @@ export function createTools(s: State) {
           current.map((t) =>
             t.slug === model.slug ? { ...t, terms: [...t.terms, term] } : t,
           ),
+        );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "term.created", taxonomy: model.slug, term },
+          }),
         );
         return {
           status: "created",
@@ -3384,6 +3394,16 @@ export function createTools(s: State) {
                 }
               : e,
           ),
+        );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: {
+              event: "relation.connected",
+              relation: model,
+              fromEntryId,
+              toEntryIds,
+            },
+          }),
         );
         return {
           status: "connected",
@@ -9848,6 +9868,9 @@ export function createTools(s: State) {
           "content.changed",
           "entry.created",
           "content_type.created",
+          "taxonomy.created",
+          "term.created",
+          "relation.connected",
           "user.created",
           "user.deleted",
           "role.created",
