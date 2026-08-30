@@ -317,6 +317,30 @@ export function createTools(s: State) {
       },
     }),
     defineTool({
+      stableKey: "page.list_templates",
+      name: "list_page_templates",
+      title: "Listar plantillas visuales",
+      description: "Lista las plantillas visuales disponibles con sus layouts y bloques; úsala antes de crear o aplicar una plantilla para conocer las bases de diseño existentes.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      annotations: { readOnlyHint: true },
+      async execute() { return { templates: s.templates.map((template) => ({ id: template.id, name: template.name, slug: template.slug, description: template.description, layoutId: template.layoutId, blockCount: template.blocks.length })), note: s.templates.length ? undefined : "El sitio no tiene plantillas visuales", ui_effect: "page_templates_listed" }; },
+    }),
+    defineTool({
+      stableKey: "page.update_template",
+      name: "update_page_template",
+      title: "Actualizar plantilla visual",
+      description: "Actualiza nombre, descripción, bloques o layout de una plantilla visual; úsala para evolucionar una base reutilizable y devuelve la plantilla guardada.",
+      inputSchema: { type: "object", properties: { templateId: { type: "string" }, name: { type: "string" }, description: { type: "string" }, blocks: { type: "array" }, layoutId: { type: "string" } }, required: ["templateId"], additionalProperties: false },
+      async execute({ templateId, name, description, blocks, layoutId }: { templateId: string; name?: string; description?: string; blocks?: PageBlock[]; layoutId?: string }) {
+        const current = s.templates.find((template) => template.id === templateId || template.slug === templateId); if (!current) throw Error("Plantilla no encontrada");
+        if (layoutId && !s.layouts.some((layout) => layout.id === layoutId || layout.slug === layoutId)) throw Error("Layout no encontrado");
+        const next = { ...current, ...(name === undefined ? {} : { name: name.trim() }), ...(description === undefined ? {} : { description: description.trim() }), ...(blocks === undefined ? {} : { blocks }), ...(layoutId === undefined ? {} : { layoutId }) };
+        if (!next.name.trim()) throw Error("El nombre de la plantilla no puede estar vacío");
+        s.setTemplates((all) => all.map((template) => template.id === current.id ? next : template));
+        return { status: "updated", template: next, ui_effect: "page_template_updated" };
+      },
+    }),
+    defineTool({
       stableKey: "page.create_layout",
       name: "create_page_layout",
       title: "Crear layout visual",
@@ -329,6 +353,28 @@ export function createTools(s: State) {
         const layout: PageLayout = { id: "layout_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: name.trim(), slug: normalized, regions: [...new Set(regions.map((region) => region.trim()).filter(Boolean))], rules };
         s.setLayouts((all) => [layout, ...all]);
         return { status: "created", layout, ui_effect: "page_layout_created" };
+      },
+    }),
+    defineTool({
+      stableKey: "page.list_layouts",
+      name: "list_page_layouts",
+      title: "Listar layouts visuales",
+      description: "Lista los layouts visuales disponibles con regiones y reglas de diseño; úsala para elegir una base antes de crear o ajustar páginas.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      annotations: { readOnlyHint: true },
+      async execute() { return { layouts: s.layouts, note: s.layouts.length ? undefined : "El sitio no tiene layouts visuales", ui_effect: "page_layouts_listed" }; },
+    }),
+    defineTool({
+      stableKey: "page.update_layout",
+      name: "update_page_layout",
+      title: "Actualizar layout visual",
+      description: "Actualiza regiones y reglas de un layout visual reutilizable; úsala para ajustar el sistema de diseño global y devuelve el layout guardado.",
+      inputSchema: { type: "object", properties: { layoutId: { type: "string" }, regions: { type: "array", items: { type: "string" } }, rules: { type: "object" } }, required: ["layoutId"], additionalProperties: false },
+      async execute({ layoutId, regions, rules }: { layoutId: string; regions?: string[]; rules?: Partial<PageLayout["rules"]> }) {
+        const current = s.layouts.find((layout) => layout.id === layoutId || layout.slug === layoutId); if (!current) throw Error("Layout no encontrado");
+        const next = { ...current, ...(regions === undefined ? {} : { regions: [...new Set(regions.map((region) => region.trim()).filter(Boolean))] }), ...(rules === undefined ? {} : { rules: { ...current.rules, ...rules } }) };
+        s.setLayouts((all) => all.map((layout) => layout.id === current.id ? next : layout));
+        return { status: "updated", layout: next, ui_effect: "page_layout_updated" };
       },
     }),
     defineTool({
