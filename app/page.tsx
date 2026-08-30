@@ -452,6 +452,8 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(true);
   const [setupRequired, setSetupRequired] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [showEntry, setShowEntry] = useState(false),
     [showTaxonomy, setShowTaxonomy] = useState(false),
     [showTerm, setShowTerm] = useState(false),
@@ -813,7 +815,7 @@ export default function Home() {
               <strong>{label(view)}</strong>
             </div>
             <div className="topbar-actions">
-              <button className="icon-button" aria-label="Search entries" onClick={() => { const query = window.prompt("Search entries, fields, relations"); if (query !== null) { setView("entries"); window.dispatchEvent(new CustomEvent("waypoint-entry-search", { detail: query })); } }}>⌕</button>
+              <button className="icon-button" aria-label="Search entries" onClick={() => setSearchOpen(true)}>⌕</button>
               <button className="icon-button" aria-label="Open agent activity" onClick={() => setView("activity")}>
                 ♧<i />
               </button>
@@ -1108,6 +1110,15 @@ export default function Home() {
               <p className="subhead">Agents can use the WebMCP tools to create and update structured content through the same workspace logic.</p>
               <div className="modal-actions"><button className="primary-button" onClick={() => setHelpOpen(false)}>Got it</button></div>
             </div>
+          </div>
+        )}
+        {searchOpen && (
+          <div className="modal-backdrop" onClick={() => setSearchOpen(false)}>
+            <form className="modal" onSubmit={(event) => { event.preventDefault(); setView("entries"); window.dispatchEvent(new CustomEvent("waypoint-entry-search", { detail: searchQuery })); setSearchOpen(false); }} onClick={(event) => event.stopPropagation()}>
+              <div className="modal-top"><div><p className="eyebrow">QUICK SEARCH</p><h2>Find content</h2></div><button type="button" onClick={() => setSearchOpen(false)}>×</button></div>
+              <input autoFocus aria-label="Search entries, fields, relations" placeholder="Search entries, fields, relations…" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+              <div className="modal-actions"><button type="button" className="ghost-button" onClick={() => setSearchOpen(false)}>Cancel</button><button className="primary-button" type="submit">Search</button></div>
+            </form>
           </div>
         )}
       </div>
