@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useEffect, useState } from "react";
 import { WebmcpRegistrar } from "../src/mcp/register";
+import { VisualCanvas } from "./visual-canvas";
 
 type View =
   | "overview"
@@ -1070,7 +1071,7 @@ export default function Home() {
               }}
             />
           )}
-          {view === "pages" && <PageBuilder pages={pages} templates={templates} layouts={layouts} createPage={createPage} updatePage={updatePage} removePage={removePage} createTemplate={createTemplate} updateTemplate={updateTemplate} removeTemplate={removeTemplate} createLayout={createLayout} updateLayout={updateLayout} />}
+          {view === "pages" && <VisualCanvas pages={pages} templates={templates} layouts={layouts} createPage={createPage} updatePage={updatePage} removePage={removePage} createTemplate={createTemplate} removeTemplate={removeTemplate} />}
           {view === "plugins" && (
             <Plugins
               plugins={plugins}
