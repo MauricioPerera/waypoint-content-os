@@ -1,0 +1,1 @@
+'use client';import {useEffect} from 'react';import {registerTools} from '@nekuda/webmcp-sdk';import {createTools} from './tools';export function WebmcpRegistrar({state}:{state:any}){useEffect(()=>{const r=registerTools(createTools(state));return()=>r.unregister()},[state]);return null}
