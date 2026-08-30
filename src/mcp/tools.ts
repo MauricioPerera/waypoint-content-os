@@ -1052,6 +1052,11 @@ export function createTools(s: State) {
         s.setUsers((all) =>
           all.map((item) => (item.id === userId ? user : item)),
         );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "user.updated", user },
+          }),
+        );
         return {
           status: "updated",
           userId,
@@ -3604,6 +3609,11 @@ export function createTools(s: State) {
           fieldTypes,
           requiredFields,
         );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "content_type.created", contentType: type },
+          }),
+        );
         return {
           status: "created",
           contentType: type,
@@ -4114,6 +4124,11 @@ export function createTools(s: State) {
         const errors = validateData(resolved, values);
         if (errors.length) throw Error(errors.join("; "));
         const entry = s.createEntry(title, resolved.name, values);
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "entry.created", entry },
+          }),
+        );
         return {
           status: "created",
           entryId: entry.id,
@@ -6362,6 +6377,11 @@ export function createTools(s: State) {
           JSON.stringify(settings),
         );
         window.dispatchEvent(new Event("waypoint-settings-updated"));
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "settings.updated", settings },
+          }),
+        );
         return {
           status: "updated",
           settings,
