@@ -2,6 +2,10 @@
 
 CMS agent-first inspirado en WordPress. Permite gestionar contenido estructurado desde una interfaz humana o mediante herramientas WebMCP para agentes de IA.
 
+Sitio público: [waypoint-content-os GitHub Page](https://mauricioperera.github.io/waypoint-content-os/)
+
+Documentación: [guía de plugins, hooks y webhooks](https://mauricioperera.github.io/waypoint-content-os/plugins.html)
+
 ## Capacidades
 
 - Tipos de entrada, campos personalizados, metadatos, términos, taxonomías y relaciones.
