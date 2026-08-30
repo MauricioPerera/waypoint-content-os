@@ -2600,6 +2600,11 @@ export function createTools(s: State) {
         s.setTaxonomies((all) =>
           all.map((item) => (item.slug === current.slug ? updated : item)),
         );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "taxonomy.updated", taxonomy: updated },
+          }),
+        );
         if (nextSlug !== current.slug)
           s.setTermAssignments((all) =>
             all.map((item) =>
@@ -2654,6 +2659,11 @@ export function createTools(s: State) {
           };
         s.setTaxonomies((all) =>
           all.filter((item) => item.slug !== current.slug),
+        );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "taxonomy.deleted", taxonomy: current.slug },
+          }),
         );
         return {
           status: "deleted",
@@ -2869,6 +2879,11 @@ export function createTools(s: State) {
               : t,
           ),
         );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "term.updated", taxonomy: model.slug, term: updated },
+          }),
+        );
         return {
           status: "updated",
           taxonomy: model.slug,
@@ -2933,6 +2948,11 @@ export function createTools(s: State) {
                 }
               : t,
           ),
+        );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "term.deleted", taxonomy: model.slug, term: current.slug },
+          }),
         );
         return {
           status: "deleted",
@@ -3136,6 +3156,11 @@ export function createTools(s: State) {
           cardinality: cardinality || "many",
         };
         s.setRelations((all) => [...all, next]);
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "relation.created", relation: next },
+          }),
+        );
         return {
           status: "created",
           relation: next,
@@ -3212,6 +3237,11 @@ export function createTools(s: State) {
         s.setRelations((all) =>
           all.map((item) => (item.id === current.id ? updated : item)),
         );
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "relation.updated", relation: updated },
+          }),
+        );
         return {
           status: "updated",
           relation: updated,
@@ -3266,6 +3296,11 @@ export function createTools(s: State) {
             note: "Repite con confirm:true para eliminar esta relación",
           };
         s.setRelations((all) => all.filter((item) => item.id !== current.id));
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: { event: "relation.deleted", relation: current },
+          }),
+        );
         return {
           status: "deleted",
           relation: current.slug,
@@ -3507,6 +3542,16 @@ export function createTools(s: State) {
             ),
           );
         }
+        window.dispatchEvent(
+          new CustomEvent("waypoint-hook", {
+            detail: {
+              event: "relation.disconnected",
+              relation: model,
+              fromEntryId,
+              toEntryIds: selected.map((connection) => connection.toEntryId),
+            },
+          }),
+        );
         return {
           status: "disconnected",
           relation: model.slug,
@@ -9869,8 +9914,16 @@ export function createTools(s: State) {
           "entry.created",
           "content_type.created",
           "taxonomy.created",
+          "taxonomy.updated",
+          "taxonomy.deleted",
           "term.created",
+          "term.updated",
+          "term.deleted",
+          "relation.created",
+          "relation.updated",
+          "relation.deleted",
           "relation.connected",
+          "relation.disconnected",
           "user.created",
           "user.deleted",
           "role.created",
