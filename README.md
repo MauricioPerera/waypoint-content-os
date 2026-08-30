@@ -61,7 +61,7 @@ El despliegue utiliza estas bindings:
 - D1: `waypoint-content-os-db`
 - R2: `waypoint-content-os-media`
 
-URL pública actual: [waypoint-content-os.rckflr.workers.dev](https://waypoint-content-os.rckflr.workers.dev/)
+Código fuente: [github.com/MauricioPerera/waypoint-content-os](https://github.com/MauricioPerera/waypoint-content-os)
 
 ## Autenticación y correo
 
