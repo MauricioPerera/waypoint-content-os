@@ -696,7 +696,7 @@ export default function Home() {
               create={() => setShowRelation(true)}
             />
           )}{" "}
-          {view === "users" && <Users users={users} />}{" "}
+          {view === "users" && <Users users={users} update={(next) => { setUsers((all) => all.map((user) => user.id === next.id ? next : user)); notify("User updated"); }} />}{" "}
           {view === "plugins" && <Plugins plugins={plugins} />}{" "}
           {view === "media" && <Media media={media} />}{" "}
           {view === "comments" && (
@@ -978,7 +978,11 @@ function Settings({
     </div>
   );
 }
-function Users({ users }: { users: User[] }) {
+function Users({ users, update }: { users: User[]; update: (user: User) => void }) {
+  const [editing, setEditing] = useState<User>();
+  const [metadataText, setMetadataText] = useState("");
+  const openEditor = (user: User) => { setEditing(user); setMetadataText(JSON.stringify(user.metadata || {}, null, 2)); };
+  const saveEditor = () => { if (!editing) return; let metadata: Record<string, unknown>; try { metadata = JSON.parse(metadataText || "{}"); } catch { return; } if (!metadata || Array.isArray(metadata) || typeof metadata !== "object") return; update({ ...editing, name: editing.name.trim(), email: editing.email.trim().toLowerCase(), metadata }); setEditing(undefined); };
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -1010,6 +1014,7 @@ function Users({ users }: { users: User[] }) {
                 <th>Status</th>
                 <th>Capabilities</th>
                 <th>Metadata</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -1034,12 +1039,14 @@ function Users({ users }: { users: User[] }) {
                   </td>
                   <td>{user.capabilities.length} granted</td>
                   <td>{Object.keys(user.metadata || {}).length} keys</td>
+                  <td><button className="text-button" onClick={() => openEditor(user)}>Edit</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
+      {editing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">USER PROFILE</p><h2>Edit {editing.name}</h2></div><button className="text-button" onClick={() => setEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label>Email<input type="email" value={editing.email} onChange={(event) => setEditing({ ...editing, email: event.target.value })} /></label><label>Metadata (JSON)<textarea rows={7} value={metadataText} onChange={(event) => setMetadataText(event.target.value)} /></label><div className="modal-actions"><button className="primary-button" onClick={saveEditor}>Save user</button></div></div></section>}
     </div>
   );
 }
