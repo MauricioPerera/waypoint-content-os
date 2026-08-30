@@ -3,6 +3,7 @@ import './globals.css';
 import './taxonomies.css';
 import './relations.css';
 import './schema.css';
+import './auth.css';
 
 export const metadata: Metadata = {
   title: 'Waypoint — Agent-first content OS',
