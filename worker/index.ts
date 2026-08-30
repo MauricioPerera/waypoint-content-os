@@ -2,6 +2,7 @@ import framework from "../dist/server/index.js";
 
 interface Env {
   DB: D1Database;
+  MEDIA_BUCKET: R2Bucket;
   ASSETS?: { fetch(request: Request): Promise<Response> };
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
@@ -229,10 +230,38 @@ async function registry(request: Request, env: Env, key: string) {
   return json({ status: "saved", updatedAt }, 200, request);
 }
 
+async function media(request: Request, env: Env, key: string) {
+  if (!await currentUser(request, env)) return json({ error: "Unauthorized" }, 401, request);
+  if (request.method === "GET") {
+    const object = await env.MEDIA_BUCKET.get(key);
+    if (!object) return new Response("Not found", { status: 404 });
+    const headers = new Headers(apiHeaders(request));
+    headers.set("Content-Type", object.httpMetadata?.contentType || "application/octet-stream");
+    headers.set("Cache-Control", "private, max-age=3600");
+    return new Response(object.body, { headers });
+  }
+  return json({ error: "Method not allowed" }, 405, request);
+}
+
+async function uploadMedia(request: Request, env: Env) {
+  if (!await currentUser(request, env)) return json({ error: "Unauthorized" }, 401, request);
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, request);
+  const form = await request.formData();
+  const file = form.get("file");
+  if (!(file instanceof File) || !file.size) return json({ error: "Archivo requerido" }, 400, request);
+  if (file.size > 10 * 1024 * 1024) return json({ error: "El archivo supera el límite de 10 MB" }, 413, request);
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-120) || "upload";
+  const key = `media/${randomToken(12)}-${safeName}`;
+  await env.MEDIA_BUCKET.put(key, file.stream(), { httpMetadata: { contentType: file.type || "application/octet-stream", cacheControl: "private, max-age=3600" } });
+  return json({ key, url: `${new URL(request.url).origin}/media/${encodeURIComponent(key)}`, name: file.name, mimeType: file.type || "application/octet-stream", size: file.size }, 201, request);
+}
+
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/api/auth/")) return auth(request, env, ctx, path.slice("/api/auth/".length));
+    if (path === "/api/media/upload") return uploadMedia(request, env);
+    if (path.startsWith("/media/")) return media(request, env, decodeURIComponent(path.slice("/media/".length)));
     if (path === "/api/state") return state(request, env);
     if (path.startsWith("/api/registry/")) return registry(request, env, path.slice("/api/registry/".length));
     if (env.ASSETS && (path.startsWith("/_next/") || path === "/favicon.svg")) {

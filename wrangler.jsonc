@@ -14,5 +14,11 @@
       "database_id": "0b622169-6328-47b3-9d91-bd666a98ff06",
       "migrations_dir": "./migrations"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_BUCKET",
+      "bucket_name": "waypoint-content-os-media"
+    }
   ]
 }

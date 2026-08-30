@@ -782,6 +782,14 @@ export default function Home() {
   const removeComment = (comment: Comment) => { if (!window.confirm("Delete this comment?")) return; setComments((all) => all.filter((item) => item.id !== comment.id)); notify("Comment deleted"); };
   const removeMedia = (asset: MediaAsset) => { if (!window.confirm(`Delete ${asset.name}?`)) return; setMedia((all) => all.filter((item) => item.id !== asset.id)); notify("Media deleted"); };
   const createMedia = (asset: MediaAsset) => { setMedia((all) => [asset, ...all]); emitRegisteredHooks("media.created", { media: asset }); notify("Media registered"); };
+  const uploadMedia = async (file: File, alt: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch("/api/media/upload", { method: "POST", credentials: "same-origin", body: form });
+    const result = await response.json() as { url?: string; name?: string; mimeType?: string; size?: number; error?: string };
+    if (!response.ok || !result.url) throw new Error(result.error || "Could not upload media");
+    createMedia({ id: "med_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: result.name || file.name, url: result.url, mimeType: result.mimeType || file.type || "application/octet-stream", size: result.size || file.size, alt: alt.trim(), attachedEntryIds: [], createdAt: new Date().toISOString() });
+  };
   const updateMedia = (asset: MediaAsset) => { setMedia((all) => all.map((item) => item.id === asset.id ? asset : item)); emitRegisteredHooks("media.updated", { media: asset }); notify("Media updated"); };
   const removeMenu = (menu: Menu) => { if (!window.confirm(`Delete menu ${menu.name}?`)) return; setMenus((all) => all.filter((item) => item.id !== menu.id)); notify("Menu deleted"); };
   const createMenu = (menu: Menu) => { setMenus((all) => [menu, ...all]); emitRegisteredHooks("menu.created", { menu }); notify("Menu created"); };
@@ -1117,7 +1125,7 @@ export default function Home() {
               }}
             />
           )}{" "}
-          {view === "media" && <Media media={media} remove={removeMedia} create={createMedia} update={updateMedia} />} {" "}
+          {view === "media" && <Media media={media} remove={removeMedia} create={createMedia} update={updateMedia} upload={uploadMedia} />} {" "}
           {view === "comments" && (
             <Comments comments={comments} entries={entries} update={updateComment} remove={removeComment} create={createComment} />
           )}{" "}
@@ -2088,9 +2096,18 @@ function Users({
     </div>
   );
 }
-function Media({ media, remove, create, update }: { media: MediaAsset[]; remove: (asset: MediaAsset) => void; create: (asset: MediaAsset) => void; update: (asset: MediaAsset) => void }) {
+function Media({ media, remove, create, update, upload }: { media: MediaAsset[]; remove: (asset: MediaAsset) => void; create: (asset: MediaAsset) => void; update: (asset: MediaAsset) => void; upload: (file: File, alt: string) => Promise<void> }) {
   const [draft, setDraft] = useState({ name: "", url: "", alt: "" });
+  const [file, setFile] = useState<File>();
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const [editing, setEditing] = useState<MediaAsset>();
+  const uploadFile = async () => {
+    if (!file) return;
+    setUploading(true);
+    setUploadError("");
+    try { await upload(file, draft.alt); setFile(undefined); setDraft({ name: "", url: "", alt: "" }); } catch (error) { setUploadError(error instanceof Error ? error.message : "Could not upload media"); } finally { setUploading(false); }
+  };
   return (
     <div className="page">
       <div className="page-heading compact">
@@ -2137,7 +2154,7 @@ function Media({ media, remove, create, update }: { media: MediaAsset[]; remove:
         </div>
       </section>
       {editing && <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><h2>Edit media</h2><button className="text-button" onClick={() => setEditing(undefined)}>Close</button></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label>URL<input value={editing.url} onChange={(event) => setEditing({ ...editing, url: event.target.value })} /></label><label>Alt text<input value={editing.alt || ""} onChange={(event) => setEditing({ ...editing, alt: event.target.value })} /></label><label>Metadata (JSON)<textarea rows={4} value={JSON.stringify(editing.metadata || {}, null, 2)} onChange={(event) => { try { setEditing({ ...editing, metadata: JSON.parse(event.target.value) }); } catch {} }} /></label><div className="modal-actions"><button className="primary-button" onClick={() => { update(editing); setEditing(undefined); }}>Save media</button></div></div></section>}
-      <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">REGISTER ASSET</p><h2>Add media</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="cover.jpg" /></label><label>URL<input type="url" value={draft.url} onChange={(event) => setDraft({ ...draft, url: event.target.value })} placeholder="https://…" /></label><label>Alt text<input value={draft.alt} onChange={(event) => setDraft({ ...draft, alt: event.target.value })} /></label><div className="modal-actions"><button className="primary-button" disabled={!draft.name.trim() || !draft.url.trim()} onClick={() => { create({ id: "med_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: draft.name.trim(), url: draft.url.trim(), mimeType: "application/octet-stream", size: 0, alt: draft.alt.trim(), attachedEntryIds: [], createdAt: new Date().toISOString() }); setDraft({ name: "", url: "", alt: "" }); }}>Register media</button></div></div></section>
+      <section className="card entries-card" style={{ marginTop: 16 }}><div className="card-heading"><div><p className="eyebrow">REGISTER ASSET</p><h2>Add media</h2></div></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0 }}><label>Upload file<input type="file" onChange={(event) => setFile(event.target.files?.[0])} /></label><label>Alt text<input value={draft.alt} onChange={(event) => setDraft({ ...draft, alt: event.target.value })} /></label>{uploadError && <p className="error-message" role="alert">{uploadError}</p>}<div className="modal-actions"><button className="primary-button" disabled={!file || uploading} onClick={uploadFile}>{uploading ? "Uploading…" : "Upload to R2"}</button></div><p className="subhead">Private authenticated storage, maximum 10 MB per file.</p></div><div className="modal" style={{ width: "100%", boxShadow: "none", borderRadius: 0, marginTop: 10 }}><label>Name<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="cover.jpg" /></label><label>Register external URL<input type="url" value={draft.url} onChange={(event) => setDraft({ ...draft, url: event.target.value })} placeholder="https://…" /></label><div className="modal-actions"><button className="primary-button" disabled={!draft.name.trim() || !draft.url.trim()} onClick={() => { create({ id: "med_" + Math.random().toString(16).slice(2, 8).toUpperCase(), name: draft.name.trim(), url: draft.url.trim(), mimeType: "application/octet-stream", size: 0, alt: draft.alt.trim(), attachedEntryIds: [], createdAt: new Date().toISOString() }); setDraft({ name: "", url: "", alt: "" }); }}>Register URL</button></div></div></section>
     </div>
   );
 }
