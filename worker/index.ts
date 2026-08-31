@@ -325,6 +325,61 @@ async function uploadMedia(request: Request, env: Env) {
   return json({ key, url: `${new URL(request.url).origin}/media/${encodeURIComponent(key)}`, name: file.name, mimeType: contentType, size: file.size }, 201, request);
 }
 
+type PublishedBlock = { type?: string; content?: string; settings?: Record<string, unknown> };
+type PublishedPage = { title: string; slug: string; status: string; blocks?: PublishedBlock[]; metadata?: Record<string, unknown> };
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function safePublishedUrl(value: unknown) {
+  const candidate = String(value ?? "").trim();
+  if (candidate.startsWith("/")) return escapeHtml(candidate);
+  try {
+    const parsed = new URL(candidate);
+    return ["http:", "https:"].includes(parsed.protocol) ? escapeHtml(parsed.toString()) : "#";
+  } catch {
+    return "#";
+  }
+}
+
+function renderPublishedBlock(block: PublishedBlock) {
+  const content = escapeHtml(block.content);
+  const align = ["left", "center", "right"].includes(String(block.settings?.align)) ? String(block.settings?.align) : "left";
+  const style = `text-align:${align};`;
+  if (block.type === "button") return `<a class="page-button" style="${style}" href="${safePublishedUrl(block.settings?.url || "/")}">${content}</a>`;
+  if (block.type === "image") return `<img class="page-image" src="${safePublishedUrl(block.content)}" alt="">`;
+  if (block.type === "divider") return "<hr>";
+  const heading = block.settings?.variant === "hero" ? " page-hero" : "";
+  return `<div class="page-copy${heading}" style="${style}">${content}</div>`;
+}
+
+async function publishedPage(env: Env, slug: string) {
+  if (!slug || slug.includes("/")) return null;
+  const row = await env.DB.prepare("SELECT data FROM workspace_state WHERE id = ?1").bind("default").first<{ data: string }>();
+  if (!row) return null;
+  try {
+    const state = JSON.parse(row.data) as { pages?: PublishedPage[] };
+    return state.pages?.find((page) => page.slug === slug && page.status === "Published") || null;
+  } catch {
+    return null;
+  }
+}
+
+async function renderPublishedPage(env: Env, slug: string) {
+  const page = await publishedPage(env, slug);
+  if (!page) return null;
+  const title = escapeHtml(page.title);
+  const description = escapeHtml(page.metadata?.seoDescription || `Página publicada en Waypoint Content OS: ${page.title}`);
+  const blocks = (page.blocks || []).map(renderPublishedBlock).join("\n");
+  return new Response(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Waypoint</title><meta name="description" content="${description}"><style>:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#101314;color:#f4f6f2}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top left,#263629 0,#101314 42%);min-height:100vh}.published-page{width:min(960px,calc(100% - 40px));margin:0 auto;padding:32px 0 72px}.page-brand{color:#d7ff4f;font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.page-shell{margin-top:72px;padding:clamp(28px,7vw,84px);border:1px solid #39413b;border-radius:28px;background:#171c1bdb;box-shadow:0 20px 80px #0008}.page-title{margin:0 0 40px;font-size:clamp(42px,8vw,86px);line-height:.98;letter-spacing:-.06em}.page-copy{margin:18px 0;color:#bec8c0;font-size:clamp(18px,2.4vw,25px);line-height:1.5}.page-hero{color:#f4f6f2;font-size:clamp(34px,6vw,66px);font-weight:800;line-height:1.02;letter-spacing:-.05em}.page-button{display:inline-block;margin-top:18px;padding:14px 20px;border-radius:12px;background:#d7ff4f;color:#101314;font-weight:800;text-decoration:none}.page-image{display:block;max-width:100%;height:auto;border-radius:18px;margin:24px auto}.page-shell hr{border:0;border-top:1px solid #4a554c;margin:32px 0}</style></head><body><main class="published-page"><div class="page-brand">Waypoint Content OS</div><article class="page-shell"><h1 class="page-title">${title}</h1>${blocks}</article></main></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;
@@ -337,6 +392,10 @@ const worker = {
     if (env.ASSETS && (path.startsWith("/_next/") || path === "/favicon.svg")) {
       const asset = await env.ASSETS.fetch(request);
       if (asset.status !== 404) return asset;
+    }
+    if (request.method === "GET" && path !== "/" && !path.includes(".")) {
+      const page = await renderPublishedPage(env, decodeURIComponent(path.slice(1).replace(/\/$/, "")));
+      if (page) return page;
     }
     return app(request, env, ctx);
   },
