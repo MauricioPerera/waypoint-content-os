@@ -104,23 +104,37 @@
         </section>
         <section id="actions">
           <h2>6. Registra una acción</h2>
-          <p>Una acción representa una intención ejecutable. Declara un nombre estable, una etiqueta humana, una descripción y las capacidades que requiere.</p>
+          <p>Una acción representa una intención ejecutable. Declara un nombre estable, una etiqueta humana, una descripción y las capacidades que requiere. Si debe notificar a un sistema externo, añade <code>webhookUrl</code>; Waypoint persiste la URL, pero nunca guarda el secreto de firma.</p>
           <pre class="code">await agent.call("register_action", {
   name: "sync_entry_to_crm",
   label: "Sincronizar entrada con CRM",
   description: "Envía una entrada concreta al CRM externo",
   pluginSlug: "crm-sync",
-  capabilities: ["content.read", "webhook.send"]
+  capabilities: ["content.read", "webhook.send"],
+  webhookUrl: "https://crm.example.com/webhooks/waypoint"
 });</pre>
-          <p>Puedes probarla desde <strong>Actions → Run test</strong>. El CMS emite un evento seguro; no evalúa funciones recibidas ni ejecuta código externo dentro del navegador.</p>
+          <p>Puedes probarla desde <strong>Actions → Run test</strong> escribiendo el secreto en el campo temporal de la pantalla. El CMS emite un evento seguro; no evalúa funciones recibidas ni ejecuta código externo dentro del navegador.</p>
           <pre class="code">await agent.call("dispatch_action", {
   action: "sync_entry_to_crm",
-  payload: { entryId: "entry_123" }
+  payload: { entryId: "entry_123" },
+  webhookSecret: "secret-loaded-from-your-worker"
 });</pre>
         </section>
         <section id="webhooks">
-          <h2>7. Conecta el webhook en tu Worker</h2>
-          <p>La entrega HTTP real debe vivir detrás de una acción o Worker de integración. El handler recibe un evento normalizado, valida la firma y delega el trabajo pesado a una cola o proceso asíncrono.</p>
+          <h2>7. Recibe el webhook en tu Worker</h2>
+          <p>Waypoint realiza la entrega HTTP desde <code>POST /api/webhooks/dispatch</code> después de autenticar al usuario. El endpoint valida que el destino sea HTTP(S), genera un identificador de entrega, firma el JSON exacto con HMAC-SHA-256 y espera como máximo cinco segundos por la respuesta.</p>
+          <pre class="code">await fetch("/api/webhooks/dispatch", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    url: "https://crm.example.com/webhooks/waypoint",
+    event: "entry.published",
+    id: "entry_123",
+    payload: { type: "case_study", status: "published" },
+    secret: env.WAYPOINT_WEBHOOK_SECRET
+  })
+});</pre>
+          <p>El receptor debe validar <code>X-Waypoint-Signature: sha256=&lt;hex&gt;</code> contra el cuerpo sin modificarlo. También recibe <code>X-Waypoint-Event</code> y <code>X-Waypoint-Delivery</code>.</p>
           <pre class="code">export default {
   async fetch(request, env) {
     if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
@@ -132,14 +146,14 @@
     return Response.json({ accepted: true });
   }
 };</pre>
-          <p>Payload recomendado:</p>
+          <p>El payload que firma Waypoint tiene esta forma:</p>
           <pre class="code">{
   "event": "entry.published",
-  "id": "evt_01J...",
+  "id": "entry_123",
   "occurredAt": "2026-08-30T12:00:00Z",
-  "entry": { "id": "entry_123", "type": "case_study" }
+  "payload": { "type": "case_study", "status": "published" }
 }</pre>
-          <p>Firma el cuerpo sin modificarlo, usa el identificador de evento para deduplicar y responde rápido. Reintenta errores transitorios con backoff; no reintentes respuestas 4xx sin corregir primero el payload.</p>
+          <p>Firma el cuerpo sin modificarlo, usa <code>X-Waypoint-Delivery</code> para deduplicar y responde rápido. Un destino correcto devuelve <code>status: "delivered"</code>; una respuesta no-2xx o un timeout devuelve <code>status: "failed"</code>. Reintenta errores transitorios con backoff; no reintentes respuestas 4xx sin corregir primero el payload.</p>
         </section>
         <section id="test">
           <h2>8. Prueba la extensión</h2>
@@ -148,7 +162,8 @@
             <li>Comprueba que aparece con <code>list_plugins</code> y lee su contrato con <code>get_plugin</code>.</li>
             <li>Registra el hook y la acción con el mismo <code>pluginSlug</code>.</li>
             <li>Usa <strong>Test</strong> en Hooks y <strong>Run test</strong> en Actions.</li>
-            <li>Verifica en tu Worker la firma, la deduplicación y el payload.</li>
+            <li>Apunta temporalmente <code>webhookUrl</code> a un receptor HTTP de pruebas.</li>
+            <li>Verifica en el receptor la firma, las cabeceras, la deduplicación y el payload.</li>
             <li>Activa el plugin solo después de revisar permisos, dependencias y logs.</li>
           </ol>
           <pre class="code">npm test
@@ -163,7 +178,7 @@
             <li>Aplica mínimo privilegio: separa lectura, escritura y envío externo.</li>
             <li>Registra actor, plugin, hook, acción, recurso, resultado y timestamp.</li>
             <li>Desactiva antes de retirar una integración y conserva el historial.</li>
-            <li>La plataforma actual ofrece registro declarativo y eventos seguros; la lógica HTTP debe implementarse en tu integración Worker.</li>
+            <li>El secreto se envía solo durante la entrega; no lo incluyas en el manifest ni en la configuración del plugin.</li>
           </ul>
           <div class="notice">Resumen: manifest → install_plugin → register_hook/register_action → Worker de integración → webhook firmado.</div>
         </section>

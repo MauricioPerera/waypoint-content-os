@@ -135,6 +135,7 @@ type Action = {
   label: string;
   description: string;
   pluginSlug?: string;
+  webhookUrl?: string;
   capabilities?: string[];
 };
 type MediaAsset = {
@@ -2355,6 +2356,8 @@ function Plugins({
   const [hookEvent, setHookEvent] = useState("content.changed");
   const [actionName, setActionName] = useState("");
   const [actionLabel, setActionLabel] = useState("");
+  const [actionWebhookUrl, setActionWebhookUrl] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
   const [registryNotice, setRegistryNotice] = useState("");
   const [pluginDraft, setPluginDraft] = useState({
     name: "",
@@ -2443,11 +2446,13 @@ function Plugins({
       name: actionName.trim(),
       label: actionLabel.trim(),
       description: actionLabel.trim(),
+      webhookUrl: actionWebhookUrl.trim() || undefined,
       capabilities: [],
     };
     persistRegistry("actions", [...actions, action]);
     setActionName("");
     setActionLabel("");
+    setActionWebhookUrl("");
   };
   const toggleHook = (hook: Hook) => {
     persistRegistry(
@@ -2470,9 +2475,33 @@ function Plugins({
     recordTestRun({ id: hook.id + Date.now(), kind: "hook", label: hook.name, createdAt: new Date().toISOString() });
     setRegistryNotice(`Hook ${hook.name} emitted successfully.`);
   };
-  const runAction = (action: Action) => {
+  const runAction = async (action: Action) => {
     window.dispatchEvent(new CustomEvent("waypoint-action", { detail: { action, input: {}, runAt: new Date().toISOString() } }));
     recordTestRun({ id: action.id + Date.now(), kind: "action", label: action.label, createdAt: new Date().toISOString() });
+    if (action.webhookUrl) {
+      if (!webhookSecret.trim()) {
+        setRegistryNotice("Add a signing secret before testing this webhook.");
+        return;
+      }
+      try {
+        const response = await fetch("/api/webhooks/dispatch", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: action.webhookUrl,
+            event: "action:" + action.name,
+            payload: { action: action.name, input: {} },
+            secret: webhookSecret,
+          }),
+        });
+        const result = await response.json() as { status?: string; error?: string };
+        setRegistryNotice(response.ok ? `Webhook delivered (${result.status}).` : result.error || "Webhook delivery failed.");
+      } catch {
+        setRegistryNotice("Webhook delivery failed.");
+      }
+      return;
+    }
     setRegistryNotice(`Action ${action.label} dispatched safely.`);
   };
   const installPlugin = () => {
@@ -2800,12 +2829,29 @@ function Plugins({
                 placeholder="e.g. refresh_cache"
               />
             </label>
-            <label>
-              Label
+          <label>
+            Label
               <input
                 value={actionLabel}
                 onChange={(event) => setActionLabel(event.target.value)}
                 placeholder="Refresh cache"
+              />
+            </label>
+            <label>
+              Webhook URL (optional)
+              <input
+                value={actionWebhookUrl}
+                onChange={(event) => setActionWebhookUrl(event.target.value)}
+                placeholder="https://example.com/webhooks/waypoint"
+              />
+            </label>
+            <label>
+              Signing secret (test only)
+              <input
+                type="password"
+                value={webhookSecret}
+                onChange={(event) => setWebhookSecret(event.target.value)}
+                placeholder="Never stored in the action"
               />
             </label>
             <div className="modal-actions">

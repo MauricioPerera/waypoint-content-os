@@ -154,6 +154,7 @@ export type Action = {
   label: string;
   description: string;
   pluginSlug?: string;
+  webhookUrl?: string;
   capabilities?: string[];
 };
 export type PageBlock = { id: string; type: "text" | "image" | "button" | "columns" | "divider" | "html"; content: string; settings?: Record<string, unknown> };
@@ -588,6 +589,7 @@ export function createTools(s: State) {
           label: { type: "string" },
           description: { type: "string" },
           pluginSlug: { type: "string" },
+          webhookUrl: { type: "string" },
           capabilities: { type: "array", items: { type: "string" } },
         },
         required: ["name", "label", "description"],
@@ -598,12 +600,14 @@ export function createTools(s: State) {
         label,
         description,
         pluginSlug,
+        webhookUrl,
         capabilities,
       }: {
         name: string;
         label: string;
         description: string;
         pluginSlug?: string;
+        webhookUrl?: string;
         capabilities?: string[];
       }) {
         const actions = readRegistry("waypoint.actions") as Action[];
@@ -617,6 +621,7 @@ export function createTools(s: State) {
           label: label.trim(),
           description: description.trim(),
           pluginSlug: pluginSlug?.trim() || undefined,
+          webhookUrl: webhookUrl?.trim() || undefined,
           capabilities: [...new Set(capabilities || [])],
         };
         writeRegistry("waypoint.actions", [...actions, action]);
@@ -631,16 +636,22 @@ export function createTools(s: State) {
         "Despacha una acción registrada con un payload JSON para que la aplicación y sus hooks reaccionen; no evalúa ni ejecuta funciones recibidas.",
       inputSchema: {
         type: "object",
-        properties: { action: { type: "string" }, payload: { type: "object" } },
+        properties: {
+          action: { type: "string" },
+          payload: { type: "object" },
+          webhookSecret: { type: "string" },
+        },
         required: ["action"],
         additionalProperties: false,
       },
       async execute({
         action,
         payload,
+        webhookSecret,
       }: {
         action: string;
         payload?: Record<string, unknown>;
+        webhookSecret?: string;
       }) {
         const actions = readRegistry("waypoint.actions") as Action[];
         const current = actions.find(
@@ -658,10 +669,28 @@ export function createTools(s: State) {
             detail: { event: "action:" + current.name, ...detail },
           }),
         );
+        let webhook;
+        if (current.webhookUrl) {
+          if (!webhookSecret) throw Error("webhookSecret es obligatorio para despachar esta acción");
+          const response = await fetch("/api/webhooks/dispatch", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: current.webhookUrl,
+              event: "action:" + current.name,
+              payload: detail,
+              secret: webhookSecret,
+            }),
+          });
+          webhook = await response.json();
+          if (!response.ok) throw Error((webhook as { error?: string }).error || "Webhook delivery failed");
+        }
         return {
           status: "dispatched",
           action: current,
           detail,
+          webhook,
           ui_effect: "action_dispatched",
         };
       },

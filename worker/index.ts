@@ -108,6 +108,68 @@ async function sendEmail(env: Env, to: string, subject: string, html: string) {
   if (!response.ok) console.error("resend_email_failed", response.status);
 }
 
+function bytesToHex(bytes: Uint8Array) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function signWebhook(value: string, secret: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+  return bytesToHex(new Uint8Array(signature));
+}
+
+async function dispatchWebhook(request: Request, env: Env) {
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, request);
+  if (!await currentUser(request, env)) return json({ error: "Unauthorized" }, 401, request);
+  let body: { url?: string; event?: string; id?: string; payload?: unknown; secret?: string };
+  try { body = await request.json(); } catch { return json({ error: "Invalid JSON" }, 400, request); }
+  const rawUrl = body.url?.trim() || "";
+  const event = body.event?.trim() || "";
+  const secret = body.secret || "";
+  if (!rawUrl || !event || !secret) return json({ error: "url, event y secret son obligatorios" }, 400, request);
+  let target: URL;
+  try { target = new URL(rawUrl); } catch { return json({ error: "URL de webhook inválida" }, 400, request); }
+  if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password)
+    return json({ error: "El webhook solo admite URLs HTTP(S) sin credenciales embebidas" }, 400, request);
+  const deliveryId = body.id?.trim() || `evt_${randomToken(12)}`;
+  const document = { event, id: deliveryId, occurredAt: new Date().toISOString(), payload: body.payload ?? {} };
+  const serialized = JSON.stringify(document);
+  const signature = await signWebhook(serialized, secret);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(target.toString(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Waypoint-Event": event,
+        "X-Waypoint-Delivery": deliveryId,
+        "X-Waypoint-Signature": `sha256=${signature}`,
+      },
+      body: serialized,
+      signal: controller.signal,
+    });
+    const responseText = (await response.text()).slice(0, 2048);
+    return json({
+      status: response.ok ? "delivered" : "failed",
+      deliveryId,
+      event,
+      targetStatus: response.status,
+      response: responseText,
+    }, response.ok ? 200 : 502, request);
+  } catch (error) {
+    return json({ status: "failed", deliveryId, error: error instanceof Error ? error.message : "Webhook delivery failed" }, 502, request);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function issuePasswordReset(request: Request, env: Env, ctx: ExecutionContext, email: string) {
   const user = await env.DB.prepare("SELECT id, name, email FROM auth_users WHERE email = ?1").bind(email).first<{ id: string; name: string; email: string }>();
   if (user) {
@@ -268,6 +330,7 @@ const worker = {
     const path = new URL(request.url).pathname;
     if (path.startsWith("/api/auth/")) return auth(request, env, ctx, path.slice("/api/auth/".length));
     if (path === "/api/media/upload") return uploadMedia(request, env);
+    if (path === "/api/webhooks/dispatch") return dispatchWebhook(request, env);
     if (path.startsWith("/media/")) return media(request, env, decodeURIComponent(path.slice("/media/".length)));
     if (path === "/api/state") return state(request, env);
     if (path.startsWith("/api/registry/")) return registry(request, env, path.slice("/api/registry/".length));

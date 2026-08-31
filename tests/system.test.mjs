@@ -39,9 +39,11 @@ test("plugin extension surface supports install, hooks, actions, and persistence
   assert.match(page, /runAction/);
   assert.match(page, /\/api\/registry\/hooks/);
   assert.match(page, /\/api\/registry\/actions/);
+  assert.match(page, /\/api\/webhooks\/dispatch/);
   assert.match(tools, /plugin/);
   assert.match(tools, /hook/);
   assert.match(tools, /action/);
+  assert.match(tools, /webhookSecret/);
 });
 
 test("public application renders the authentication shell", async () => {
@@ -57,12 +59,16 @@ test("protected API routes reject anonymous requests", async () => {
     "/api/registry/settings",
     "/api/registry/hooks",
     "/api/registry/actions",
+    "/api/webhooks/dispatch",
     "/api/media/upload",
     "/media/not-found",
   ];
 
   const results = await Promise.all(paths.map(async (path) => {
-    const response = await fetch(`${baseUrl}${path}`, { redirect: "manual" });
+    const init = path === "/api/webhooks/dispatch"
+      ? { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }
+      : {};
+    const response = await fetch(baseUrl + path, { ...init, redirect: "manual" });
     return [path, response.status];
   }));
 
