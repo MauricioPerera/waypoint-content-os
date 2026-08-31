@@ -349,10 +349,16 @@ function safePublishedUrl(value: unknown) {
   }
 }
 
+function safePublishedColor(value: unknown) {
+  const candidate = String(value ?? "").trim();
+  return /^#[0-9a-fA-F]{3,8}$/.test(candidate) ? candidate : "";
+}
+
 function renderPublishedBlock(block: PublishedBlock) {
   const content = escapeHtml(block.content);
   const align = ["left", "center", "right"].includes(String(block.settings?.align)) ? String(block.settings?.align) : "left";
-  const style = `text-align:${align};`;
+  const color = safePublishedColor(block.settings?.color);
+  const style = `text-align:${align};${color ? `color:${color};` : ""}`;
   if (block.type === "button") return `<a class="page-button" style="${style}" href="${safePublishedUrl(block.settings?.url || "/")}">${content}</a>`;
   if (block.type === "image") return `<img class="page-image" src="${safePublishedUrl(block.content)}" alt="">`;
   if (block.type === "divider") return "<hr>";
