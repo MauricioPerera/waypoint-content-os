@@ -158,7 +158,8 @@ export type Action = {
   capabilities?: string[];
 };
 export type PageBlock = { id: string; type: "text" | "image" | "button" | "columns" | "divider" | "html"; content: string; settings?: Record<string, unknown> };
-export type VisualPage = { id: string; title: string; slug: string; status: "Draft" | "Published" | "Archived"; templateId?: string; blocks: PageBlock[]; metadata?: Record<string, unknown>; updatedAt: string };
+export type PageStyle = { background: string; foreground: string; accent: string; fontFamily: string; maxWidth: string; spacing: string; radius: string; layout: "stack" | "split" | "centered" };
+export type VisualPage = { id: string; title: string; slug: string; status: "Draft" | "Published" | "Archived"; templateId?: string; blocks: PageBlock[]; metadata?: Record<string, unknown>; style?: Partial<PageStyle>; updatedAt: string };
 export type PageTemplate = { id: string; name: string; slug: string; description: string; blocks: PageBlock[]; layoutId?: string };
 export type PageLayout = { id: string; name: string; slug: string; regions: string[]; rules: { fontFamily: string; headingScale: string; accent: string; maxWidth: string; spacing: string; radius: string } };
 export type State = {
@@ -281,21 +282,22 @@ export function createTools(s: State) {
       description: "Lista las páginas visuales disponibles para elegir una página antes de editarla; devuelve títulos, slugs, estados y cantidad de bloques.",
       inputSchema: { type: "object", properties: {}, additionalProperties: false },
       annotations: { readOnlyHint: true },
-      async execute() { return { pages: s.pages.map((page) => ({ id: page.id, title: page.title, slug: page.slug, status: page.status, blockCount: page.blocks.length })), note: s.pages.length ? undefined : "El sitio no tiene páginas visuales", ui_effect: "visual_pages_listed" }; },
+      async execute() { return { pages: s.pages.map((page) => ({ id: page.id, title: page.title, slug: page.slug, status: page.status, blockCount: page.blocks.length, style: page.style })), note: s.pages.length ? undefined : "El sitio no tiene páginas visuales", ui_effect: "visual_pages_listed" }; },
     }),
     defineTool({
       stableKey: "page.create_visual_page",
       name: "create_visual_page",
       title: "Crear página visual",
       description: "Crea una página visual desde cero o a partir de una plantilla; úsala cuando el agente deba preparar una nueva página y devuelve la página creada en modo borrador.",
-      inputSchema: { type: "object", properties: { title: { type: "string" }, slug: { type: "string" }, templateId: { type: "string" } }, required: ["title", "slug"], additionalProperties: false },
-      async execute({ title, slug, templateId }: { title: string; slug: string; templateId?: string }) {
+      inputSchema: { type: "object", properties: { title: { type: "string" }, slug: { type: "string" }, templateId: { type: "string" }, style: { type: "object" } }, required: ["title", "slug"], additionalProperties: false },
+      async execute({ title, slug, templateId, style }: { title: string; slug: string; templateId?: string; style?: Partial<PageStyle> }) {
         const normalized = slug.trim().toLowerCase();
         if (!title.trim() || !/^[a-z0-9-]+$/.test(normalized)) throw Error("Título o slug inválido");
         if (s.pages.some((page) => page.slug === normalized)) throw Error("El slug de la página ya existe");
         const template = templateId ? s.templates.find((item) => item.id === templateId || item.slug === templateId) : undefined;
         if (templateId && !template) throw Error("Plantilla no encontrada");
-        const page: VisualPage = { id: "page_" + Math.random().toString(16).slice(2, 8).toUpperCase(), title: title.trim(), slug: normalized, status: "Draft", templateId: template?.id, blocks: (template?.blocks || []).map((block) => ({ ...block, id: "blk_" + Math.random().toString(16).slice(2, 8).toUpperCase() })), updatedAt: new Date().toISOString() };
+        if (style?.layout && !["stack", "split", "centered"].includes(style.layout)) throw Error("Layout inválido");
+        const page: VisualPage = { id: "page_" + Math.random().toString(16).slice(2, 8).toUpperCase(), title: title.trim(), slug: normalized, status: "Draft", templateId: template?.id, blocks: (template?.blocks || []).map((block) => ({ ...block, id: "blk_" + Math.random().toString(16).slice(2, 8).toUpperCase() })), style, updatedAt: new Date().toISOString() };
         s.setPages((all) => [page, ...all]);
         window.dispatchEvent(new CustomEvent("waypoint-hook", { detail: { event: "page.created", page } }));
         return { status: "created", page, ui_effect: "visual_page_created" };
@@ -383,10 +385,11 @@ export function createTools(s: State) {
       name: "update_visual_page",
       title: "Editar página visual",
       description: "Actualiza título, slug, estado o bloques de una página visual; úsala para componer y publicar contenido, y devuelve la versión guardada con su efecto visible en el editor.",
-      inputSchema: { type: "object", properties: { pageId: { type: "string" }, title: { type: "string" }, slug: { type: "string" }, status: { type: "string", enum: ["Draft", "Published", "Archived"] }, blocks: { type: "array" } }, required: ["pageId"], additionalProperties: false },
-      async execute({ pageId, title, slug, status, blocks }: { pageId: string; title?: string; slug?: string; status?: VisualPage["status"]; blocks?: PageBlock[] }) {
+      inputSchema: { type: "object", properties: { pageId: { type: "string" }, title: { type: "string" }, slug: { type: "string" }, status: { type: "string", enum: ["Draft", "Published", "Archived"] }, blocks: { type: "array" }, style: { type: "object" } }, required: ["pageId"], additionalProperties: false },
+      async execute({ pageId, title, slug, status, blocks, style }: { pageId: string; title?: string; slug?: string; status?: VisualPage["status"]; blocks?: PageBlock[]; style?: Partial<PageStyle> }) {
         const current = s.pages.find((page) => page.id === pageId || page.slug === pageId); if (!current) throw Error("Página visual no encontrada");
-        const next = { ...current, ...(title === undefined ? {} : { title: title.trim() }), ...(slug === undefined ? {} : { slug: slug.trim().toLowerCase() }), ...(status === undefined ? {} : { status }), ...(blocks === undefined ? {} : { blocks }), updatedAt: new Date().toISOString() };
+        if (style?.layout && !["stack", "split", "centered"].includes(style.layout)) throw Error("Layout inválido");
+        const next = { ...current, ...(title === undefined ? {} : { title: title.trim() }), ...(slug === undefined ? {} : { slug: slug.trim().toLowerCase() }), ...(status === undefined ? {} : { status }), ...(blocks === undefined ? {} : { blocks }), ...(style === undefined ? {} : { style: { ...current.style, ...style } }), updatedAt: new Date().toISOString() };
         if (!next.title || !/^[a-z0-9-]+$/.test(next.slug)) throw Error("Título o slug inválido");
         s.setPages((all) => all.map((page) => page.id === current.id ? next : page));
         return { status: "updated", page: next, ui_effect: "visual_page_updated" };

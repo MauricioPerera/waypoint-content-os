@@ -326,7 +326,8 @@ async function uploadMedia(request: Request, env: Env) {
 }
 
 type PublishedBlock = { type?: string; content?: string; settings?: Record<string, unknown> };
-type PublishedPage = { title: string; slug: string; status: string; blocks?: PublishedBlock[]; metadata?: Record<string, unknown> };
+type PublishedPageStyle = { background?: unknown; foreground?: unknown; accent?: unknown; fontFamily?: unknown; maxWidth?: unknown; spacing?: unknown; radius?: unknown; layout?: unknown };
+type PublishedPage = { title: string; slug: string; status: string; blocks?: PublishedBlock[]; metadata?: Record<string, unknown>; style?: PublishedPageStyle };
 type PublishedEntry = { id?: string; title: string; slug?: string; type?: string; status: string; updatedAt?: string; data?: Record<string, unknown>; metadata?: Record<string, unknown> };
 
 function escapeHtml(value: unknown) {
@@ -354,11 +355,35 @@ function safePublishedColor(value: unknown) {
   return /^#[0-9a-fA-F]{3,8}$/.test(candidate) ? candidate : "";
 }
 
+function safePublishedDimension(value: unknown, fallback: string) {
+  const candidate = String(value ?? "").trim();
+  return /^(?:\d+(?:\.\d+)?(?:px|rem|em|vw|vh|%|auto)|clamp\([^;{}]+\))$/.test(candidate) ? candidate : fallback;
+}
+
+function safePublishedFont(value: unknown, fallback: string) {
+  const candidate = String(value ?? "").trim();
+  return /^[a-zA-Z0-9 _,.'"()-]+$/.test(candidate) ? candidate : fallback;
+}
+
+function publishedPageTheme(page: PublishedPage) {
+  const style = page.style || {};
+  return {
+    background: safePublishedColor(style.background) || "#101314",
+    foreground: safePublishedColor(style.foreground) || "#F4F6F2",
+    accent: safePublishedColor(style.accent) || "#D7FF4F",
+    fontFamily: safePublishedFont(style.fontFamily, "Inter,ui-sans-serif,system-ui,sans-serif"),
+    maxWidth: safePublishedDimension(style.maxWidth, "960px"),
+    spacing: safePublishedDimension(style.spacing, "clamp(28px,7vw,84px)"),
+    radius: safePublishedDimension(style.radius, "28px"),
+    layout: ["stack", "split", "centered"].includes(String(style.layout)) ? String(style.layout) : "stack",
+  };
+}
+
 function renderPublishedBlock(block: PublishedBlock) {
   const content = escapeHtml(block.content);
   const align = ["left", "center", "right"].includes(String(block.settings?.align)) ? String(block.settings?.align) : "left";
   const color = safePublishedColor(block.settings?.color);
-  const style = `text-align:${align};${color ? `color:${color};` : ""}`;
+  const style = `text-align:${align};${color && color.toLowerCase() !== "#202326" ? `color:${color};` : ""}`;
   if (block.type === "button") return `<a class="page-button" style="${style}" href="${safePublishedUrl(block.settings?.url || "/")}">${content}</a>`;
   if (block.type === "image") return `<img class="page-image" src="${safePublishedUrl(block.content)}" alt="">`;
   if (block.type === "divider") return "<hr>";
@@ -439,7 +464,10 @@ async function renderPublishedPage(env: Env, slug: string) {
   const title = escapeHtml(page.title);
   const description = escapeHtml(page.metadata?.seoDescription || `Página publicada en Waypoint Content OS: ${page.title}`);
   const blocks = (page.blocks || []).map(renderPublishedBlock).join("\n");
-  return new Response(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Waypoint</title><meta name="description" content="${description}"><style>:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#101314;color:#f4f6f2}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top left,#263629 0,#101314 42%);min-height:100vh}.published-page{width:min(960px,calc(100% - 40px));margin:0 auto;padding:32px 0 72px}.page-brand{color:#d7ff4f;font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.page-shell{margin-top:72px;padding:clamp(28px,7vw,84px);border:1px solid #39413b;border-radius:28px;background:#171c1bdb;box-shadow:0 20px 80px #0008}.page-title{margin:0 0 40px;font-size:clamp(42px,8vw,86px);line-height:.98;letter-spacing:-.06em}.page-copy{margin:18px 0;color:#bec8c0;font-size:clamp(18px,2.4vw,25px);line-height:1.5}.page-hero{color:#f4f6f2;font-size:clamp(34px,6vw,66px);font-weight:800;line-height:1.02;letter-spacing:-.05em}.page-button{display:inline-block;margin-top:18px;padding:14px 20px;border-radius:12px;background:#d7ff4f;color:#101314;font-weight:800;text-decoration:none}.page-image{display:block;max-width:100%;height:auto;border-radius:18px;margin:24px auto}.page-shell hr{border:0;border-top:1px solid #4a554c;margin:32px 0}</style></head><body><main class="published-page"><div class="page-brand">Waypoint Content OS</div><article class="page-shell"><h1 class="page-title">${title}</h1>${blocks}</article></main></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  const theme = publishedPageTheme(page);
+  const titleFont = theme.layout === "centered" ? "0.86" : "0.98";
+  const shellLayout = theme.layout === "split" ? "display:grid;grid-template-columns:minmax(0,1.2fr) minmax(220px,.8fr);gap:clamp(24px,5vw,72px);align-items:center" : theme.layout === "centered" ? "text-align:center" : "";
+  return new Response(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title} — Waypoint</title><meta name="description" content="${description}"><style>:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#101314;min-height:100vh}.published-page{width:min(var(--page-max),calc(100% - 40px));min-height:100vh;margin:0 auto;padding:32px 0 72px;background:var(--page-bg);color:var(--page-fg);font-family:var(--page-font)}.page-brand{color:var(--page-accent);font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.page-shell{margin-top:72px;padding:var(--page-spacing);border:1px solid color-mix(in srgb,var(--page-fg) 24%,transparent);border-radius:var(--page-radius);background:color-mix(in srgb,var(--page-fg) 7%,var(--page-bg));box-shadow:0 20px 80px #0008;${shellLayout}}.page-title{margin:0 0 40px;font-size:clamp(42px,8vw,86px);line-height:${titleFont};letter-spacing:-.06em}.page-content{min-width:0}.page-copy{margin:18px 0;color:color-mix(in srgb,var(--page-fg) 78%,var(--page-bg));font-size:clamp(18px,2.4vw,25px);line-height:1.5}.page-hero{color:var(--page-fg);font-size:clamp(34px,6vw,66px);font-weight:800;line-height:1.02;letter-spacing:-.05em}.page-button{display:inline-block;margin-top:18px;padding:14px 20px;border-radius:12px;background:var(--page-accent);color:var(--page-bg);font-weight:800;text-decoration:none}.page-image{display:block;max-width:100%;height:auto;border-radius:var(--page-radius);margin:24px auto}.page-shell hr{border:0;border-top:1px solid color-mix(in srgb,var(--page-fg) 30%,transparent);margin:32px 0}@media(max-width:720px){.page-shell.split{display:block}.page-shell{margin-top:44px}}</style></head><body><main class="published-page" style="--page-bg:${theme.background};--page-fg:${theme.foreground};--page-accent:${theme.accent};--page-font:${theme.fontFamily};--page-max:${theme.maxWidth};--page-spacing:${theme.spacing};--page-radius:${theme.radius}"><div class="page-brand">Waypoint Content OS</div><article class="page-shell ${theme.layout}"><h1 class="page-title">${title}</h1><div class="page-content">${blocks}</div></article></main></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 const worker = {

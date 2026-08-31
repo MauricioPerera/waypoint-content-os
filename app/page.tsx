@@ -192,6 +192,7 @@ type PageBlock = {
   content: string;
   settings?: Record<string, unknown>;
 };
+type PageStyle = { background: string; foreground: string; accent: string; fontFamily: string; maxWidth: string; spacing: string; radius: string; layout: "stack" | "split" | "centered" };
 type VisualPage = {
   id: string;
   title: string;
@@ -200,6 +201,7 @@ type VisualPage = {
   templateId?: string;
   blocks: PageBlock[];
   metadata?: Record<string, unknown>;
+  style?: Partial<PageStyle>;
   updatedAt: string;
 };
 type PageTemplate = {
