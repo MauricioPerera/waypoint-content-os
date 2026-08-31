@@ -326,6 +326,28 @@ const seedUsers: User[] = [
     metadata: { specialty: "Culture" },
   },
 ];
+
+const mergeAuthenticatedUser = (members: User[], authUser: AuthUser): User[] => {
+  const email = authUser.email.trim().toLowerCase();
+  const existing = members.find(
+    (member) => member.id === authUser.id || member.email.trim().toLowerCase() === email,
+  );
+  const current: User = {
+    id: authUser.id,
+    name: authUser.name,
+    email: authUser.email,
+    role: existing?.role || authUser.role,
+    status: existing?.status || "Active",
+    capabilities: existing?.capabilities || [],
+    metadata: existing?.metadata || {},
+  };
+  return [
+    current,
+    ...members.filter(
+      (member) => member.id !== authUser.id && member.email.trim().toLowerCase() !== email,
+    ),
+  ];
+};
 const seedPlugins: Plugin[] = [
   {
     id: "plg_webmcp",
@@ -507,9 +529,11 @@ export default function Home() {
     ])
       .then(async ([meResponse, statusResponse]) => {
         if (!mounted) return;
+        let authenticatedUser: AuthUser | null = null;
         if (meResponse.ok) {
           const payload = (await meResponse.json()) as { user?: AuthUser };
-          setAuthUser(payload.user || null);
+          authenticatedUser = payload.user || null;
+          setAuthUser(authenticatedUser);
         } else if (meResponse.status === 404) {
           setAuthUser({ id: "local", name: "Local admin", email: "admin@localhost", role: "administrator" });
         }
@@ -517,7 +541,7 @@ export default function Home() {
           const payload = (await statusResponse.json()) as { setupRequired?: boolean };
           setSetupRequired(Boolean(payload.setupRequired));
         }
-        if (meResponse.ok)
+        if (meResponse.ok && authenticatedUser)
           fetch("/api/auth/users", { credentials: "same-origin" })
             .then((response) => (response.ok ? response.json() : null))
             .then((payload) => {
@@ -534,7 +558,10 @@ export default function Home() {
                   capabilities: user.capabilities || [],
                   metadata: user.metadata,
                 }));
-                return [...mapped, ...current.filter((user) => !remoteEmails.has(user.email.toLowerCase()))];
+                return mergeAuthenticatedUser(
+                  [...mapped, ...current.filter((user) => !remoteEmails.has(user.email.toLowerCase()))],
+                  authenticatedUser,
+                );
               });
             })
             .catch(() => undefined);
@@ -546,6 +573,9 @@ export default function Home() {
       .finally(() => mounted && setAuthLoading(false));
     return () => { mounted = false; };
   }, []);
+  useEffect(() => {
+    if (authUser) setUsers((current) => mergeAuthenticatedUser(current, authUser));
+  }, [authUser]);
   useEffect(() => {
     const raw = window.localStorage.getItem("waypoint.model");
     if (raw)
@@ -610,6 +640,7 @@ export default function Home() {
   }, [authUser]);
   useEffect(() => {
     if (!authUser) return;
+    const authenticatedUser = authUser;
     let mounted = true;
     fetch("/api/state", { credentials: "same-origin" })
       .then((response) => (response.ok ? response.json() : null))
@@ -626,7 +657,7 @@ export default function Home() {
         if (data.connections) setConnections(data.connections);
         if (data.termAssignments) setTermAssignments(data.termAssignments);
         if (data.revisions) setRevisions(data.revisions);
-        if (data.users) setUsers(data.users);
+        if (data.users) setUsers(mergeAuthenticatedUser(data.users, authenticatedUser));
         if (data.roles) setRoles(data.roles);
         if (data.plugins) setPlugins(data.plugins);
         if (data.media) setMedia(data.media);
@@ -927,7 +958,7 @@ export default function Home() {
           setView={setView}
           siteName={settings.siteName}
           entryCount={entries.length}
-          currentUser={users[0]}
+          currentUser={authUser}
         />
         <main className="main-content">
           <header className="topbar">
@@ -965,7 +996,7 @@ export default function Home() {
               relations={relations}
               taxonomies={taxonomies}
               revisions={revisions}
-              currentUser={users[0]}
+              currentUser={authUser}
               go={setView}
               create={() => setShowEntry(true)}
             />
@@ -1017,6 +1048,7 @@ export default function Home() {
             <Users
               users={users}
               roles={roles}
+              currentUserId={authUser.id}
               create={(user) => {
                 if (
                   users.some(
@@ -1134,6 +1166,7 @@ export default function Home() {
           {view === "settings" && (
             <Settings
               settings={settings}
+              currentUser={authUser}
               changePassword={async (currentPassword, password) => {
                 const response = await fetch("/api/auth/password", {
                   method: "POST",
@@ -1334,7 +1367,7 @@ function Sidebar({
   setView: (v: View) => void;
   siteName: string;
   entryCount: number;
-  currentUser?: User;
+  currentUser?: AuthUser;
 }) {
   const initials = (currentUser?.name || "WS")
     .split(" ")
@@ -1491,10 +1524,12 @@ function Nav({
 }
 function Settings({
   settings,
+  currentUser,
   save,
   changePassword,
 }: {
   settings: SiteSettings;
+  currentUser: AuthUser;
   save: (settings: SiteSettings) => void;
   changePassword: (currentPassword: string, password: string) => Promise<void>;
 }) {
@@ -1581,6 +1616,13 @@ function Settings({
               Save settings
             </button>
           </div>
+        </div>
+      </section>
+      <section className="card entries-card">
+        <div className="card-heading"><div><p className="eyebrow">ACCOUNT</p><h2>Your profile</h2></div></div>
+        <div className="user-row" style={{ padding: "18px 0" }}>
+          <span className="user-avatar">{currentUser.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+          <span><b>{currentUser.name}</b><small>{currentUser.email} · {currentUser.role}</small></span>
         </div>
       </section>
       <section className="card entries-card">
@@ -1804,12 +1846,14 @@ function Roles({
 function Users({
   users,
   roles,
+  currentUserId,
   create,
   update,
   remove,
 }: {
   users: User[];
   roles: Role[];
+  currentUserId: string;
   create: (user: User) => void;
   update: (user: User) => void;
   remove: (user: User) => void;
@@ -1895,7 +1939,7 @@ function Users({
                         .slice(0, 2)}
                     </span>
                     <span className="entry-name">
-                      <b>{user.name}</b>
+                      <b>{user.name}{user.id === currentUserId && <small className="current-user-label"> · You</small>}</b>
                       <small>{user.email}</small>
                     </span>
                   </td>
@@ -2897,7 +2941,7 @@ function Overview({
   relations: Relation[];
   taxonomies: Taxonomy[];
   revisions: Revision[];
-  currentUser?: User;
+  currentUser?: AuthUser;
   go: (v: View) => void;
   create: () => void;
 }) {
