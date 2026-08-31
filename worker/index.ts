@@ -327,6 +327,7 @@ async function uploadMedia(request: Request, env: Env) {
 
 type PublishedBlock = { type?: string; content?: string; settings?: Record<string, unknown> };
 type PublishedPage = { title: string; slug: string; status: string; blocks?: PublishedBlock[]; metadata?: Record<string, unknown> };
+type PublishedEntry = { id?: string; title: string; slug?: string; type?: string; status: string; updatedAt?: string; data?: Record<string, unknown>; metadata?: Record<string, unknown> };
 
 function escapeHtml(value: unknown) {
   return String(value ?? "")
@@ -371,6 +372,61 @@ async function publishedPage(env: Env, slug: string) {
   }
 }
 
+function entrySlug(entry: PublishedEntry) {
+  return String(entry.slug || entry.title).toLowerCase().replaceAll(" ", "-");
+}
+
+async function publishedEntries(env: Env) {
+  const row = await env.DB.prepare("SELECT data FROM workspace_state WHERE id = ?1").bind("default").first<{ data: string }>();
+  if (!row) return [];
+  try {
+    const state = JSON.parse(row.data) as { entries?: PublishedEntry[] };
+    return (state.entries || []).filter((entry) => entry.status === "Published");
+  } catch {
+    return [];
+  }
+}
+
+function entryBody(entry: PublishedEntry) {
+  const body = typeof entry.data?.body === "string" ? entry.data.body : "";
+  if (!body.trim()) return `<p class="entry-copy">Esta entrada está publicada en Waypoint Content OS.</p>`;
+  return body
+    .split(/\r?\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p class="entry-copy">${escapeHtml(paragraph)}</p>`)
+    .join("");
+}
+
+function publicBlogShell(title: string, description: string, content: string) {
+  return new Response(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)} — Waypoint</title><meta name="description" content="${escapeHtml(description)}"><style>:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#101314;color:#f4f6f2}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top left,#263629 0,#101314 42%);min-height:100vh}.public-site{width:min(1040px,calc(100% - 40px));margin:0 auto;padding:32px 0 72px}.brand{color:#d7ff4f;font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.public-shell{margin-top:72px;padding:clamp(26px,6vw,72px);border:1px solid #39413b;border-radius:28px;background:#171c1bdb;box-shadow:0 20px 80px #0008}.public-shell h1{margin:0 0 14px;font-size:clamp(42px,8vw,82px);line-height:.98;letter-spacing:-.06em}.lede{color:#bec8c0;font-size:20px;line-height:1.5}.entry-list{display:grid;gap:16px;margin-top:42px}.entry-card{display:block;padding:24px;border:1px solid #39413b;border-radius:18px;color:#f4f6f2;text-decoration:none;background:#111615aa}.entry-card:hover{border-color:#d7ff4f}.entry-card h2{margin:0 0 10px;font-size:clamp(23px,3vw,34px);letter-spacing:-.04em}.entry-card p,.entry-copy{color:#bec8c0;font-size:18px;line-height:1.55}.entry-meta{color:#d7ff4f;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.entry-head{margin-bottom:34px}.entry-copy{max-width:760px;margin:20px 0}.entry-details{display:flex;flex-wrap:wrap;gap:10px;margin-top:34px;color:#9eaaa1;font-size:13px}.entry-details span{padding:8px 10px;border:1px solid #39413b;border-radius:999px}.back-link{display:inline-block;margin-top:42px;color:#d7ff4f;font-weight:800;text-decoration:none}</style></head><body><main class="public-site"><div class="brand">Waypoint Content OS</div><section class="public-shell">${content}</section></main></body></html>`, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
+function renderPublicBlog(entries: PublishedEntry[]) {
+  const articles = entries.filter((entry) => !entry.type || entry.type === "Article");
+  const cards = articles.map((entry) => {
+    const slug = encodeURIComponent(entrySlug(entry));
+    const excerpt = typeof entry.data?.body === "string" ? entry.data.body : "Contenido publicado en Waypoint Content OS.";
+    return `<a class="entry-card" href="/article/${slug}"><div class="entry-meta">${escapeHtml(entry.type || "Article")}</div><h2>${escapeHtml(entry.title)}</h2><p>${escapeHtml(excerpt.slice(0, 180))}${excerpt.length > 180 ? "…" : ""}</p></a>`;
+  }).join("");
+  const content = `<div class="entry-head"><div class="entry-meta">PUBLICACIÓN</div><h1>Blog</h1><p class="lede">Entradas estructuradas, publicadas y listas para ser consumidas por personas o agentes.</p></div><div class="entry-list">${cards || `<p class="lede">Todavía no hay entradas publicadas.</p>`}</div>`;
+  return publicBlogShell("Blog", "Entradas publicadas en Waypoint Content OS.", content);
+}
+
+function renderPublicEntry(entry: PublishedEntry) {
+  const authors = typeof entry.data?.authors === "string" ? entry.data.authors : "";
+  const topics = typeof entry.data?.topics === "string" ? entry.data.topics : "";
+  const readingTime = typeof entry.data?.reading_time === "string" ? entry.data.reading_time : "";
+  const details = [authors && `Autor: ${authors}`, topics && `Temas: ${topics}`, readingTime && `Lectura: ${readingTime}`].filter(Boolean).map((item) => `<span>${escapeHtml(item)}</span>`).join("");
+  const content = `<div class="entry-head"><div class="entry-meta">${escapeHtml(entry.type || "Article")} · PUBLICADO</div><h1>${escapeHtml(entry.title)}</h1>${entry.updatedAt ? `<p class="lede">Actualizado ${escapeHtml(new Date(entry.updatedAt).toLocaleDateString("es-MX"))}</p>` : ""}</div>${entryBody(entry)}${details ? `<div class="entry-details">${details}</div>` : ""}<a class="back-link" href="/blog">← Volver al blog</a>`;
+  return publicBlogShell(entry.title, `Entrada publicada: ${entry.title}`, content);
+}
+
+async function renderPublishedEntry(env: Env, slug: string) {
+  const entry = (await publishedEntries(env)).find((item) => entrySlug(item) === slug);
+  return entry ? renderPublicEntry(entry) : null;
+}
+
 async function renderPublishedPage(env: Env, slug: string) {
   const page = await publishedPage(env, slug);
   if (!page) return null;
@@ -389,6 +445,13 @@ const worker = {
     if (path.startsWith("/media/")) return media(request, env, decodeURIComponent(path.slice("/media/".length)));
     if (path === "/api/state") return state(request, env);
     if (path.startsWith("/api/registry/")) return registry(request, env, path.slice("/api/registry/".length));
+    if (request.method === "GET" && path === "/blog") return renderPublicBlog(await publishedEntries(env));
+    if (request.method === "GET" && path.startsWith("/article/")) {
+      const slug = decodeURIComponent(path.slice("/article/".length).replace(/\/$/, ""));
+      const entry = await renderPublishedEntry(env, slug);
+      if (entry) return entry;
+      return new Response("Not found", { status: 404 });
+    }
     if (env.ASSETS && (path.startsWith("/_next/") || path === "/favicon.svg")) {
       const asset = await env.ASSETS.fetch(request);
       if (asset.status !== 404) return asset;
